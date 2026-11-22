@@ -354,8 +354,8 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
 .hs { color: var(--ink-3); margin-right: .06em; font-weight: 400; }
 .neg .hn { color: var(--warn); }
 .roll { display: inline-block; }
-@media (prefers-reduced-motion: no-preference) { .roll { animation: roll .3s var(--ease); } }
-@keyframes roll { from { transform: translateY(-28%); opacity: .2; } }
+@media (prefers-reduced-motion: no-preference) { .roll { animation: roll .24s var(--ease); } }
+@keyframes roll { from { transform: translateY(-16%); opacity: .45; } }
 .hero-empty { display: inline-flex; align-items: center; gap: .3em; font-family: var(--f-sans); font-size: .58em; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
 .hero-in { width: 100%; height: 3.6rem; padding: 0 .8rem; border-radius: .9rem; border: 1.5px solid var(--accent); background: var(--surface-2); box-shadow: 0 0 0 4px var(--accent-wash-2); font-size: 1.7rem; color: var(--ink); caret-color: var(--accent); }
 

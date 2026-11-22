@@ -233,7 +233,7 @@ const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一
 .day.today .dn { box-shadow: inset 0 0 0 1.5px var(--now); }
 .day.s .dn { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
 .day.e .dn { background: var(--surface-2); color: var(--accent); font-weight: 650; box-shadow: inset 0 0 0 2px var(--accent); }
-.day.s.e .dn { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
+.day.s.e .dn { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
 .day:focus-visible { outline: none; }
 .day:focus-visible .dn { outline: 2px solid var(--accent); outline-offset: 2px; }
 .year { flex: none; display: flex; flex-direction: column; gap: .2rem; padding-left: 1.9rem; }
