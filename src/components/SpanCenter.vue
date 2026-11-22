@@ -255,7 +255,7 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
     if (presetProgress.value != null) return { segs: [{ t: `${PERIOD_PAST[S.endPreset!]}已過 ` }, { t: `${nfMax(presetProgress.value * 100, 1)}%`, b: true }, { t: ` · ${endName} ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
     return { segs: [{ t: `${eMs < n ? '已過' : '距'}${endName} · ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
   }
-  if (eMs < sMs) return { segs: [{ t: '結束早於開始 · 按右上的 ⇄ 交換' }], tone: 'soft' };
+  if (eMs < sMs) return { segs: [{ t: '結束早於開始 · 按 ⇄ 可以交換' }], tone: 'soft' };
   if (n < sMs) return { segs: [{ t: '尚未開始 · ' }, { t: left(sMs - n), b: true }, { t: ' 後開始' }], tone: '' };
   if (n > eMs) return { segs: [{ t: '已經結束 · ' }, { t: left(n - eMs), b: true }, { t: ' 前' }], tone: '' };
   const f = (n - sMs) / (eMs - sMs);

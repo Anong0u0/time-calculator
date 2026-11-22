@@ -110,6 +110,7 @@ export function commit(fn: () => boolean | void, opts: { label?: string; key?: s
   const t = Date.now();
   if (opts.key && opts.key === coalesceKey && (opts.hold || t - coalesceAt < 1200) && history.undo.length) {
     coalesceAt = t;
+    if (opts.label) history.undo[history.undo.length - 1].label = opts.label;
   } else {
     history.undo.push({ s: before, label: opts.label || '' });
     if (history.undo.length > 100) history.undo.shift();
@@ -175,6 +176,7 @@ export function setStartTz(id: string, keepInstant = true) {
   S.startTz = id;
   if (follow) {
     if (keepInstant && S.end && !S.link && eMs != null) S.end = partsInTz(eMs, id);
+    if (!sameZone(S.endTz, id)) { S.endPreset = null; S.endSample = false; }
     S.endTz = id;
   }
   if (!S.zones.some((z) => sameZone(z, prev))) S.zones.unshift(prev);
@@ -183,6 +185,7 @@ export function setStartTz(id: string, keepInstant = true) {
 export function setEndTz(id: string) {
   const prev = S.endTz;
   if (!S.link && S.end && endMs.value != null) S.end = partsInTz(endMs.value, id);
+  if (!sameZone(prev, id)) { S.endPreset = null; S.endSample = false; }
   S.endTz = id;
   if (!S.zones.some((z) => sameZone(z, prev))) S.zones.unshift(prev);
   trimZones();

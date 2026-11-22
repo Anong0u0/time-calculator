@@ -53,7 +53,7 @@ defineExpose({ place, pos });
 <template>
   <Teleport to="body">
     <div v-if="open" ref="el" class="pop" role="dialog" :aria-label="label"
-      :style="{ top: pos.top + 'px', left: pos.left + 'px', width: `min(${width}, calc(100vw - 16px))`, maxHeight: pos.maxH + 'px', visibility: pos.ready ? 'visible' : 'hidden' }">
+      :style="{ top: pos.top + 'px', left: pos.left + 'px', width: `min(${width}, calc(100vw - 16px))`, maxHeight: pos.maxH + 'px', opacity: pos.ready ? 1 : 0, pointerEvents: pos.ready ? 'auto' : 'none' }">
       <slot :max-h="pos.maxH" />
     </div>
   </Teleport>

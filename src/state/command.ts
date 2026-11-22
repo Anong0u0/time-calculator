@@ -173,6 +173,6 @@ export function interpret(input: string): Suggestion[] {
 function zoneSuggestions(zid: string, out: Suggestion[]) {
   const name = zoneName(zid);
   if (!zoneRows.value.some((z) => sameZone(z, zid))) out.push({ id: `add-${zid}`, kind: 'zone', title: `加入時區：${name}`, detail: '出現在時區列表', apply: () => commit(() => addZoneRow(zid), { label: `加入${name}`, say: `已加入${name}` }) });
-  if (!sameZone(S.startTz, zid)) out.push({ id: `stz-${zid}`, kind: 'start', title: `開始改用${name}時區`, detail: '時刻不變', apply: () => commit(() => setStartTz(zid), { label: `開始時區：${name}`, say: `開始時區：${name}，時刻不變` }) });
-  if (!sameZone(S.endTz, zid) && wallOf('end')) out.push({ id: `etz-${zid}`, kind: 'end', title: `結束改用${name}時區`, detail: '時刻不變', apply: () => commit(() => setEndTz(zid), { label: `結束時區：${name}`, say: `結束時區：${name}，時刻不變` }) });
+  if (!sameZone(S.startTz, zid)) out.push({ id: `stz-${zid}`, kind: 'start', title: `開始改用${name}時區`, detail: '同一刻，改用當地時間表示', apply: () => commit(() => setStartTz(zid), { label: `開始時區：${name}`, say: `開始改用${name}時區，同一個時刻` }) });
+  if (!sameZone(S.endTz, zid) && wallOf('end')) out.push({ id: `etz-${zid}`, kind: 'end', title: `結束改用${name}時區`, detail: '同一刻，改用當地時間表示', apply: () => commit(() => setEndTz(zid), { label: `結束時區：${name}`, say: `結束改用${name}時區，同一個時刻` }) });
 }

@@ -175,7 +175,7 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
 .tag.warn { color: var(--warn); background: var(--warn-wash); border-color: transparent; cursor: help; }
 .ep-time { --sdt-size: 1.75rem; margin: .1rem 0; }
 .ep-meta { display: flex; align-items: center; gap: .6rem; min-width: 0; font-size: .9rem; color: var(--ink-3); }
-.tzb { display: inline-flex; align-items: center; gap: .35rem; height: 1.95rem; padding: 0 .45rem 0 .55rem; margin-left: -.4rem; border-radius: .65rem; color: var(--ink-2); font-weight: 550; min-width: 0; transition: background .15s, color .15s; }
+.tzb { flex: none; display: inline-flex; align-items: center; gap: .35rem; height: 1.95rem; padding: 0 .45rem 0 .55rem; margin-left: -.4rem; border-radius: .65rem; color: var(--ink-2); font-weight: 550; min-width: 0; transition: background .15s, color .15s; }
 .tzb:hover, .tzb[aria-expanded="true"] { background: var(--accent-wash); color: var(--accent); }
 .tzb .ic { width: 1.05em; height: 1.05em; color: var(--ink-3); }
 .tzb:hover .ic { color: var(--accent); }

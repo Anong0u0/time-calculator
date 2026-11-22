@@ -290,8 +290,8 @@ const awayText = (which: End) => {
           <span v-if="inWin(xe)" class="knob e" :class="{ on: dragging === 'end' }" :style="{ left: xe! * 100 + '%' }" role="slider" tabindex="0"
             aria-label="結束" aria-valuemin="0" aria-valuemax="1440" :aria-valuenow="knobNow('end')" :aria-valuetext="knobText('end')"
             @pointerdown.stop="down($event, axis!, 'end')" @keydown="knobKey($event, 'end')"><i class="node end" /></span>
-          <button v-if="outRight" type="button" class="away r" v-tip="`看${SUBJ[outRight]}那一天`" @pointerdown.stop @click="winPick = outRight"><i class="node" :class="{ end: outRight === 'end' }" />{{ awayText(outRight) }}<Icon name="chevR" /></button>
-          <button v-if="outLeft" type="button" class="away l" v-tip="`看${SUBJ[outLeft]}那一天`" @pointerdown.stop @click="winPick = outLeft"><Icon name="chevL" /><i class="node" :class="{ end: outLeft === 'end' }" />{{ awayText(outLeft) }}</button>
+          <span v-if="outRight" class="edge r" v-tip="`${outRight === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outRight)}，用上方的切換看那一天`" />
+          <span v-if="outLeft" class="edge l" v-tip="`${outLeft === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outLeft)}，用上方的切換看那一天`" />
         </div>
       </div>
 
@@ -408,11 +408,9 @@ const awayText = (which: End) => {
 .knob .node { font-size: .95rem; }
 .knob:hover, .knob.on { transform: scale(1.12); }
 .knob.on { cursor: grabbing; box-shadow: 0 0 0 3px var(--accent-wash-2), 0 2px 8px rgba(11, 18, 34, .25); }
-.away { position: absolute; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; gap: .25rem; height: 1.5rem; padding: 0 .45rem; border-radius: 99rem; font-size: var(--fs-xs); font-weight: 600; color: var(--accent); background: var(--surface-2); border: 1px solid var(--accent-line); z-index: 1; white-space: nowrap; }
-.away.r { right: 0; }
-.away.l { left: 0; }
-.away .node { font-size: .7rem; }
-.away .ic { width: .9em; height: .9em; }
+.edge { position: absolute; top: 50%; width: .7rem; height: .7rem; margin-top: -.35rem; border-top: 2.5px solid var(--accent); border-right: 2.5px solid var(--accent); opacity: .75; }
+.edge.r { right: -.1rem; transform: rotate(45deg); }
+.edge.l { left: -.1rem; transform: rotate(-135deg); }
 .zmore { flex: none; display: flex; align-items: center; gap: .3rem; height: 2rem; padding: 0 .55rem; margin: 0 -.3rem; border-radius: .6rem; font-size: max(11px, .84rem); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zmore:hover { background: var(--well-2); color: var(--ink); }
 .zmenu { display: flex; flex-direction: column; padding: .5rem; }
