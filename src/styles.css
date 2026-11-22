@@ -244,5 +244,7 @@ input[type="text"]:focus-visible { outline: none; }
   @keyframes popIn { from { opacity: .3; transform: translateY(-.35rem) scale(.985); } }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  /* Turn motion off outright. A tiny duration would still animate every property (transition-property defaults to all),
+     so inherited font sizes would lag a frame and text-fitting would measure stale widths. */
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }

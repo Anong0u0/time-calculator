@@ -40,8 +40,8 @@ const shape = computed(() => toks.value.map((t) => (t.t === 'num' ? `${t.k}${t.v
 const box = ref<HTMLElement | null>(null);
 const line = ref<HTMLElement | null>(null);
 const { w: boxW } = useSize(box);
-const refit = () => nextTick(() => fitText(line.value, 0.42));
-watch([shape, boxW, () => props.compact, fontsTick], refit);
+const refit = () => nextTick(() => { fitText(line.value, 0.42); requestAnimationFrame(() => fitText(line.value, 0.42)); });
+watch([() => toks.value.map((t) => ('v' in t ? t.v : ':')).join(''), boxW, () => props.compact, fontsTick], refit);
 onMounted(refit);
 
 /* ---------- typing ---------- */

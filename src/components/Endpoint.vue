@@ -99,7 +99,7 @@ void clamp;
       </template>
       <template v-else>
         <span v-if="S.endSample" class="tag sample" v-tip="'第一次開啟時放的範例：距離跨年。改掉它或按 × 清除就會消失'">範例</span>
-        <button v-if="hasEnd" type="button" class="tag link" :aria-pressed="!!S.link" v-tip="linkTip" @click="toggleLink">
+        <button v-if="hasEnd" type="button" class="tag link" :aria-pressed="!!S.link" :aria-label="S.link ? `連動：結束 = 開始 ${S.link.expr}` : '結束固定，點一下改成連動'" v-tip="linkTip" @click="toggleLink">
           <Icon :name="S.link ? 'link' : 'pin'" /><span>{{ S.link ? `= 開始 ${S.link.expr}` : '固定' }}</span>
         </button>
       </template>
@@ -153,7 +153,7 @@ void clamp;
 <style scoped>
 .ep { padding: .9rem 1.1rem 1rem; gap: .55rem; justify-content: flex-start; transition: border-color .2s, box-shadow .2s; }
 .ep.active { border-color: var(--accent-line); }
-.ep-head { display: flex; align-items: center; gap: .5rem; min-height: 2.1rem; min-width: 0; }
+.ep-head { display: flex; align-items: center; gap: .5rem; min-height: 2.1rem; min-width: 0; container-type: inline-size; }
 .ep-head .node { font-size: 1.05rem; }
 .ep-head h2 { font-size: 1.02rem; font-weight: 650; white-space: nowrap; }
 .ep-tools { margin-left: auto; display: flex; align-items: center; gap: .1rem; flex: none; }
@@ -169,9 +169,16 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
 .tag.live[aria-pressed="true"] { color: var(--now); background: var(--now-wash); border-color: transparent; }
 .tag.live[aria-pressed="true"] .dot { background: var(--now); animation: beat 2s infinite; }
 @keyframes beat { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-.tag.sample { color: var(--warn); background: var(--warn-wash); border-color: transparent; cursor: help; }
+.tag.sample { flex: none; color: var(--warn); background: var(--warn-wash); border-color: transparent; cursor: help; }
 .tag.link[aria-pressed="true"] { color: var(--accent); background: var(--accent-wash); border-color: var(--accent-line); }
-.tag.link { max-width: 12.5rem; }
+.tag.link { max-width: 12.5rem; overflow: hidden; flex: 0 1 auto; }
+.tag.link .ic { flex: none; }
+.tag.live { flex: none; }
+/* A narrow header keeps the link tag as a clean round icon; the tooltip still says what it does. */
+@container (max-width: 15.5rem) {
+  .tag.link { flex: none; width: 1.6rem; padding: 0; justify-content: center; }
+  .tag.link span { display: none; }
+}
 .tag.warn { color: var(--warn); background: var(--warn-wash); border-color: transparent; cursor: help; }
 .ep-time { --sdt-size: 1.75rem; margin: .1rem 0; }
 .ep-meta { display: flex; align-items: center; gap: .6rem; min-width: 0; font-size: .9rem; color: var(--ink-3); }

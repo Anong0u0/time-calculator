@@ -112,11 +112,12 @@ const allRows = computed<Row[]>(() => {
   });
 });
 const visible = computed(() => allRows.value.slice(0, capacity.value));
-/** When every row fits, rows grow (up to half again) so the panel has no dead space. */
+/** Rows grow (up to half again) into whatever height is left, so the panel has no dead space. */
 const rowH = computed(() => {
   const n = visible.value.length, base = baseRowH.value;
-  if (!bodyH.value || !n || hidden.value.length) return base;
-  const per = (bodyH.value - axisH.value - gap.value + gap.value) / n - gap.value;
+  if (!bodyH.value || !n) return base;
+  const reserve = hidden.value.length ? 2 * remPx.value + gap.value : 0;
+  const per = (bodyH.value - axisH.value - reserve) / n - gap.value;
   return Math.max(base, Math.min(base * 1.45, per));
 });
 const hidden = computed(() => allRows.value.slice(visible.value.length));
