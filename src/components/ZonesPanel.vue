@@ -354,7 +354,7 @@ const awayText = (which: End) => {
 </template>
 
 <style scoped>
-.zp { --zc-name: minmax(5.6rem, 1fr); --zc-times: 8.6rem; }
+.zp { --zc-name: minmax(7.5rem, 1fr); --zc-times: 8.6rem; }
 .ph-ic { color: var(--ink-3); }
 .icon-btn.sm { width: 2rem; height: 2rem; border-radius: .65rem; }
 .seg-ctl button { height: 1.7rem; font-size: var(--fs-s); padding: 0 .5rem; gap: .3rem; }
@@ -370,7 +370,7 @@ const awayText = (which: End) => {
 .zc-name { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; padding: .15rem .4rem; margin-left: -.4rem; border-radius: .55rem; line-height: 1.2; transition: background .15s; }
 .zc-name:hover, .zc-name[aria-expanded="true"] { background: var(--well-2); }
 .zc-name b { font-weight: 600; font-size: .93rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.zc-name small { font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; }
+.zc-name small { font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .isS .zc-name b { color: var(--accent); }
 .stacked .zc-name { flex-direction: row; align-items: baseline; gap: .5rem; }
 
