@@ -179,6 +179,14 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
   .tag.link { flex: none; width: 1.6rem; padding: 0; justify-content: center; }
   .tag.link span { display: none; }
 }
+/* The compact header also carries the time zone, so it gets tight sooner. */
+@container (max-width: 27rem) {
+  .compact .tag.link { flex: none; width: 1.6rem; padding: 0; justify-content: center; }
+  .compact .tag.link span { display: none; }
+}
+@container (max-width: 22rem) {
+  .compact .tzb-head .tzb-o { display: none; }
+}
 .tag.warn { color: var(--warn); background: var(--warn-wash); border-color: transparent; cursor: help; }
 .ep-time { --sdt-size: 1.75rem; margin: .1rem 0; }
 .ep-meta { display: flex; align-items: center; gap: .6rem; min-width: 0; font-size: .9rem; color: var(--ink-3); }

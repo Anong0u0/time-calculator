@@ -83,7 +83,7 @@ const LENSES: [Lens, string, string][] = [['zones', '時區', 'globe'], ['cal', 
 <template>
   <div class="app" :data-layout="layout">
     <TopBar class="a-top" :compact="layout === 'phone'" />
-    <Equation class="a-eq" :compact="compact" :stack="compact" :tight="layout === 'short'" />
+    <Equation class="a-eq" :compact="compact" :stack="compact" :auto-tight="layout === 'short'" />
     <div v-if="tabbed" class="a-tabs seg-ctl" role="tablist" aria-label="檢視">
       <button v-for="[k, name, ic] in LENSES" :id="`tab-${k}`" :key="k" type="button" role="tab" :aria-selected="S.lens === k" :aria-controls="`lens-${k}`" @click="S.lens = k">
         <Icon :name="ic" />{{ name }}
@@ -137,5 +137,5 @@ const LENSES: [Lens, string, string][] = [['zones', '時區', 'globe'], ['cal', 
 .a-tabs { display: flex; width: 100%; }
 .a-tabs button { flex: 1; justify-content: center; height: 1.95rem; font-size: .88rem; }
 .a-tabs .ic { width: 1em; height: 1em; }
-.app[data-layout="short"] .a-eq { align-self: start; }
+.app[data-layout="short"] .a-eq { min-height: 0; }
 </style>
