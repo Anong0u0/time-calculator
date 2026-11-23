@@ -24,7 +24,7 @@ bun test         # 單元測試（時區、日曆、解析器）
 bun run build    # 型別檢查並輸出到 dist/
 ```
 
-推送到 `main` 後，GitHub Actions 會跑測試、建置，並把 `dist/` 發布到 `gh-pages` 分支（GitHub Pages）。
+推送到 `main` 後，GitHub Actions 會跑測試、建置，並直接部署到 GitHub Pages（不經過任何分支）。
 
 ## 結構
 
