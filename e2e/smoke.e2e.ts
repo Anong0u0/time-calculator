@@ -38,10 +38,11 @@ test('typed text sets both ends, the address follows, and undo takes it back', a
   await expect(field(page, '開始的年')).toHaveValue('2000');
   await expect(field(page, '結束的日')).toHaveValue('31');
   await expect(page.getByRole('region', { name: '間隔' })).toContainText('30天');
-  await expect(page).toHaveURL(/s=2000-01-01.*e=2000-01-31/);
+  await expect(page).toHaveURL((url) => url.search === '?s=2000-01-01&e=2000-01-31');
   await box.blur();
   await page.keyboard.press('Control+z');
   await expect(field(page, '結束的年')).not.toHaveValue('2000');
+  await expect(page).toHaveURL((url) => url.search === '');
 });
 
 test('panels answer the keyboard, and the calendar shows the whole year', async ({ page }) => {

@@ -4,24 +4,35 @@
      ?s=2026-11-24T16:13&tz=Asia/Taipei&e=2027-01-01&etz=Europe/London&z=Asia/Tokyo,Europe/London
 
    s     start (date, date and time, or Unix seconds). Absent (or now): the start is now and follows the clock.
-   tz    the start's time zone. Written whenever any time is written, so a link means the same moment everywhere.
-   e     a fixed end, or now: the end follows the clock.  etz: the end's zone, only when it differs from the start's.
+   tz    the start's time zone. Dates without a zone use the opening device's local time.
+   e     a fixed end, or now: the end follows the clock.  etz: the end's zone, defaults to the start's.
    d     the end follows the start by a span (1mo7d, -3h, 28bd for working days).
    ds    the start follows the end back by a span: ?e=now&ds=30d is always the last 30 days.
    er    the rule the end was set by (下個月底, 中秋 …, as a short code; ! in front: the end keeps following it).
          With a live start and no e, it is worked out when the link is opened: a bookmark of "until 中秋" always counts
          to the next one.  sr: the same for the start.  en, sn: their names, when not the rule's own.
    p     (older links) the end of a period: day, week, month, newyear, lny.
-   z     the zone list, only when it differs from the default.
+   z     the zone list.
    calc  the duration calculator's expression, only when it is not the sample.
-   v     the panels shown, when some are put away (span.rail is a full-screen countdown).  cm=year: the calendar shows the year.
+   v     the panels shown (span.rail is a full-screen countdown).  cm=year: the calendar shows the year.
 
    When the link carries any of s, e, d, ds, p, tz, the time comes from the link alone: no end in it means no end.
    z, calc, v and cm replace yours only when they are there.
-   The address is written only after something is changed here; opening the page leaves it as it is.
+   The address keeps the incoming parameters and adds only the fields changed since the page opened.
    ============================================================ */
-import { watch } from 'vue';
-import { type Wall, type Span, validWall, partsInTz, pad, interpretSpanText, fmtSpan, isValidTz } from '../core/time';
+import { computed, watch, type ComputedRef } from 'vue';
+import {
+  type Wall,
+  type HeldWall,
+  type Span,
+  validWall,
+  heldWallAt,
+  wallToInstant,
+  pad,
+  interpretSpanText,
+  fmtSpan,
+  isValidTz,
+} from '../core/time';
 import { LOCAL_TZ, sameZone } from '../core/zones';
 import { decodeRule, ruleName } from '../core/rule';
 import {
@@ -33,13 +44,11 @@ import {
   type CalMode,
   commit,
   applyRule,
-  defaultZones,
   isLinked,
   OLD_PRESETS,
   PANELS,
   showOnly,
   shownList,
-  shown,
   viewSnap,
   restoreView,
   toast,
@@ -61,12 +70,12 @@ export function wallParam(w: Wall): string {
   return `${date}T${pad(w.h)}:${pad(w.mi)}${w.s ? ':' + pad(w.s) : ''}`;
 }
 /** A wall time, or an instant when the value is a Unix timestamp (seconds, or milliseconds from 12 digits). */
-export function parseWallParam(v: string, tz: string): Wall | null {
+export function parseWallParam(v: string, tz: string): HeldWall | null {
   const t = v.trim();
   if (/^-?\d{5,}$/.test(t)) {
     const n = +t;
     const ms = t.replace('-', '').length >= 12 ? n : n * 1000;
-    const w = Number.isFinite(ms) ? partsInTz(ms, tz) : null;
+    const w = Number.isFinite(new Date(ms).getTime()) ? heldWallAt(ms, tz) : null;
     return validWall(w) ? w : null;
   }
   const m = /^(\d{1,4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/.exec(t);
@@ -74,6 +83,8 @@ export function parseWallParam(v: string, tz: string): Wall | null {
   const w = { y: +m[1], mo: +m[2], d: +m[3], h: +(m[4] || 0), mi: +(m[5] || 0), s: +(m[6] || 0) };
   return validWall(w) ? w : null;
 }
+/** Unix milliseconds disambiguate the later occurrence. Ordinary links keep their readable date. */
+const heldParam = (w: HeldWall, tz: string) => (w.later ? pad(wallToInstant(w, tz, true).ms, 12) : wallParam(w));
 /** 1y2mo3w4d5h6m7s, with - in front for a span backwards and bd for working days. */
 export function spanParam(sp: Span): string {
   let out = sp.sign < 0 ? '-' : '';
@@ -96,8 +107,8 @@ export interface UrlState {
   time: boolean;
   tz?: string;
   etz?: string;
-  s?: Wall;
-  e?: Wall;
+  s?: HeldWall;
+  e?: HeldWall;
   eLive?: boolean;
   d?: Link;
   ds?: Link;
@@ -224,86 +235,79 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
 }
 
 /* ---------- writing the address ---------- */
-/** The query for the state now; empty for a first visit's untouched sample. */
-export function buildQuery(): string {
-  const out: [string, string][] = [];
-  const untouched =
-    S.live && S.endSample && !S.link && !S.endLive && S.startTz === LOCAL_TZ && sameZone(S.endTz, S.startTz);
-  if (!untouched) {
-    const rule = (which: End, k: string, nk: string) => {
-      const r = S.rules[which];
-      if (!r) return;
-      out.push([k, (r.follow ? '!' : '') + r.code]);
-      const d = decodeRule(r.code);
-      if (d && r.name && r.name !== ruleName(d, S.prefs)) out.push([nk, r.name]);
-    };
-    if (!S.live && !isLinked('start') && !S.rules.start?.follow) out.push(['s', wallParam(S.start)]);
-    rule('start', 'sr', 'sn');
-    out.push(['tz', S.startTz]);
-    if (!sameZone(S.endTz, S.startTz)) out.push(['etz', S.endTz]);
-    if (isLinked('end')) out.push(['d', spanParam(S.link!.span)]);
-    else {
-      if (S.link) out.push(['ds', spanParam(S.link.span)]);
-      if (S.endLive) out.push(['e', 'now']);
-      else if (S.end && !S.rules.end?.follow) {
-        // a live start counting to a rule's moment (跨年, 中秋 …): keep the rule, so the link stays right after it passes
-        if (!(S.live && S.rules.end)) out.push(['e', wallParam(S.end)]);
-      }
-      rule('end', 'er', 'en');
-    }
+function queryFields(): URLSearchParams {
+  const out = new URLSearchParams();
+  const rule = (which: End, key: string, nameKey: string) => {
+    const r = S.rules[which];
+    if (!r) return;
+    out.set(key, (r.follow ? '!' : '') + r.code);
+    const d = decodeRule(r.code);
+    if (d && r.name && r.name !== ruleName(d, S.prefs)) out.set(nameKey, r.name);
+  };
+
+  if (!S.live && !isLinked('start') && !S.rules.start?.follow) out.set('s', heldParam(S.start, S.startTz));
+  rule('start', 'sr', 'sn');
+  out.set('tz', S.startTz);
+  out.set('etz', S.endTz);
+  if (S.link) out.set(isLinked('end') ? 'd' : 'ds', spanParam(S.link.span));
+  if (!isLinked('end') && !S.endSample) {
+    if (S.endLive) out.set('e', 'now');
+    else if (S.end && !S.rules.end?.follow) out.set('e', heldParam(S.end, S.endTz));
+    rule('end', 'er', 'en');
   }
-  const dz = defaultZones();
-  if (S.zones.length !== dz.length || S.zones.some((z, i) => z !== dz[i])) out.push(['z', S.zones.join(',')]);
-  if (!S.durSample) out.push(['calc', S.dur]);
-  if (S.hidden.length) out.push(['v', shownList().join('.')]);
-  if (S.calMode === 'year' && shown('cal')) out.push(['cm', 'year']);
-  return out.map(([k, v]) => `${k}=${enc(v)}`).join('&');
+  out.set('z', S.zones.join(','));
+  if (!S.durSample) out.set('calc', S.dur);
+  out.set('v', shownList().join('.'));
+  out.set('cm', S.calMode);
+  return out;
+}
+
+/** Take the baseline after local storage, the incoming link and the sample have been applied. */
+export function sessionSearch(search: string) {
+  const initial = queryFields();
+  return computed(() => {
+    const current = queryFields();
+    const keys = new Set([...initial.keys(), ...current.keys()]);
+    const edits = new Set([...keys].filter((k) => current.get(k) !== initial.get(k)));
+    if (!edits.size) return search;
+    const params = new URLSearchParams(search);
+    // A name belongs to its rule, including an end rule supplied by an older p= link.
+    for (const [code, name] of [
+      ['er', 'en'],
+      ['sr', 'sn'],
+    ]) {
+      if (edits.has(code) || edits.has(name)) {
+        edits.add(code);
+        edits.add(name);
+        if (code === 'er') params.delete('p');
+      }
+    }
+    for (const key of edits) {
+      let value = current.get(key);
+      if (key === 'etz' && params.has('tz') && sameZone(S.endTz, S.startTz)) value = null;
+      // A live countdown bookmark re-evaluates its rule when opened.
+      if (key === 'e' && S.live && S.rules.end && !S.endLive) value = null;
+      if (value === null) params.delete(key);
+      else params.set(key, value);
+    }
+    const query = Array.from(params, ([k, v]) => `${enc(k)}=${enc(v)}`).join('&');
+    return query ? '?' + query : '';
+  });
 }
 /** Readable: : / , stay as they are. */
 const enc = (v: string) => encodeURIComponent(v).replace(/%3A/gi, ':').replace(/%2F/gi, '/').replace(/%2C/gi, ',');
 
-export function shareUrl(): string {
-  const q = buildQuery();
-  return location.origin + location.pathname + (q ? '?' + q : '');
-}
-
-let timer: ReturnType<typeof setTimeout> | undefined;
-/** Keep the address bar in step with the state once a value changes (replacing the entry: undo is the way back,
-    not the back button). Opening the page writes nothing: a plain address stays plain, a link stays as it was typed. */
-export function startUrlSync() {
-  return watch(
-    () => [
-      S.startTz,
-      S.endTz,
-      S.live,
-      S.live ? null : S.start,
-      S.end,
-      S.endLive,
-      S.endSample,
-      S.rules,
-      S.link?.expr,
-      S.linkTo,
-      S.zones,
-      S.dur,
-      S.durSample,
-      S.hidden,
-      S.calMode,
-      S.map,
-    ],
-    () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const q = buildQuery();
-        const next = location.pathname + (q ? '?' + q : '') + location.hash;
-        if (next !== location.pathname + location.search + location.hash) {
-          try {
-            history.replaceState(history.state, '', next);
-          } catch {
-            /* some sandboxes refuse; the app still works */
-          }
+export function startUrlSync(search: ComputedRef<string>) {
+  return watch(search, (next, _previous, onCleanup) => {
+    const timer = setTimeout(() => {
+      if (next !== location.search) {
+        try {
+          history.replaceState(history.state, '', location.pathname + next + location.hash);
+        } catch {
+          /* some sandboxes refuse; the app still works */
         }
-      }, 250);
-    },
-    { deep: true },
-  );
+      }
+    }, 250);
+    onCleanup(() => clearTimeout(timer));
+  });
 }

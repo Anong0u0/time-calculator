@@ -56,6 +56,14 @@ describe('zones and DST', () => {
     expect(diffCalendar(a, b, 'America/New_York')).toEqual({ y: 0, mo: 0, d: 1, h: 0, mi: 0, s: 0 });
     expect(spanBetween(a, b, 'America/New_York')).toMatchObject({ d: 1, h: 0 });
   });
+  test('12h × 2 and 24h both span 24 elapsed hours across spring-forward', () => {
+    const tz = 'America/New_York';
+    const start = toInstant({ y: 2026, mo: 3, d: 7, h: 12, mi: 0, s: 0 }, tz);
+    for (const input of ['12h × 2', '24h']) {
+      const result = interpretSpanText(input);
+      expect(result.kind === 'span' && addDuration(start, tz, result.span).ms).toBe(start + 86400000);
+    }
+  });
 });
 
 describe('calendar arithmetic', () => {
@@ -171,7 +179,7 @@ describe('command bar and the duration calculator', () => {
   });
 });
 
-import { parseQuery, wallParam, parseWallParam, spanParam, startUrlSync } from '../src/state/url';
+import { parseQuery, wallParam, parseWallParam, spanParam, sessionSearch, startUrlSync } from '../src/state/url';
 import { LOCAL_TZ } from '../src/core/zones';
 import { S } from '../src/state/store';
 
@@ -217,32 +225,39 @@ describe('address bar', () => {
     expect(parseQuery('?d=+3h')?.d?.expr).toBe('+3小時');
     expect(LOCAL_TZ.length).toBeGreaterThan(0);
   });
-  test('the address is written only after a value changes', async () => {
+  test('sync keeps incoming parameters and only writes fields changed during this visit', async () => {
     const g = globalThis as unknown as Record<string, unknown>;
     const was = { location: g.location, history: g.history };
     const writes: string[] = [];
-    g.location = { pathname: '/', search: '', hash: '' };
+    const location = { pathname: '/', search: '?v=span.rail&ref=home', hash: '#top' };
+    g.location = location;
     g.history = {
       state: null,
       replaceState: (_s: unknown, _t: string, u: string) => {
         writes.push(u);
+        location.search = new URL(u, 'https://example.org').search;
       },
     };
-    const dur = S.dur,
-      durSample = S.durSample;
-    const stop = startUrlSync();
+    const saved = { startTz: S.startTz, endTz: S.endTz, dur: S.dur, durSample: S.durSample };
+    Object.assign(S, { startTz: 'Europe/London', endTz: 'America/New_York', dur: '1h', durSample: false });
+    const search = sessionSearch(location.search);
+    const stop = startUrlSync(search);
     try {
-      await Bun.sleep(300);
-      expect(writes).toEqual([]);
+      expect(search.value).toBe(location.search);
       S.dur = '3h × 4';
-      S.durSample = false;
+      const params = new URLSearchParams(search.value);
+      expect(Object.fromEntries(params)).toEqual({ v: 'span.rail', ref: 'home', calc: '3h × 4' });
       await Bun.sleep(300);
-      expect(writes.length).toBe(1);
-      expect(writes[0]).toContain('calc=');
+      expect(writes).toEqual(['/' + search.value + '#top']);
+
+      S.startTz = 'Asia/Tokyo';
+      expect(new URLSearchParams(search.value).get('tz')).toBe('Asia/Tokyo');
+      S.startTz = 'Europe/London';
+      S.dur = '1h';
+      expect(search.value).toBe('?v=span.rail&ref=home');
     } finally {
       stop();
-      S.dur = dur;
-      S.durSample = durSample;
+      Object.assign(S, saved);
       g.location = was.location;
       g.history = was.history;
     }
@@ -372,20 +387,22 @@ describe('the two ends are alike', () => {
   });
   test('a live end and a backward span survive the address bar', async () => {
     const { S, setWall, setLive, setLink, isDerived } = await import('../src/state/store');
-    const { buildQuery, applyUrl } = await import('../src/state/url');
+    const { applyUrl } = await import('../src/state/url');
     S.startTz = 'UTC';
     S.endTz = 'UTC';
     setWall('start', { y: 2000, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
     S.link = null;
+    setLive('end', false);
+    const search = sessionSearch('');
     setLive('end', true);
     setLink({ sign: 1, y: 0, mo: 0, w: 0, d: 30, h: 0, mi: 0, s: 0, biz: false });
-    const q = buildQuery();
+    const q = search.value;
     expect(q).toContain('e=now');
     expect(q).toContain('ds=30d');
     expect(q).not.toContain('s=2000');
     setWall('end', { y: 2020, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
     S.link = null;
-    applyUrl('?' + q, false);
+    applyUrl(q, false);
     expect(S.endLive).toBe(true);
     expect(isDerived('start')).toBe(true);
   });
@@ -474,15 +491,9 @@ describe('rules', () => {
     expect(decodeRule('n/+1x')).toBeNull();
     expect(ruleName(parseRuleText('明年春節')!.main.rule)).toBe('明年 春節');
   });
-  test('a link is a rule', () => {
-    const r: Rule = {
-      o: { t: 'other' },
-      steps: [
-        { t: 'move', n: 1, u: 'mo' },
-        { t: 'move', n: 7, u: 'd' },
-      ],
-    };
-    expect(spanOfRule(r, 'end')).toMatchObject({ sign: 1, mo: 1, d: 7 });
+  test('a single move from the other end is a link', () => {
+    const r: Rule = { o: { t: 'other' }, steps: [{ t: 'move', n: 1, u: 'mo' }] };
+    expect(spanOfRule(r, 'end')).toMatchObject({ sign: 1, mo: 1 });
     expect(spanOfRule({ o: { t: 'now' }, steps: [] }, 'end')).toBeNull();
   });
   test('your own words', () => {

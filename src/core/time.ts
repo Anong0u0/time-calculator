@@ -20,6 +20,8 @@ export interface Wall {
   mi: number;
   s: number;
 }
+/** A held clock reading can identify the second occurrence of a repeated local time. */
+export type HeldWall = Wall & { later?: true };
 export interface YMD {
   y: number;
   mo: number;
@@ -169,7 +171,7 @@ export function offsetAt(ms: number, tz: string): number {
 }
 export type WallNote = null | 'gap' | 'overlap' | 'range';
 /** Wall clock in a zone → instant. Gaps push forward, overlaps take the earlier instant (Temporal "compatible"). */
-export function wallToInstant(w: Wall, tz: string): { ms: number; note: WallNote } {
+export function wallToInstant(w: Wall, tz: string, later = false): { ms: number; note: WallNote } {
   const local = wallKey(w);
   const offA = offsetAt(local - DAY, tz),
     offB = offsetAt(local + DAY, tz);
@@ -179,13 +181,19 @@ export function wallToInstant(w: Wall, tz: string): { ms: number; note: WallNote
     if (offsetAt(t, tz) === off) cands.push(t);
   }
   if (cands.length === 1) return { ms: cands[0], note: null };
-  if (cands.length > 1) return { ms: Math.min(...cands), note: 'overlap' };
+  if (cands.length > 1)
+    return later ? { ms: Math.max(...cands), note: null } : { ms: Math.min(...cands), note: 'overlap' };
   const off = offsetAt(local, tz),
     t = local - off;
   if (offsetAt(t, tz) === off) return { ms: t, note: null };
   return { ms: local - offA, note: 'gap' };
 }
 export const toInstant = (w: Wall, tz: string) => wallToInstant(w, tz).ms;
+export function heldWallAt(ms: number, tz: string): HeldWall {
+  const wall = partsInTz(ms, tz);
+  if (validWall(wall) && toInstant(wall, tz) !== Math.floor(ms / SEC) * SEC) return { ...wall, later: true };
+  return wall;
+}
 
 export function fmtOffset(offMs: number, { utc = true, compact = false } = {}): string {
   const sign = offMs < 0 ? '−' : '+';
@@ -233,6 +241,8 @@ export function addDuration(
   sign = 1,
   businessDays = false,
 ): { ms: number; note: WallNote } {
+  const exact = sign * (((dur.h || 0) * 3600 + (dur.mi || 0) * 60 + (dur.s || 0)) * SEC);
+  if (!dur.y && !dur.mo && !dur.w && !dur.d) return { ms: ms + exact, note: null };
   const w = partsInTz(ms, tz);
   let cur = addMonthsWall(w, sign * ((dur.y || 0) * 12 + (dur.mo || 0)));
   const days = sign * ((dur.w || 0) * 7 + (dur.d || 0));
@@ -244,7 +254,6 @@ export function addDuration(
   }
   if (cur.y < YEAR_MIN || cur.y > YEAR_MAX) return { ms: NaN, note: 'range' };
   const r = wallToInstant(cur, tz);
-  const exact = sign * (((dur.h || 0) * 3600 + (dur.mi || 0) * 60 + (dur.s || 0)) * SEC);
   return { ms: r.ms + exact, note: exact ? null : r.note };
 }
 
@@ -265,10 +274,11 @@ export function diffCalendar(a: number, b: number, tz: string): CalDiff {
   }
   const base = addMonthsWall(A, months);
   let days = dayNum(B.y, B.mo, B.d) - dayNum(base.y, base.mo, base.d);
-  let t = toInstant(addDaysWall(base, days), tz);
+  const atDay = (d: number) => (months || d ? toInstant(addDaysWall(base, d), tz) : a);
+  let t = atDay(days);
   while (days > 0 && t > b) {
     days--;
-    t = toInstant(addDaysWall(base, days), tz);
+    t = atDay(days);
   }
   let rest = Math.round((b - t) / SEC);
   const h = floorDiv(rest, 3600);
@@ -301,6 +311,12 @@ export function splitSeconds(totalSec: number) {
   const mi = floorDiv(r, 60);
   r -= mi * 60;
   return { sign, d, h, mi, s: r };
+}
+
+/** Elapsed time stays in hours, even when a local calendar day has 23 or 25 of them. */
+export function elapsedSpan(seconds: number): Span {
+  const { d, h, mi, s } = splitSeconds(Math.round(Math.abs(seconds)));
+  return { ...emptySpan(), sign: seconds < 0 ? -1 : 1, h: d * 24 + h, mi, s };
 }
 
 export function isoDuration(parts: Partial<CalDiff>, sign = 1): string {
@@ -939,7 +955,7 @@ export function parseSpan(src: string): Span | null {
     }
   }
   if (later && out.sign < 0) throw new DurError('in 只能往後', 0, 2);
-  if (SPAN_KEYS.some((k) => out[k] > 999999)) throw new DurError('數字太大了', 0, s.length);
+  if (SPAN_KEYS.some((k) => out[k] > (k === 'h' ? 999999 * 24 : 999999))) throw new DurError('數字太大了', 0, s.length);
   out.biz = biz;
   return out;
 }
@@ -955,6 +971,8 @@ export function fmtSpan(sp: Span | null): string {
   const tn = (sp.h ? 1 : 0) + (sp.mi ? 1 : 0) + (sp.s ? 1 : 0);
   let time = '';
   if (tn === 1) time = sp.h ? `${sp.h}小時` : sp.mi ? `${sp.mi}分` : `${sp.s}秒`;
+  else if (tn > 1 && (sp.mi > 59 || sp.s > 59))
+    time = [sp.h && `${sp.h}小時`, sp.mi && `${sp.mi}分`, sp.s && `${sp.s}秒`].filter(Boolean).join('');
   else if (tn > 1) time = `${sp.h}:${pad(sp.mi)}${sp.s ? ':' + pad(sp.s) : ''}`;
   const body = date.join('') + (date.length && time ? ' ' : '') + time;
   return (sp.sign < 0 ? '−' : '+') + (body || '0天');
@@ -965,7 +983,7 @@ export function spanBetween(a: number, b: number, tz: string): Span {
   const sign = b < a ? -1 : 1;
   const A = partsInTz(a, tz),
     B = partsInTz(b, tz);
-  const at = (n: number) => toInstant(addDaysWall(A, sign * n), tz);
+  const at = (n: number) => (n ? toInstant(addDaysWall(A, sign * n), tz) : a);
   let d = Math.abs(dayNum(B.y, B.mo, B.d) - dayNum(A.y, A.mo, A.d));
   while (d > 0 && sign * (b - at(d)) < 0) d--;
   while (sign * (b - at(d + 1)) >= 0) d++;
@@ -1021,15 +1039,8 @@ export function interpretSpanText(src: string): SpanInput {
     const r = evalDuration(raw);
     if (r.empty) return { kind: 'error', message: '輸入長度，例如 +30天、1年6個月、20工作日', soft: true };
     if (r.dim === 'num') return { kind: 'ratio', value: r.value, result: r };
-    const total = Math.round(r.value);
-    if (Math.abs(total) > 999999 * 86400) return { kind: 'error', message: '數字太大了', soft: false };
-    const p = splitSeconds(total);
-    return {
-      kind: 'span',
-      expr: true,
-      result: r,
-      span: { sign: total < 0 ? -1 : 1, y: 0, mo: 0, w: 0, d: p.d, h: p.h, mi: p.mi, s: p.s, biz: false },
-    };
+    if (Math.round(Math.abs(r.value)) > 999999 * 86400) return { kind: 'error', message: '數字太大了', soft: false };
+    return { kind: 'span', expr: true, result: r, span: elapsedSpan(r.value) };
   } catch (e2) {
     const err = e2 as DurError;
     if (err.cal)

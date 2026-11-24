@@ -33,7 +33,7 @@ import {
   toast,
 } from './state/store';
 import { interpret } from './state/command';
-import { applyUrl, startUrlSync } from './state/url';
+import { applyUrl, sessionSearch, startUrlSync } from './state/url';
 import { focusCommand, ui, toggleFullscreen, canFullscreen } from './state/ui';
 import { readRem, remPx } from './composables/size';
 import { hideTip } from './composables/tip';
@@ -42,7 +42,8 @@ const hadSaved = loadState();
 // a link's own time wins over what was saved here; a link with a time but no end means no end
 if (!applyUrl(location.search, hadSaved)?.time) seedSample();
 startPersisting();
-startUrlSync();
+const search = sessionSearch(location.search);
+startUrlSync(search);
 
 const vw = ref(window.innerWidth),
   vh = ref(window.innerHeight);
@@ -325,7 +326,7 @@ const tabs = computed(() => LENSES.filter(([k]) => lenses.value.includes(k)));
 
 <template>
   <div class="app dial" :data-layout="layout" :class="{ 'no-top': !showTop, 'eq-big': eqBig }" :style="grid">
-    <TopBar v-if="showTop" class="a-top" :compact="layout === 'phone'" />
+    <TopBar v-if="showTop" class="a-top" :search="search" :compact="layout === 'phone'" />
     <Equation v-if="showEq" class="a-eq" :compact="compact" :stack="compact" :auto-tight="eqTight" :big="eqBig" />
     <div v-if="showTabs" class="a-tabs seg-ctl" role="tablist" aria-label="檢視">
       <button

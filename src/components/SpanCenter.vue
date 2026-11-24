@@ -402,10 +402,12 @@ function pickQuick(c: Chip): boolean {
   if (!editing.value) return false;
   const r = chipRule(c);
   const sp = r ? spanOfRule(r, 'end') : null;
-  if (sp) {
-    text.value = fmtSpan(sp);
-    onInput();
+  if (!sp) {
+    finish();
+    return false;
   }
+  text.value = fmtSpan(sp);
+  onInput();
   return true;
 }
 const bizShown = computed(

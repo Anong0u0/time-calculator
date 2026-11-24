@@ -18,17 +18,20 @@ import {
   redo,
   breakCoalesce,
   setWall,
+  setInstant,
   setLive,
   setLink,
   freezeLink,
   clearEnd,
   swapEnds,
   applyRule,
+  runRule,
   setFollow,
   setStartTz,
 } from '../src/state/store';
-import type { Wall, Span } from '../src/core/time';
+import { type Wall, type Span, parseSpan, fmtSpan } from '../src/core/time';
 import type { Rule } from '../src/core/rule';
+import { sessionSearch, applyUrl } from '../src/state/url';
 
 const NOW = Date.UTC(2026, 10, 24, 12, 0, 0);
 const wall = (y: number, mo: number, d: number, h = 0, mi = 0, s = 0): Wall => ({ y, mo, d, h, mi, s });
@@ -121,6 +124,19 @@ describe('how the ends are worked out', () => {
     expect(iso(endMs.value)).toBe('2026-05-01T00:00:00');
   });
 
+  test('applying two month moves keeps the preview and follows the same steps as the start changes', () => {
+    setWall('start', wall(2026, 1, 31));
+    const month = { t: 'move', n: 1, u: 'mo' } as const;
+    const rule: Rule = { o: { t: 'other' }, steps: [month, month] };
+    const preview = runRule(rule, 'end');
+    if (!preview.ok) throw new Error(preview.err);
+    expect(iso(preview.ms)).toBe('2026-03-28T00:00:00');
+    expect(applyRule('end', rule)).toBe(true);
+    expect(endMs.value).toBe(preview.ms);
+    setWall('start', wall(2026, 8, 31));
+    expect(iso(endMs.value)).toBe('2026-10-30T00:00:00');
+  });
+
   test('the start can follow a rule on the end; the end that read the start is pinned first', () => {
     setWall('start', wall(2026, 4, 3));
     applyRule('end', endOfStartMonth);
@@ -169,9 +185,42 @@ describe('how the ends are worked out', () => {
     expect(startMs.value).toBe(s0);
     expect(endMs.value).toBe(e0);
   });
+
+  test('a zone change and a shared link preserve the later occurrence of a repeated time', () => {
+    const search = sessionSearch('');
+    const first = Date.UTC(2026, 10, 1, 5, 30);
+    const second = first + 3600000;
+    setInstant('start', first);
+    setInstant('end', second);
+    setStartTz('America/New_York');
+    expect([startMs.value, endMs.value]).toEqual([first, second]);
+    const query = search.value;
+    setStartTz('UTC');
+    applyUrl(query, false);
+    expect([startMs.value, endMs.value]).toEqual([first, second]);
+  });
+
+  test('editing the end of an older bookmark replaces its preset and undo restores the bookmark', () => {
+    const original = '?p=newyear&tz=Asia/Taipei';
+    applyUrl(original, false);
+    const search = sessionSearch(original);
+    commit(() => setWall('end', wall(2026, 12, 15)));
+    expect(Object.fromEntries(new URLSearchParams(search.value))).toEqual({ tz: 'Asia/Taipei', e: '2026-12-15' });
+    undo();
+    expect(search.value).toBe(original);
+  });
 });
 
 describe('undo history', () => {
+  test('undo restores a span with more than 59 minutes and keeps it editable', () => {
+    const span = parseSpan('1h 90m')!;
+    setLink(span);
+    commit(() => setWall('end', wall(2026, 5, 1)));
+    undo();
+    expect(gapSec.value).toBe(150 * 60);
+    expect(S.link?.span).toEqual(span);
+    expect(parseSpan(fmtSpan(span))).toEqual(span);
+  });
   test('a change is one step; undo and redo walk it', () => {
     commit(() => setWall('end', wall(2026, 2, 1)), { label: '結束' });
     expect(history.undo.length).toBe(1);

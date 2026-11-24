@@ -6,10 +6,9 @@ import Popover from './Popover.vue';
 import VocabPanel from './VocabPanel.vue';
 import PanelMenu from './PanelMenu.vue';
 import { S, history, undo, redo, now, startWall, DENSITY, type Theme } from '../state/store';
-import { shareUrl } from '../state/url';
 import { copiedKey, copyText } from '../composables/copy';
 
-defineProps<{ compact?: boolean }>();
+const props = defineProps<{ compact?: boolean; search: string }>();
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const mod = isMac ? '⌘' : 'Ctrl ';
 const THEME_NAME: Record<Theme, string> = { system: '跟隨系統', light: '淺色', dark: '深色' };
@@ -68,10 +67,9 @@ function backTo(i: number) {
 function forwardTo(j: number) {
   for (let k = 0; k <= j; k++) redo();
 }
-/* the address always carries the time; this copies it */
 const linkCopied = computed(() => copiedKey.value === 'share');
 function copyLink() {
-  copyText(shareUrl(), 'share', '連結');
+  copyText(location.origin + location.pathname + props.search + location.hash, 'share', '連結');
 }
 const helpBtn = ref<HTMLElement | null>(null);
 const help = ref(false);
@@ -136,7 +134,7 @@ const hands = computed(() => {
         type="button"
         class="icon-btn"
         :class="{ ok: linkCopied }"
-        v-tip="'複製連結：開始、結束、時區都在網址裡，可以加入書籤或分享'"
+        v-tip="'複製連結，可加入書籤或分享'"
         aria-label="複製這個畫面的連結"
         @click="copyLink"
       >
@@ -356,7 +354,7 @@ const hands = computed(() => {
             >，點月份名稱回到那個月。
           </li>
           <li>
-            網址會跟著開始、結束、時區更新，可以直接<b>加入書籤或分享</b>（右上
+            網址會保留原有參數，只同步這次開啟後改過的項目，可以直接<b>加入書籤或分享</b>（右上
             <span class="hk"><Icon name="link" /></span> 複製連結）。
           </li>
           <li>中間的間隔可以<b>左右拖曳</b>數字，或點一下輸入 <code>+30天</code>、<code>47m × 16</code>。</li>

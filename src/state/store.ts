@@ -7,10 +7,12 @@
 import { reactive, computed, ref, watch } from 'vue';
 import {
   type Wall,
+  type HeldWall,
   type Span,
   type WallNote,
   DAY,
   partsInTz,
+  heldWallAt,
   wallToInstant,
   addDuration,
   validWall,
@@ -150,10 +152,10 @@ export const now = ref(Date.now());
 
 export const S = reactive({
   startTz: LOCAL_TZ,
-  start: partsInTz(Date.now(), LOCAL_TZ) as Wall,
+  start: partsInTz(Date.now(), LOCAL_TZ) as HeldWall,
   /** The start follows the clock. */
   live: true,
-  end: null as Wall | null,
+  end: null as HeldWall | null,
   endTz: LOCAL_TZ,
   /** The end follows the clock. */
   endLive: false,
@@ -232,6 +234,8 @@ const readsOther = (which: End) => {
   const r = followRule(which);
   return !!r && ruleReads(r, which, wordRule).has(other(which));
 };
+// A span is counted on its anchor's clock. Other rules read dates on the clock they set.
+const ruleZone = (rule: Rule, which: End) => tzOf(spanOfRule(rule, which) ? other(which) : which);
 /** Read a rule for this end, now. */
 export function runRule(rule: Rule, which: End, otherMs?: number | null): RuleResult {
   void ruleTick.value;
@@ -239,7 +243,7 @@ export function runRule(rule: Rule, which: End, otherMs?: number | null): RuleRe
   const om = otherMs !== undefined ? otherMs : msOf(o);
   return evalRule(rule, {
     now: now.value,
-    tz: tzOf(which),
+    tz: ruleZone(rule, which),
     self: which,
     ends: { [which]: msOf(which), [o]: om },
     prefs: S.prefs,
@@ -253,7 +257,7 @@ const fromRule = (which: End, otherMs: number | null): Point | null => {
   const o = other(which);
   const res = evalRule(r, {
     now: Math.floor(now.value / 1000) * 1000,
-    tz: tzOf(which),
+    tz: ruleZone(r, which),
     self: which,
     ends: { [o]: otherMs },
     prefs: S.prefs,
@@ -272,10 +276,11 @@ const own = (which: End): Point | null => {
     const p = fromRule(which, null);
     if (p) return p;
   }
-  const w = which === 'start' ? S.start : S.end;
-  if (!w) return null;
-  const r = wallToInstant(w, tz);
-  return { wall: w, ms: r.ms, note: r.note };
+  const held = S[which];
+  if (!held) return null;
+  // Date edits receive plain wall fields, so a previous overlap choice cannot leak into a new date.
+  const { later, ...wall } = held;
+  return { wall, ...wallToInstant(wall, tz, later) };
 };
 const RANGE_ERR = '超出可計算範圍（西元 1–9999 年）';
 /** `fromMs` moved by the span (dir −1: back), read on the wall clock of `toTz`; null when it leaves years 1–9999. */
@@ -360,13 +365,13 @@ export function toastClose() {
 
 /* ---------- history: many levels of undo and redo ---------- */
 interface Snap {
-  start: Wall;
+  start: HeldWall;
   live: boolean;
   startTz: string;
-  end: Wall | null;
+  end: HeldWall | null;
   endLive: boolean;
   endTz: string;
-  link: string | null;
+  link: Span | null;
   linkTo: End;
   rules: { start: EndRule | null; end: EndRule | null };
   endSample: boolean;
@@ -378,13 +383,13 @@ interface Snap {
 }
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 const snap = (): Snap => ({
-  start: { ...startWall.value },
+  start: { ...S.start },
   live: S.live,
   startTz: S.startTz,
   end: S.end ? { ...S.end } : null,
   endLive: S.endLive,
   endTz: S.endTz,
-  link: S.link ? S.link.expr : null,
+  link: S.link ? { ...S.link.span } : null,
   linkTo: S.linkTo,
   rules: clone(S.rules),
   endSample: S.endSample,
@@ -414,7 +419,7 @@ function restoreSnap(o: Snap) {
   S.endTz = o.endTz;
   S.end = o.end;
   S.endLive = o.endLive;
-  S.link = o.link ? mkLink(o.link) : null;
+  S.link = o.link ? { expr: fmtSpan(o.link), span: { ...o.link } } : null;
   S.linkTo = o.linkTo;
   S.rules = clone(o.rules);
   S.endSample = o.endSample;
@@ -573,11 +578,8 @@ function unhookFrom(which: End) {
 function pinRule(which: End) {
   const r = S.rules[which];
   if (!r?.follow) return;
-  const w = wallOf(which);
-  if (w) {
-    if (which === 'start') S.start = { ...w };
-    else S.end = { ...w };
-  }
+  const ms = msOf(which);
+  if (ms != null) S[which] = heldWallAt(ms, tzOf(which));
   S.rules[which] = { ...r, follow: false };
 }
 /** Puts this end at a moment. If the span was computing this end, it stops; if it computes the other end, that one follows. */
@@ -599,11 +601,11 @@ export function setWall(which: End, w: Wall): boolean {
   return true;
 }
 export function setInstant(which: End, ms: number): boolean {
-  if (!Number.isFinite(ms)) {
+  if (!Number.isFinite(new Date(ms).getTime())) {
     toast(RANGE_ERR);
     return false;
   }
-  return setWall(which, partsInTz(ms, tzOf(which)));
+  return setWall(which, heldWallAt(ms, tzOf(which)));
 }
 /** This end follows the clock (on), or stays at the second it shows now (off). */
 export function setLive(which: End, on: boolean) {
@@ -618,13 +620,9 @@ export function setLive(which: End, on: boolean) {
     return;
   }
   if (!isLive(which)) return;
-  if (which === 'start') {
-    S.start = { ...startWall.value };
-    S.live = false;
-  } else {
-    S.end = { ...endWall.value! };
-    S.endLive = false;
-  }
+  S[which] = heldWallAt(msOf(which)!, tzOf(which));
+  if (which === 'start') S.live = false;
+  else S.endLive = false;
 }
 /** Keeps the instant; the end follows when it shared the start's zone. */
 export function setStartTz(id: string, keepInstant = true) {
@@ -632,10 +630,11 @@ export function setStartTz(id: string, keepInstant = true) {
   const follow = sameZone(S.endTz, prev) || !hasEnd.value;
   const sMs = startMs.value,
     eMs = endMs.value;
-  if (keepInstant && !S.live && !isDerived('start')) S.start = partsInTz(sMs, id);
+  if (!S.live && !isDerived('start')) S.start = keepInstant ? heldWallAt(sMs, id) : startWall.value;
+  if (follow && S.end && !S.endLive && !isDerived('end') && eMs != null)
+    S.end = keepInstant ? heldWallAt(eMs, id) : endWall.value;
   S.startTz = id;
   if (follow) {
-    if (keepInstant && S.end && !S.endLive && !isDerived('end') && eMs != null) S.end = partsInTz(eMs, id);
     if (!sameZone(S.endTz, id)) S.endSample = false;
     S.endTz = id;
   }
@@ -644,7 +643,7 @@ export function setStartTz(id: string, keepInstant = true) {
 }
 export function setEndTz(id: string) {
   const prev = S.endTz;
-  if (S.end && !S.endLive && !isDerived('end') && endMs.value != null) S.end = partsInTz(endMs.value, id);
+  if (S.end && !S.endLive && !isDerived('end') && endMs.value != null) S.end = heldWallAt(endMs.value, id);
   if (!sameZone(prev, id)) S.endSample = false;
   S.endTz = id;
   if (!S.zones.some((z) => sameZone(z, prev))) S.zones.unshift(prev);
@@ -699,18 +698,9 @@ export function setLink(sp: Span, to: End = linkTarget()): boolean {
 /** The end the span was computing stays where it is right now; the span no longer ties them. */
 export function freezeLink(): boolean {
   if (!S.link) return false;
-  const which = S.linkTo,
-    w = wallOf(which);
-  if (!w) return false;
-  if (which === 'end') {
-    S.end = { ...w };
-    S.endLive = false;
-  } else {
-    S.start = { ...w };
-    S.live = false;
-  }
-  S.link = null;
-  return true;
+  const which = S.linkTo;
+  const ms = msOf(which);
+  return ms != null && setInstant(which, ms);
 }
 /** Keep the current gap: the end not held at now follows the other. */
 export function linkFromMeasured(to: End = linkTarget()): boolean {
@@ -739,10 +729,10 @@ function swapRule(r: EndRule | null): EndRule | null {
 /** Start and end trade places: moments, zones, which one follows the clock, and which one the span computes. */
 export function swapEnds(): boolean {
   if (!endWall.value) return false;
-  const s = { ...startWall.value },
+  const s = isDerived('start') || S.live ? heldWallAt(startMs.value, S.startTz) : S.start,
     sTz = S.startTz,
     sLive = S.live,
-    e = { ...endWall.value },
+    e = isDerived('end') || S.endLive ? heldWallAt(endMs.value!, S.endTz) : S.end!,
     eTz = S.endTz,
     eLive = S.endLive;
   S.start = e;
@@ -932,7 +922,7 @@ export function loadState(): boolean {
     o = null;
   }
   if (!o || o.v !== 2) return false;
-  const W = (w: unknown): Wall | null => {
+  const W = (w: unknown): HeldWall | null => {
     if (!w || typeof w !== 'object') return null;
     const x = w as Record<string, unknown>;
     const r = {
@@ -942,6 +932,7 @@ export function loadState(): boolean {
       h: +(x.h as number),
       mi: +(x.mi as number),
       s: +(x.s as number),
+      ...(x.later === true && { later: true as const }),
     };
     return validWall(r) ? r : null;
   };
@@ -1003,7 +994,11 @@ export function loadState(): boolean {
       lunar: pr.lunar !== false,
     };
   }
-  if (typeof o.link === 'string') S.link = mkLink(o.link);
+  if (typeof o.link === 'string') {
+    // Older saves could write 1h 90m as "+1:90". Read those clock fields back as separate units.
+    const expr = o.link.replace(/(\d+):(\d+)(?::(\d+))?$/, (_, h, mi, s) => `${h}小時${mi}分${s ?? 0}秒`);
+    S.link = mkLink(expr);
+  }
   S.linkTo = o.linkTo === 'start' && S.link && (S.endLive || S.end) ? 'start' : 'end';
   if (S.link && S.linkTo === 'end') S.endLive = false;
   if (Array.isArray(o.zones)) S.zones = (o.zones as unknown[]).filter((z): z is string => isValidTz(z)).slice(0, ZMAX);

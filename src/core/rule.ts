@@ -30,6 +30,7 @@ import {
   YEAR_MAX,
   WD,
   type Span,
+  emptySpan,
 } from './time';
 import { lunarOfDay, lunarYear, lunarMonthName, lunarDayName } from './lunar';
 import { termMoment, termAround, termOnDay, termsOfYear, TERM_NAMES, TERMS_IN_YEAR, CHINA_TZ } from './terms';
@@ -761,29 +762,17 @@ export function decodeRule(code: string): Rule | null {
 /* ---------- what a rule is, in the app's older terms ---------- */
 /** The rule is the clock itself: 現在. */
 export const isNowRule = (r: Rule) => r.o.t === 'now' && !r.steps.length;
-/** The other end plus a length (+30天, −1年3個月): what the app keeps as a link. */
+/** A single move from the other end can be a span. Compound rules keep their intermediate dates. */
 export function spanOfRule(r: Rule, self?: EndRef): Span | null {
   const otherEnd = self && (r.o.t === 'other' || (self === 'start' ? r.o.t === 'end' : r.o.t === 'start'));
-  if (!otherEnd || !r.steps.length) return null;
-  const sp: Span = { sign: 1, y: 0, mo: 0, w: 0, d: 0, h: 0, mi: 0, s: 0, biz: false };
-  let sign = 0;
-  for (const s of r.steps) {
-    if (s.t !== 'move' || s.u === 'lmo' || s.u === 'ly' || s.u === 'term') return null;
-    const sg = s.n < 0 ? -1 : 1;
-    if (sign && sg !== sign) return null;
-    sign = sg;
-    const a = Math.abs(s.n);
-    if (s.u === 'bd') {
-      if (sp.d && !sp.biz) return null;
-      sp.d += a;
-      sp.biz = true;
-    } else if (s.u === 'd') {
-      if (sp.biz) return null;
-      sp.d += a;
-    } else if (s.u === 'q') sp.mo += 3 * a;
-    else sp[s.u] += a;
-  }
-  sp.sign = (sign || 1) as 1 | -1;
+  if (!otherEnd || r.steps.length !== 1) return null;
+  const s = r.steps[0];
+  if (s.t !== 'move' || s.u === 'lmo' || s.u === 'ly' || s.u === 'term') return null;
+  const sp = emptySpan();
+  sp.sign = s.n < 0 ? -1 : 1;
+  sp.biz = s.u === 'bd';
+  const unit = s.u === 'q' ? 'mo' : s.u === 'bd' ? 'd' : s.u;
+  sp[unit] = Math.abs(s.n) * (s.u === 'q' ? 3 : 1);
   return sp;
 }
 export function ruleOfSpan(sp: Span): Rule {

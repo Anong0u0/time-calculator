@@ -15,6 +15,7 @@ import {
   fmtSpan,
   fmtClock,
   splitSeconds,
+  elapsedSpan,
   isoDuration,
 } from '../core/time';
 import { nfMax, plainNum, durWords } from '../core/format';
@@ -82,7 +83,7 @@ const totals = computed(() => {
     neg = s.value < 0 ? '-' : '',
     ng = s.value < 0 ? '−' : '';
   const sp = splitSeconds(Math.round(a * 1000) / 1000);
-  const iso = isoDuration({ d: sp.d, h: sp.h, mi: sp.mi, s: sp.s }, s.value < 0 ? -1 : 1);
+  const iso = isoDuration({ h: sp.d * 24 + sp.h, mi: sp.mi, s: sp.s }, s.value < 0 ? -1 : 1);
   return [
     { k: 'h', t: `${ng}${nfMax(a / 3600, 4)} 時`, c: neg + plainNum(a / 3600, 6) },
     { k: 'm', t: `${ng}${nfMax(a / 60, 2)} 分`, c: neg + plainNum(a / 60, 4) },
@@ -94,8 +95,7 @@ const spanOut = computed<Span | null>(() => {
   const s = st.value;
   if (s.k === 'cal') return s.span;
   if (s.k !== 'dur' || Math.round(Math.abs(s.value)) === 0) return null;
-  const sp = splitSeconds(Math.round(Math.abs(s.value)));
-  return { sign: s.value < 0 ? -1 : 1, y: 0, mo: 0, w: 0, d: sp.d, h: sp.h, mi: sp.mi, s: sp.s, biz: false };
+  return elapsedSpan(s.value);
 });
 
 function onInput() {
