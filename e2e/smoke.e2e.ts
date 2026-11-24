@@ -38,6 +38,8 @@ test('typed text sets both ends, the address follows, and undo takes it back', a
   await expect(field(page, '開始的年')).toHaveValue('2000');
   await expect(field(page, '結束的日')).toHaveValue('31');
   await expect(page.getByRole('region', { name: '間隔' })).toContainText('30天');
+  await expect(page.getByRole('region', { name: '間隔' }).getByLabel('換算成各種單位')).toContainText('工作日');
+  await expect(page.getByRole('region', { name: '讀法' }).getByLabel('換算成各種單位')).toHaveCount(0);
   await expect(page).toHaveURL((url) => url.search === '?s=2000-01-01&e=2000-01-31');
   await box.blur();
   await page.keyboard.press('Control+z');

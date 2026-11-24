@@ -8,6 +8,7 @@ import Icon from './Icon.vue';
 import Popover from './Popover.vue';
 import DurationCalc from './DurationCalc.vue';
 import ChipRow from './ChipRow.vue';
+import SpanUnits from './SpanUnits.vue';
 import {
   S,
   now,
@@ -108,9 +109,18 @@ const shape = computed(() =>
 );
 
 /* ---------- fit the hero to its width ---------- */
+const scEl = ref<HTMLElement | null>(null);
 const box = ref<HTMLElement | null>(null);
 const line = ref<HTMLElement | null>(null);
+const { w: scW } = useSize(scEl);
 const { w: boxW, h: boxH } = useSize(box);
+const unitsCols = computed(() => {
+  const r = remPx.value;
+  if (!scW.value) return props.compact ? 2 : 3;
+  if (scW.value >= 52 * r) return 6;
+  if (scW.value >= 29 * r) return 3;
+  return 2;
+});
 /** In big mode the hero's size comes from its height; fitting to the width then takes it down where needed. */
 const heroFs = computed(() => {
   if (!props.big || !boxH.value) return null;
@@ -596,6 +606,7 @@ watch(calcHere, (h) => {
 
 <template>
   <section
+    ref="scEl"
     class="panel sc"
     :class="[`m-${mode}`, { compact, big, flash: flashing, neg: (heroSpan?.sign ?? 1) < 0, dropping }]"
     aria-label="間隔"
@@ -732,6 +743,10 @@ watch(calcHere, (h) => {
       {{ exprNote.src }} <span>{{ exprNote.text }}</span>
     </p>
 
+    <div v-if="hasEnd && !(compact && tight)" class="sc-units">
+      <SpanUnits :cols="unitsCols" :inline="unitsCols < 6" :compact="compact" />
+    </div>
+
     <div
       v-if="!tight && shown('chips')"
       class="sc-quick"
@@ -798,7 +813,7 @@ watch(calcHere, (h) => {
 }
 .sc {
   padding: 0.9rem 1.15rem 1rem;
-  gap: 0.5rem;
+  gap: 0.35rem;
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--surface)), var(--surface) 70%);
   box-shadow: var(--shadow-hero);
   border-color: color-mix(in srgb, var(--accent) 16%, var(--hair));
@@ -843,7 +858,7 @@ watch(calcHere, (h) => {
   position: relative;
   flex: 1;
   min-width: 0;
-  height: 4.1rem;
+  height: 3.6rem;
   display: flex;
   align-items: center;
 }
@@ -1004,11 +1019,25 @@ watch(calcHere, (h) => {
   color: var(--ink-2);
 }
 
+.sc-units {
+  min-width: 0;
+  padding-top: 0.1rem;
+}
+.sc.compact .sc-units {
+  padding-top: 0;
+}
 .sc-quick {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   min-width: 0;
+  margin-top: auto;
+  padding-top: 0.15rem;
+}
+.sc.big .sc-quick,
+.sc.compact .sc-quick {
+  margin-top: 0;
+  padding-top: 0;
 }
 .sc-quick :deep(.cr) {
   flex: 1 1 0;

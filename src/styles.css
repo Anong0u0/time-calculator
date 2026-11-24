@@ -818,16 +818,28 @@ input[type='text']:focus-visible {
 .app.dial .zt small {
   color: var(--ink-4);
 }
-/* unit conversions: label over number, no cells */
+/* unit conversions: quiet sub-readings on the dial, no cells */
 .app.dial .units {
   background: none;
   border: 0;
   border-radius: 0;
-  gap: 0.1rem 1.2rem;
+  gap: 0.1rem 1rem;
+}
+.app.dial .units.inline {
+  gap: 0.12rem 0.5rem;
 }
 .app.dial .units .u {
   background: none;
-  padding: 0.3rem 0;
+  padding: 0.25rem 0;
+}
+.app.dial .units.inline .u {
+  padding: 0.08rem 0;
+}
+.app.dial .units .u dt {
+  color: var(--ink-4);
+}
+.app.dial .units .u-v {
+  color: var(--ink-2);
 }
 .app.dial .dc-totals {
   background: none;

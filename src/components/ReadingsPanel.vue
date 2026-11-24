@@ -8,7 +8,6 @@ import { ref, computed, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import CopyBtn from './CopyBtn.vue';
 import Popover from './Popover.vue';
-import SpanUnits from './SpanUnits.vue';
 import {
   S,
   type End,
@@ -258,13 +257,10 @@ const isoDur = computed(() => {
 const { w: bodyW, h: bodyH } = useSize(body);
 const cols = computed(() => bodyW.value > 0 && bodyW.value >= 38 * remPx.value);
 const rowH = computed(() => (cols.value || !hasEnd.value ? 2.15 : 2.95) * remPx.value);
-const unitsBox = ref<HTMLElement | null>(null);
-const { h: unitsInner } = useSize(unitsBox);
-const unitsH = computed(() => (hasEnd.value ? unitsInner.value + 0.7 * remPx.value : 0));
 const lenH = computed(() => (hasEnd.value ? 2.15 * remPx.value : 0));
 const fit = computed(() => {
   // the foot (全部寫法 · 複製表格) is always there
-  const room = bodyH.value - unitsH.value - lenH.value - 2.3 * remPx.value;
+  const room = bodyH.value - lenH.value - 2.3 * remPx.value;
   if (defs.value.length * rowH.value <= room) return defs.value.length;
   return Math.max(0, Math.floor(room / rowH.value));
 });
@@ -371,9 +367,6 @@ function editKey(e: KeyboardEvent) {
       >
     </header>
     <div ref="body" class="rd-body">
-      <div v-if="hasEnd" ref="unitsBox" class="rd-units">
-        <SpanUnits :cols="cols ? 6 : bodyW >= 24 * remPx ? 3 : 2" />
-      </div>
       <div v-if="hasEnd" class="rd-row len" :class="{ hot: copiedKey === 'rd-dur' }">
         <span class="rd-k" v-tip="'ISO 8601 的長度寫法'">{{ copiedKey === 'rd-dur' ? '已複製' : '長度' }}</span>
         <span class="rd-v"><CopyBtn class="mono" :text="isoDur" k="rd-dur" label="ISO 長度" /></span>
@@ -605,10 +598,6 @@ function editKey(e: KeyboardEvent) {
   padding: 0.35rem 1rem 0.7rem;
   overflow: hidden;
 }
-.rd-units {
-  margin: 0.2rem 0 0.5rem;
-  flex: none;
-}
 .rd-row {
   display: grid;
   grid-template-columns: 5.9rem minmax(0, 1fr);
@@ -620,8 +609,7 @@ function editKey(e: KeyboardEvent) {
   min-height: 2.15rem;
   flex: none;
 }
-.rd-row:first-child,
-.rd-units + .rd-row {
+.rd-row:first-child {
   border-top: 0;
 }
 .rd-row .rd-v + .rd-v {

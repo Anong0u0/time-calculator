@@ -21,7 +21,7 @@ import {
 import { partsInTz, dayNum, countWeekdays, interpretSpanText, fmtSpan } from '../core/time';
 import { nf, nfMax, plainNum } from '../core/format';
 
-defineProps<{ cols?: number }>();
+defineProps<{ cols?: number; inline?: boolean; compact?: boolean }>();
 const KEYS = ['週', '天', '小時', '分鐘', '秒', '工作日'] as const;
 const cells = computed(() => {
   if (gapSec.value == null || endMs.value == null)
@@ -132,7 +132,7 @@ function key(e: KeyboardEvent) {
 </script>
 
 <template>
-  <dl class="units" :style="{ '--cols': cols || 6 }" aria-label="換算成各種單位">
+  <dl class="units" :class="{ inline, compact }" :style="{ '--cols': cols || 6 }" aria-label="換算成各種單位">
     <div v-for="c in cells" :key="c.k" class="u">
       <dt>{{ c.k }}</dt>
       <dd v-if="editing === c.k">
@@ -191,38 +191,63 @@ function key(e: KeyboardEvent) {
   background: var(--surface);
   min-width: 0;
 }
+.units.inline .u {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.28rem;
+}
 .u dt {
   font-size: var(--fs-xs);
   color: var(--ink-3);
   font-weight: 600;
   letter-spacing: 0.02em;
+  flex: none;
+  white-space: nowrap;
 }
 .u dd {
   min-width: 0;
   display: flex;
-}
-.u-v {
-  font-size: max(var(--floor), 0.86rem);
-  font-weight: 500;
-  color: var(--ink);
-  gap: 0.35rem;
-  margin: -0.12rem -0.35rem;
-  min-width: 0;
-}
-.u dd {
   align-items: center;
   gap: 0.1rem;
 }
+.units.inline .u dd {
+  flex: 1;
+}
+.u-v {
+  font-size: max(var(--floor), 0.84rem);
+  font-weight: 500;
+  color: var(--ink);
+  gap: 0.25rem;
+  margin: -0.12rem -0.25rem;
+  padding: 0.12rem 0.25rem;
+  min-width: 0;
+}
+.units.compact .u-v {
+  font-size: max(var(--floor), 0.8rem);
+}
 .u-ed {
   flex: none;
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 1.25rem;
+  height: 1.25rem;
   display: grid;
   place-items: center;
   border-radius: 0.4rem;
   color: var(--ink-4);
   opacity: 0;
   transition: opacity 0.15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .u-ed {
+    width: 0;
+    overflow: hidden;
+    margin-left: -0.1rem;
+  }
+  .u:hover .u-ed,
+  .u-ed:focus-visible {
+    width: 1.25rem;
+    margin-left: 0;
+  }
 }
 .u:hover .u-ed,
 .u-ed:focus-visible {
@@ -239,20 +264,20 @@ function key(e: KeyboardEvent) {
 .u-in {
   width: 100%;
   min-width: 0;
-  height: 1.6rem;
+  height: 1.5rem;
   padding: 0 0.35rem;
-  margin: -0.1rem -0.3rem;
+  margin: -0.1rem -0.25rem;
   border-radius: 0.4rem;
   border: 1.5px solid var(--accent);
   background: var(--surface-2);
   color: var(--ink);
-  font-size: 0.86rem;
+  font-size: max(var(--floor), 0.84rem);
 }
 @media (pointer: coarse) {
   .u-ed {
     opacity: 1;
-    width: 1.9rem;
-    height: 1.9rem;
+    width: 1.65rem;
+    height: 1.65rem;
   }
 }
 </style>
