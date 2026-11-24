@@ -39,6 +39,7 @@ bun install
 bun run dev      # 開發伺服器
 bun test         # 單元測試（時區、日曆、解析器）
 bun run build    # 型別檢查並輸出到 dist/
+bun run e2e      # 建置後在瀏覽器跑冒煙測試（第一次先 bunx playwright install chromium）
 ```
 
 推送到 `main` 後，GitHub Actions 會跑測試、建置，並直接部署到 GitHub Pages（不經過任何分支）。
@@ -50,5 +51,6 @@ src/core/      計算核心：時區換算、日曆、間隔與時長運算、�
                詞彙（vocab.ts）、農曆（lunar.ts）、節氣與新月（terms.ts）（無 UI，可單獨測試）
 src/state/     狀態、復原歷史、單一輸入框的解析建議
 src/components 介面：方程式列、時區、月曆與年曆、讀法、面板選單
-tests/         bun test
+tests/         bun test（核心與狀態）
+e2e/           Playwright 冒煙測試（建置後的頁面）
 ```

@@ -38,6 +38,11 @@ jobs:
       - name: Type-check and build
         run: bun run build
 
+      - name: Smoke test in a browser
+        run: |
+          bunx playwright install --with-deps --only-shell chromium
+          bunx playwright test
+
       # No routes in the app: any unknown path still opens it.
       - name: SPA fallback
         run: cp dist/index.html dist/404.html
