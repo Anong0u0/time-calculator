@@ -14,6 +14,7 @@
 
    When the link carries any of s, e, d, p, tz, the time comes from the link alone: no end in it means no end.
    z and calc replace yours only when they are there.
+   The address is written only after something is changed here; opening the page leaves it as it is.
    ============================================================ */
 import { watch } from 'vue';
 import { type Wall, type Span, validWall, partsInTz, pad, interpretSpanText, fmtSpan, isValidTz } from '../core/time';
@@ -140,9 +141,10 @@ export function shareUrl(): string {
 }
 
 let timer: ReturnType<typeof setTimeout> | undefined;
-/** Keep the address bar in step with the state (replacing the entry: undo is the way back, not the back button). */
+/** Keep the address bar in step with the state once a value changes (replacing the entry: undo is the way back,
+    not the back button). Opening the page writes nothing: a plain address stays plain, a link stays as it was typed. */
 export function startUrlSync() {
-  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.dur, S.durSample], () => {
+  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.dur, S.durSample], () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const q = buildQuery();
@@ -151,5 +153,5 @@ export function startUrlSync() {
         try { history.replaceState(history.state, '', next); } catch { /* some sandboxes refuse; the app still works */ }
       }
     }, 250);
-  }, { deep: true, immediate: true });
+  }, { deep: true });
 }

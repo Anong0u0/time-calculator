@@ -145,8 +145,9 @@ describe('command bar and the duration calculator', () => {
   });
 });
 
-import { parseQuery, wallParam, parseWallParam, spanParam } from '../src/state/url';
+import { parseQuery, wallParam, parseWallParam, spanParam, startUrlSync } from '../src/state/url';
 import { LOCAL_TZ } from '../src/core/zones';
+import { S } from '../src/state/store';
 
 describe('address bar', () => {
   test('wall times in the shortest form, and back', () => {
@@ -188,5 +189,26 @@ describe('address bar', () => {
     // + typed by hand arrives as a space and still reads
     expect(parseQuery('?d=+3h')?.d?.expr).toBe('+3小時');
     expect(LOCAL_TZ.length).toBeGreaterThan(0);
+  });
+  test('the address is written only after a value changes', async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const was = { location: g.location, history: g.history };
+    const writes: string[] = [];
+    g.location = { pathname: '/', search: '', hash: '' };
+    g.history = { state: null, replaceState: (_s: unknown, _t: string, u: string) => { writes.push(u); } };
+    const dur = S.dur, durSample = S.durSample;
+    const stop = startUrlSync();
+    try {
+      await Bun.sleep(300);
+      expect(writes).toEqual([]);
+      S.dur = '3h × 4'; S.durSample = false;
+      await Bun.sleep(300);
+      expect(writes.length).toBe(1);
+      expect(writes[0]).toContain('calc=');
+    } finally {
+      stop();
+      S.dur = dur; S.durSample = durSample;
+      g.location = was.location; g.history = was.history;
+    }
   });
 });
