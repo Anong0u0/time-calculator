@@ -37,7 +37,8 @@
 ```sh
 bun install
 bun run dev      # 開發伺服器
-bun test         # 單元測試（時區、日曆、解析器）
+bun test         # 單元測試（時區、日曆、解析器、狀態）
+bun run lint     # ESLint 與 Prettier 檢查（bun run format 自動排版）
 bun run build    # 型別檢查並輸出到 dist/
 bun run e2e      # 建置後在瀏覽器跑冒煙測試（第一次先 bunx playwright install chromium）
 ```

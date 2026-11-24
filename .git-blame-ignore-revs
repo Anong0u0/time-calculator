@@ -1,0 +1,3 @@
+# Formatting only (Prettier): git blame skips it. GitHub reads this file; locally:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+c9d25bae78affaff920a6b96946929dbe64545d8
