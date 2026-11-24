@@ -1,9 +1,7 @@
 <script setup lang="ts">
-/* A floating panel anchored to the control that opened it. Closes on Esc or a press outside. */
 import { ref, reactive, watch, nextTick, onBeforeUnmount } from 'vue';
 import { hideTip } from '../composables/tip';
 
-/** tall: on a phone it takes the whole screen's height instead of the room beside its anchor (editors with much in them). */
 const props = withDefaults(
   defineProps<{
     open: boolean;

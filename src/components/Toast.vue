@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* The one place that announces changes, to the eye and to screen readers. */
 import { toastState, toastClose } from '../state/store';
 import Icon from './Icon.vue';
 function doUndo() {

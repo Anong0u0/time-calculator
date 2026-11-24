@@ -20,7 +20,6 @@ export function relative(ms: number, now: number): string {
   return RTF.format(Math.round(diff / (365.2425 * DAY)), 'year');
 }
 
-/** "1:02:03" for under a day, "3 天 4 時" for under a week, "40 天" beyond. */
 export function fmtRemain(ms: number): string {
   const sp = splitSeconds(Math.max(0, Math.floor(ms / SEC)));
   if (sp.d === 0) return `${sp.h}:${pad(sp.mi)}:${pad(sp.s)}`;
@@ -44,7 +43,6 @@ export type HeroTok =
   | { t: 'colon' }
   | { t: 'sign'; v: string };
 
-/** Big numbers, small units: 1個月 8天 19:19:26 */
 export function spanTokens(
   sp: Span | (CalDiff & { sign: number; w?: number; biz?: boolean }),
   { plus = false, clock = false } = {},

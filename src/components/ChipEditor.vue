@@ -1,6 +1,4 @@
 <script setup lang="ts">
-/* One row of shortcuts, to change: the list (drag by the grip to reorder, × to remove, click to edit),
-   and the block builder for the one picked or a new one. A rule can also be kept as a word, to use inside others. */
 import { ref, computed, watch } from 'vue';
 import Icon from './Icon.vue';
 import RuleBuilder from './RuleBuilder.vue';
@@ -166,7 +164,7 @@ function saveWord() {
       else S.words.push({ name: n, code });
       S.wordsOff = S.wordsOff.filter((x) => x !== n);
     },
-    { label: `詞彙：${n}`, say: `${redefine ? '已改寫' : '已新增'}詞彙「${n}」，打字和積木都能用` },
+    { label: `詞彙：${n}`, say: `${redefine ? '已更新' : '已新增'}詞彙「${n}」` },
   );
   asWord.value = false;
   wordName.value = '';
@@ -224,7 +222,7 @@ const broken = (i: number) => !chipRule(list.value[i]);
     </ol>
 
     <div class="ce-build">
-      <p class="ce-k">{{ sel == null ? '新的快捷' : `修改「${chipName(list[sel])}」` }}：組合積木，或直接打字</p>
+      <p class="ce-k">{{ sel == null ? '新增快捷' : `編輯「${chipName(list[sel])}」` }}</p>
       <RuleBuilder
         v-model="draft"
         :self="which"
@@ -258,8 +256,8 @@ const broken = (i: number) => !chipRule(list.value[i]);
         />
         <button type="button" class="btn sm" @click="saveWord">存成詞</button>
         <p class="ce-note">
-          存成詞之後，打字可以直接用（<code>明天{{ wordName || draftName || '下班' }}</code
-          >），也能在積木裡當作一步。
+          存成詞後，打字（<code>明天{{ wordName || draftName || '下班' }}</code
+          >）與積木皆可用。
         </p>
       </div>
     </div>

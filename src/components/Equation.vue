@@ -1,12 +1,4 @@
 <script setup lang="ts">
-/* The main reading: start + span = end, printed largest on the face.
-   One rail threads the equation: ● start ── (+) ── span ── (=) ── ○ end. The span stretch of the rail carries
-   the ticks, the progress and the red "now" hand. The + opens the span; the = links or fixes the end.
-   In a row the rail runs under the three; stacked, it runs down the left edge.
-   The rail is also a range slider: drag ● or ○ to move that end, drag the stretch between to move both (the span
-   kept), the wheel does the same a step at a time, and hovering reads the moment under the pointer. The step is a
-   unit that suits the span (minutes for an hour, days for a month, months for years).
-   Drag = toward an end to make the span compute that end (開始 = 結束 − 間隔, or 結束 = 開始 + 間隔). */
 import Endpoint from './Endpoint.vue';
 import SpanCenter from './SpanCenter.vue';
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
@@ -21,7 +13,6 @@ import {
   wallOf,
   linkSentence,
   followText,
-  linkTarget,
   startMs,
   endMs,
   setInstant,
@@ -35,9 +26,6 @@ import { fmtDT, addDuration, partsInTz, WD, wdOf, pad, type Span } from '../core
 import { editSpan } from '../state/ui';
 import type { EqMode } from '../state/layout';
 import { remPx, fontsTick } from '../composables/size';
-/** autoTight: the band sits in a cell of fixed height (short screens). It shows the quick chips only when they fit.
-    big: nothing else below it (or beside one lens), so it takes the whole height and its readings grow to fill it.
-    mode: 'row' (left-to-right horizon), 'stack' (vertical with left rail), 'stage' (full-width span hero over rail and endpoints). */
 const props = defineProps<{
   mode?: EqMode;
   compact?: boolean;
@@ -49,8 +37,6 @@ const props = defineProps<{
 const isStack = computed(() => props.mode === 'stack');
 const isStage = computed(() => props.mode === 'stage');
 
-/* ---------- the pieces shown: start, span and end can each be put away, and so can the rail ----------
-   The grid is built from what is left; a joint (+ or =) stands only between the span and an end. */
 type Slot = 's' | 'j1' | 'm' | 'j2' | 'e' | 'div';
 const parts = computed(() => {
   const s = shown('start'),
@@ -178,14 +164,12 @@ function measure() {
   } else if (used > room + 1) tight.value = true;
 }
 
-/* ---------- the joints ---------- */
-const plusTip = '開始 + 間隔：點一下輸入間隔，例如 +30天、3個月';
+const plusTip = '輸入間隔（如 +30天）';
 const N = { start: '開始', end: '結束' } as const;
 const eqTip = computed(() => {
-  if (!hasEnd.value) return '設定結束後，= 決定兩端是各自固定，還是用間隔連在一起';
-  if (S.link) return `連動中：${linkSentence()}。${followText()}。點一下改成固定`;
-  const to = linkTarget();
-  return `兩端各自固定。點一下改成連動：保持目前的間隔，${N[to]}跟著${N[to === 'end' ? 'start' : 'end']}移動。往左拖＝算開始，往右拖＝算結束`;
+  if (!hasEnd.value) return '設定結束後可切換固定／連動';
+  if (S.link) return `連動：${linkSentence()}（點選固定）`;
+  return '兩端固定（點選連動 · 左右拖曳切換方向）';
 });
 function plus() {
   editSpan();
@@ -358,7 +342,7 @@ function hoverRuler(e: PointerEvent) {
   const box = ruler.value.closest('.eq')!.getBoundingClientRect();
   readout.value = {
     x: clampX(e.clientX - box.left, box.width),
-    text: `${when(ms, tzOf('start'))} · ${Math.round(f * 100)}% · 拖曳移動兩端`,
+    text: `${when(ms, tzOf('start'))} · ${Math.round(f * 100)}%`,
   };
 }
 let wheelAcc = 0;
@@ -381,9 +365,7 @@ function gripKey(grip: Grip, e: KeyboardEvent) {
 }
 const gripTip = (g: Grip) => {
   const st = scale().step.name;
-  return g === 'both'
-    ? `拖曳：兩端一起移動，間隔不變（每格 1 ${st}）；停在上面看那一點的時刻`
-    : `拖曳或滾輪：移動${GRIP_NAME[g]}（每格 1 ${st}，按住 Shift 一次 10 格）`;
+  return g === 'both' ? `拖曳平移兩端（每格 1 ${st}）` : `拖曳或滾輪移動${GRIP_NAME[g]}（1 ${st} · Shift ×10）`;
 };
 /** Stacked: the rail is measured from the ● and ○ in the headers and the + and = on it. */
 const v = reactive({ x: 0, top: 0, h: 0, a: 0, b: 0, ok: false });
@@ -607,7 +589,6 @@ watch([() => props.mode, fontsTick, hasEnd], () => nextTick(relayout));
 </template>
 
 <style scoped>
-/* no plate: the band is printed on the face like everything else; the rail is its horizon */
 .eq {
   display: grid;
   min-width: 0;
@@ -639,7 +620,6 @@ watch([() => props.mode, fontsTick, hasEnd], () => nextTick(relayout));
     1px 100% no-repeat;
 }
 
-/* the rail along the bottom of the band */
 .track {
   grid-area: 2 / 1 / 3 / -1;
   position: relative;
@@ -654,7 +634,6 @@ watch([() => props.mode, fontsTick, hasEnd], () => nextTick(relayout));
   height: 1px;
   background: var(--hair-2);
 }
-/* engraved captions where the rail begins and ends, like the scale names printed on a dial */
 .cap {
   position: absolute;
   top: 50%;

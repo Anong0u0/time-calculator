@@ -1,9 +1,3 @@
-/* ============================================================
-   Text into a rule. The words that count (明天, 下週五, 下個月底, 3天後, 開始那個月的, 下一個中秋, 農曆八月十五,
-   冬至那一刻, 第二個週日, 每月5號 …) become steps; the dates and times written out are read by parseAbsoluteText.
-   Steps are put in order from the largest unit to the smallest, so "8pm tomorrow" and "明天晚上8點" are one rule.
-   Any word in the vocabulary (built in or the user's own) can be used inside a sentence: 下個月發薪日, 明天下班.
-   ============================================================ */
 import {
   type Wall,
   type YMD,
@@ -621,7 +615,6 @@ export function parseRuleText(input: string, opts: ParseOpts = {}): RuleParse | 
   return { main: out[0], alts: out.slice(1), relative };
 }
 
-/** A rule's moment for the old callers: today at 00:00 UTC unless now and the clock are given. */
 export function evalReading(r: RuleReading, opts: ParseOpts): Wall | null {
   const now = opts.now ?? (opts.today ? utcMs(opts.today.y, opts.today.mo, opts.today.d) : Date.now());
   const tz = opts.tz ?? 'UTC';

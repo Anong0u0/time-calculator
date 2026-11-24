@@ -1,4 +1,3 @@
-/* Time zone directory: curated cities with Chinese names, plus every IANA zone the browser knows. */
 import { isValidTz, offsetAt, MIN, fmtOffset } from './time';
 
 export interface ZoneInfo {
@@ -9,7 +8,6 @@ export interface ZoneInfo {
   curated: boolean;
 }
 
-/* [IANA id, 中文名, English name, search keywords] */
 const CITIES: [string, string, string, string][] = [
   ['Pacific/Pago_Pago', '帕果帕果', 'Pago Pago', 'samoa sst 美屬薩摩亞'],
   ['Pacific/Honolulu', '檀香山', 'Honolulu', 'hawaii hst 夏威夷'],
@@ -214,7 +212,6 @@ export interface ZoneHit {
   off: number;
   score: number;
 }
-/** Search by Chinese or English name, keyword, IANA id or an offset such as "UTC+8" / "+5:30". */
 export function searchZones(raw: string, now = Date.now(), limit = Infinity): ZoneHit[] {
   const q = raw.trim().toLowerCase();
   const om = /^(?:utc|gmt)?\s*([+\-−])\s*(\d{1,2})(?::?(\d{2}))?$/.exec(q);
@@ -246,7 +243,6 @@ export function searchZones(raw: string, now = Date.now(), limit = Infinity): Zo
   res.sort((a, b) => b.score - a.score || a.off - b.off || a.z.zh.localeCompare(b.z.zh, 'zh-Hant'));
   return res.slice(0, limit);
 }
-/** Finds a zone named at the start or end of a text: "東京 15:00", "15:00 in Tokyo", "3pm NYC". */
 export function zoneInText(text: string): { zone: ZoneInfo; rest: string } | null {
   const t = text.trim();
   let best: { zone: ZoneInfo; rest: string; len: number } | null = null;

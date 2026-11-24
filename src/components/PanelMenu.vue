@@ -1,7 +1,4 @@
 <script setup lang="ts">
-/* What is on the face. Like the boxes of a system monitor, every panel can be put away and brought back (each has a key),
-   a preset puts several away at once (P steps through them), and the page can take the whole screen (F).
-   With one panel left it fills the screen: 滿版倒數, 滿版月曆, 滿版年曆 are just that. */
 import { computed } from 'vue';
 import Icon from './Icon.vue';
 import { S, PANELS, VIEW_PRESETS, shown, togglePanel, applyPreset, presetNow } from '../state/store';
@@ -33,7 +30,7 @@ const allShown = computed(() => cur.value?.k === 'all');
       </div>
     </section>
     <section class="pm-sec">
-      <h3>面板<small>只剩一個時會放到滿版</small></h3>
+      <h3>面板<small>單一面板自動滿版</small></h3>
       <div class="pm-list">
         <button
           v-for="d in main"
@@ -85,10 +82,7 @@ const allShown = computed(() => cur.value?.k === 'all');
         <Icon name="panels" />全部顯示<span class="kbd">0</span>
       </button>
     </section>
-    <p class="pm-note">
-      按鍵在沒有打字的時候有效。頂列收起來時，右上角有一個小按鈕可以打開這裡；按
-      <span class="kbd">/</span> 也會叫回輸入框。版面會寫進網址，書籤打開就是同一個畫面。
-    </p>
+    <p class="pm-note">未打字時按鍵生效 · 隱藏頂列後按 <span class="kbd">/</span> 叫回輸入框</p>
   </div>
 </template>
 

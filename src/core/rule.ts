@@ -1,17 +1,3 @@
-/* ============================================================
-   A moment as a rule: where to start, then steps, each one taking the moment so far to a new one.
-
-     start   現在, 開始, 結束, the other end, or a date
-     steps   move   ± N 秒 分 時 天 工作日 週 月 季 年 農曆月 農曆年 節氣
-             align  to a period's beginning, middle, last day or end: 日 週 月 季 年 農曆月 農曆年 節氣 季節
-             pick   a day by its marks (month, day, weekday, the n-th weekday, a lunar date, a 節氣):
-                    the next or previous one, or the one inside a period (this week's Wednesday, this year's 中秋)
-             time   a time of day
-             word   a named rule from the vocabulary (中秋, 下班, 發薪日 …), used as one step
-
-   開始那個月的月底 = 開始 → align month · end; 明晚 = 現在 → +1 天 → 晚上; 母親節 = next (May, 2nd Sunday).
-   The same rule reads the same everywhere: in a shortcut, in the command box, at either end, in a link.
-   ============================================================ */
 import {
   type Wall,
   SEC,
@@ -66,24 +52,17 @@ export interface Rule {
   steps: Step[];
 }
 
-/** The general settings every rule is read with. */
 export interface RulePrefs {
-  /** 1: weeks begin on Monday (ISO); 0: on Sunday. */
   weekStart: 0 | 1;
-  /** Which day a 節氣 falls on: as the almanac prints it (China's clock), or on the clock of the end. */
   termTz: 'china' | 'local';
-  /** A day the period does not have (31號 in February, 三十 in a short lunar month, a leap month that is not there): the nearest one, or an error. */
   missing: 'clamp' | 'error';
-  /** Picking or aligning to a day starts that day at 00:00 (otherwise the time of day is kept). */
   dayResets: boolean;
 }
 export const DEFAULT_PREFS: RulePrefs = { weekStart: 1, termTz: 'china', missing: 'clamp', dayResets: true };
 
 export interface RuleCtx {
   now: number;
-  /** The clock the rule is read on (the zone of the end it sets). */
   tz: string;
-  /** The end the rule is for: "the other end" is the opposite one. */
   self?: EndRef;
   ends?: { start?: number | null; end?: number | null };
   prefs?: RulePrefs;
@@ -97,7 +76,6 @@ export type RuleResult =
   | { ok: true; ms: number; trace: Trace[]; from: number | null }
   | { ok: false; err: string; at: number; trace: Trace[] };
 
-/* ---------- names of things ---------- */
 export const UNITS: Unit[] = ['s', 'mi', 'h', 'd', 'bd', 'w', 'mo', 'q', 'y', 'lmo', 'ly', 'term'];
 export const UNIT_NAME: Record<Unit, string> = {
   s: '秒',
@@ -147,7 +125,6 @@ const fail = (m: string): never => {
   throw new RuleError(m);
 };
 
-/* ---------- the periods a moment is in ---------- */
 interface Frame {
   tz: string;
   prefs: RulePrefs;
@@ -204,7 +181,6 @@ function placeIn(p: Period, pos: Pos, ms: number, f: Frame): { ms: number; from:
   return { ms: atWall(day0(dayOf(b - 1, f)), f), from: a };
 }
 
-/* ---------- picking a day by its marks ---------- */
 function matcher(c: Cond, f: Frame): (n: number) => boolean {
   const termTz = f.prefs.termTz === 'china' ? CHINA_TZ : f.tz;
   const lunar = c.lmo != null || c.ld != null || c.leap != null;
@@ -231,7 +207,6 @@ function matcher(c: Cond, f: Frame): (n: number) => boolean {
     return true;
   };
 }
-/** Does day n have these marks? (A calendar marks its festivals with it.) */
 export const dayMatches = (c: Cond, tz: string, prefs: RulePrefs = DEFAULT_PREFS) => matcher(c, { tz, prefs });
 const LIMIT = 366 * 220;
 function seekDay(c: Cond, from: number, dir: 1 | -1, k: number, f: Frame): number | null {
@@ -277,7 +252,6 @@ function termOfDay(n: number, k: number | undefined, f: Frame): number | null {
   return null;
 }
 
-/* ---------- reading a rule ---------- */
 interface State {
   ms: number;
   from: number | null;
@@ -473,7 +447,6 @@ function pick(s: Extract<Step, { t: 'pick' }>, st: State, f: Frame) {
   st.ms = land(hits[i]);
 }
 
-/* ---------- describing a rule in words ---------- */
 export function condName(c: Cond): string {
   const out: string[] = [];
   if (c.mo != null) out.push(`${c.mo}月`);
@@ -552,7 +525,6 @@ export function originName(o: Origin): string {
   const w = o.w;
   return `${w.y}/${w.mo}/${w.d}${w.h || w.mi || w.s ? ` ${pad(w.h)}:${pad(w.mi)}` : ''}`;
 }
-/** A short name for a rule, the way a person would say it where possible: 明天 晚上, 今天結束, 下個月 月底, 開始 → 月結束. */
 export function ruleName(r: Rule, prefs: RulePrefs = DEFAULT_PREFS): string {
   const st = r.steps;
   if (!st.length) return originName(r.o);
@@ -647,7 +619,6 @@ export function ruleName(r: Rule, prefs: RulePrefs = DEFAULT_PREFS): string {
   return out.join(' ');
 }
 
-/* ---------- a rule as a short text, for storage and links ---------- */
 const wallCode = (w: Wall) =>
   `${pad(w.y, 4)}${pad(w.mo)}${pad(w.d)}${w.h || w.mi || w.s ? `T${pad(w.h)}${pad(w.mi)}${w.s ? pad(w.s) : ''}` : ''}`;
 const COND_KEYS: [keyof Cond, string][] = [
@@ -759,10 +730,8 @@ export function decodeRule(code: string): Rule | null {
   return { o, steps };
 }
 
-/* ---------- what a rule is, in the app's older terms ---------- */
-/** The rule is the clock itself: 現在. */
 export const isNowRule = (r: Rule) => r.o.t === 'now' && !r.steps.length;
-/** A single move from the other end can be a span. Compound rules keep their intermediate dates. */
+/** A single move from the other end maps to a span; compound rules stay rules. */
 export function spanOfRule(r: Rule, self?: EndRef): Span | null {
   const otherEnd = self && (r.o.t === 'other' || (self === 'start' ? r.o.t === 'end' : r.o.t === 'start'));
   if (!otherEnd || r.steps.length !== 1) return null;
@@ -790,7 +759,6 @@ export function ruleOfSpan(sp: Span): Rule {
   if (!steps.length) steps.push({ t: 'move', n: 0, u: 'd' });
   return { o: { t: 'other' }, steps };
 }
-/** Which ends a rule reads (through its words too). */
 export function ruleReads(
   r: Rule,
   self: EndRef | undefined,

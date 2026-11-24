@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* The duration calculator as a lens: its own column when the window has room for four. */
 import { ref, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import DurationCalc from './DurationCalc.vue';
@@ -8,7 +7,6 @@ import { useFlash } from '../composables/flash';
 
 const calc = ref<InstanceType<typeof DurationCalc> | null>(null);
 const { flashing, flash } = useFlash();
-/* A request can arrive just before this lens mounts (its tab opens because of it), so answer on mount too. */
 async function answer() {
   if (ui.durReq === ui.durSeen) return;
   ui.durSeen = ui.durReq;
@@ -25,7 +23,6 @@ onMounted(answer);
     <header class="panel-head">
       <Icon name="calc" class="ph-ic" />
       <h2>時長</h2>
-      <span class="panel-sub">加減乘除時間長度，不會動到開始和結束</span>
     </header>
     <div class="du-body"><DurationCalc ref="calc" /></div>
   </section>

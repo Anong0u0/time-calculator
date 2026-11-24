@@ -1,6 +1,4 @@
 <script setup lang="ts">
-/* The same gap in every unit. Each value copies on click; the pen (or a double click) types a new value right there,
-   and the span becomes that many of the unit (90 天, 20 工作日, 1.5 小時). */
 import { computed, ref, nextTick } from 'vue';
 import CopyBtn from './CopyBtn.vue';
 import Icon from './Icon.vue';
@@ -25,7 +23,7 @@ defineProps<{ cols?: number; inline?: boolean; compact?: boolean; big?: boolean 
 const KEYS = ['週', '天', '小時', '分鐘', '秒', '工作日'] as const;
 const cells = computed(() => {
   if (gapSec.value == null || endMs.value == null)
-    return KEYS.map((k) => ({ k, v: '—', copy: '', tip: '設定結束後才有數字' }));
+    return KEYS.map((k) => ({ k, v: '—', copy: '', tip: '設定結束後顯示' }));
   const total = Math.abs(gapSec.value),
     neg = gapSec.value < 0;
   const lo = Math.min(startMs.value, endMs.value),
@@ -69,7 +67,7 @@ const cells = computed(() => {
       k: KEYS[5],
       v: (wk && neg ? '−' : '') + nf(wk),
       copy: (wk && neg ? '-' : '') + String(wk),
-      tip: `週一到週五（僅扣週末，不含國定假日）。週末 ${nf(n1 - n0 - wk)} 天`,
+      tip: `僅扣週末 · 週末 ${nf(n1 - n0 - wk)} 天`,
     },
   ];
 });
@@ -153,7 +151,7 @@ function key(e: KeyboardEvent) {
           :text="c.copy"
           :k="`u-${c.k}`"
           :label="c.k"
-          :tip="c.copy ? `${c.tip}。點一下複製 ${c.copy}；雙擊或筆可以改寫` : c.tip"
+          :tip="c.copy ? `${c.tip} · 點選複製、雙擊改寫` : c.tip"
           :disabled="!c.copy"
           >{{ c.v }}</CopyBtn
         >
@@ -162,7 +160,7 @@ function key(e: KeyboardEvent) {
           type="button"
           class="u-ed"
           :aria-label="`改寫成多少${c.k}`"
-          v-tip="`改寫：間隔變成這麼多${c.k}`"
+          v-tip="`改寫${c.k}`"
           @click="edit(c.k, c.copy)"
         >
           <Icon name="edit" />

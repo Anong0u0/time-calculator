@@ -1,6 +1,5 @@
 import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue';
 
-/** Content-box size of an element, kept current. */
 export function useSize(target: Ref<HTMLElement | null>) {
   const w = ref(0),
     h = ref(0);
@@ -17,7 +16,6 @@ export function useSize(target: Ref<HTMLElement | null>) {
   return { w, h };
 }
 
-/** Bumps when web fonts finish loading, so measured text can be measured again. */
 export const fontsTick = ref(0);
 if (typeof document !== 'undefined' && document.fonts) {
   document.fonts.ready.then(() => {
@@ -28,7 +26,6 @@ if (typeof document !== 'undefined' && document.fonts) {
   });
 }
 
-/** The root font size in px; everything is sized in rem. */
 export const remPx = ref(16);
 export function readRem() {
   remPx.value = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;

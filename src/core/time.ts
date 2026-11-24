@@ -1,9 +1,3 @@
-/* ============================================================
-   Time Calculator · core
-   Pure date/time math. No DOM. Shared by the app and the tests.
-   Proleptic Gregorian calendar, IANA zones through Intl.
-   ============================================================ */
-
 export const SEC = 1000;
 export const MIN = 60000;
 export const HOUR = 3600000;
@@ -11,7 +5,6 @@ export const DAY = 86400000;
 export const YEAR_MIN = 1;
 export const YEAR_MAX = 9999;
 
-/** A wall-clock reading: what a clock on the wall of some zone shows. */
 export interface Wall {
   y: number;
   mo: number;
@@ -20,14 +13,13 @@ export interface Wall {
   mi: number;
   s: number;
 }
-/** A held clock reading can identify the second occurrence of a repeated local time. */
+/** `later` selects the second occurrence of a DST-repeated local time. */
 export type HeldWall = Wall & { later?: true };
 export interface YMD {
   y: number;
   mo: number;
   d: number;
 }
-/** A calendar-aware length: calendar units on the wall clock, then exact units. */
 export interface Span {
   sign: 1 | -1;
   y: number;
@@ -56,7 +48,6 @@ export const floorDiv = (a: number, b: number) => Math.floor(a / b);
 export const mod = (a: number, b: number) => ((a % b) + b) % b;
 export const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
-/* ---------- civil calendar ---------- */
 export function utcMs(y: number, mo: number, d: number, h = 0, mi = 0, s = 0): number {
   const dt = new Date(0);
   dt.setUTCFullYear(y, mo - 1, d);
@@ -64,7 +55,6 @@ export function utcMs(y: number, mo: number, d: number, h = 0, mi = 0, s = 0): n
   return dt.getTime();
 }
 export const isLeap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-/** The first leap year after y. */
 export function nextLeap(y: number): number {
   let n = y + 1;
   while (!isLeap(n)) n++;
@@ -72,13 +62,11 @@ export function nextLeap(y: number): number {
 }
 const MDAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export const daysInMonth = (y: number, mo: number) => (mo === 2 && isLeap(y) ? 29 : MDAYS[mo - 1]);
-/** Days since 1970-01-01. */
 export const dayNum = (y: number, mo: number, d: number) => floorDiv(utcMs(y, mo, d), DAY);
 export function fromDayNum(n: number): YMD {
   const dt = new Date(n * DAY);
   return { y: dt.getUTCFullYear(), mo: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
 }
-/** 0 = Sunday. */
 export const weekdayOf = (y: number, mo: number, d: number) => mod(dayNum(y, mo, d) + 4, 7);
 export const dayOfYear = (y: number, mo: number, d: number) => dayNum(y, mo, d) - dayNum(y, 1, 1) + 1;
 export const daysInYear = (y: number) => (isLeap(y) ? 366 : 365);
@@ -93,7 +81,6 @@ export function addDaysWall<T extends YMD>(w: T, days: number): T {
   const p = fromDayNum(dayNum(w.y, w.mo, w.d) + days);
   return { ...w, y: p.y, mo: p.mo, d: p.d };
 }
-/** The wall clock read as if it were UTC. */
 export const wallKey = (w: Partial<Wall> & YMD) => utcMs(w.y, w.mo, w.d, w.h || 0, w.mi || 0, w.s || 0);
 export const wallOfKey = (k: number): Wall => {
   const dt = new Date(k);
@@ -107,7 +94,6 @@ export const wallOfKey = (k: number): Wall => {
   };
 };
 
-/* ---------- ISO 8601 week date ---------- */
 export function isoWeek(y: number, mo: number, d: number) {
   const n = dayNum(y, mo, d);
   const wd = mod(n + 3, 7); // Monday = 0
@@ -121,13 +107,11 @@ export function isoWeekStart(weekYear: number, week: number): YMD {
   const monday1 = jan4 - mod(jan4 + 3, 7);
   return fromDayNum(monday1 + (week - 1) * 7);
 }
-/** Week 1 contains Jan 1; weeks start on Sunday. */
 export function usWeek(y: number, mo: number, d: number) {
   const jan1wd = weekdayOf(y, 1, 1);
   return floorDiv(dayOfYear(y, mo, d) - 1 + jan1wd, 7) + 1;
 }
 
-/* ---------- time zones ---------- */
 const fmtCache = new Map<string, Intl.DateTimeFormat>();
 export function tzFormatter(tz: string): Intl.DateTimeFormat {
   let f = fmtCache.get(tz);
@@ -212,7 +196,6 @@ export function isoOffset(off: number): string {
   return (off < 0 ? '-' : '+') + pad(Math.floor(a / 60)) + ':' + pad(a % 60);
 }
 
-/* ---------- arithmetic on instants ---------- */
 export function addBusinessDays<T extends YMD>(w: T, n: number): T {
   let num = dayNum(w.y, w.mo, w.d);
   const step = n < 0 ? -1 : 1;
@@ -257,7 +240,6 @@ export function addDuration(
   return { ms: r.ms + exact, note: exact ? null : r.note };
 }
 
-/** Calendar difference a → b (a ≤ b) measured on the wall clock of `tz`. */
 export function diffCalendar(a: number, b: number, tz: string): CalDiff {
   const A = partsInTz(a, tz),
     B = partsInTz(b, tz);
@@ -288,7 +270,6 @@ export function diffCalendar(a: number, b: number, tz: string): CalDiff {
   return { y: floorDiv(months, 12), mo: mod(months, 12), d: days, h, mi, s };
 }
 
-/** Weekdays (Mon–Fri) in day numbers [n0, n1). */
 export function countWeekdays(n0: number, n1: number): number {
   if (n1 <= n0) return 0;
   const total = n1 - n0;
@@ -335,7 +316,6 @@ export function isoDuration(parts: Partial<CalDiff>, sign = 1): string {
   return (sign < 0 ? '-' : '') + 'P' + date + (time ? 'T' + time : '');
 }
 
-/* ---------- Unix timestamps ---------- */
 export type TsUnit = 's' | 'ms' | 'us' | 'ns';
 export function parseTimestamp(text: string): { ms: number; unit: TsUnit } | null {
   const t = String(text)
@@ -364,7 +344,6 @@ export function parseTimestamp(text: string): { ms: number; unit: TsUnit } | nul
   return { ms, unit };
 }
 
-/* ---------- free-text date/time parsing ---------- */
 const FW: Record<string, string> = {
   '０': '0',
   '１': '1',
@@ -411,7 +390,6 @@ export function validWall(w: Wall | null | undefined): w is Wall {
     w.s <= 59
   );
 }
-/* ---------- duration expressions ---------- */
 const UNIT_TABLE: [string, number][] = [
   ['milliseconds', 0.001],
   ['millisecond', 0.001],
@@ -701,7 +679,6 @@ export function evalDuration(src: string): DurResult {
   return { value: result.v, dim: result.dim, terms };
 }
 
-/* ---------- calendar spans: what the interval field accepts ---------- */
 const SPAN_UNITS: [string, string][] = [
   ['工作日', 'bd'],
   ['工作天', 'bd'],
@@ -787,7 +764,6 @@ const CN_D: Record<string, number> = {
   八: 8,
   九: 9,
 };
-/** 三 → 3, 十五 → 15, 二十 → 20, 一百 → 100 (for lengths written in words). */
 export function cnDigits(s: string): string {
   return s
     .replace(/[〇零一二兩两三四五六七八九十百千]+/g, (x) => {
@@ -806,7 +782,6 @@ export function cnDigits(s: string): string {
     .replace(/(\d)\s*半\s*(小時|小时|鐘頭|天|日)/g, '$1.5$2')
     .replace(/(^|[^\d.])半\s*(小時|小时|鐘頭|天)/g, (_m, a: string, u: string) => `${a}0.5${u}`);
 }
-/** ISO 8601 durations: P1Y2M3W4DT5H6M7S, the way the 長度 reading writes them. */
 function isoSpan(s: string): Span | null {
   const m =
     /^([+-])?P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)(?:[.,]\d+)?S)?)?$/i.exec(
@@ -816,8 +791,6 @@ function isoSpan(s: string): Span | null {
   const n = (i: number) => +(m[i] || 0);
   return { sign: m[1] === '-' ? -1 : 1, y: n(2), mo: n(3), w: n(4), d: n(5), h: n(6), mi: n(7), s: n(8), biz: false };
 }
-/** Parses "+30天", "1年6個月", "1.5天", "20工作日", "3天前", "三週", "1年 + 3天", "2h30", "in 3 days", "P1M7D".
-    Returns null for empty input; throws DurError. */
 export function parseSpan(src: string): Span | null {
   let s = cnDigits(normalizeWide(src)).replace(/\s+/g, ' ').trim();
   if (!s) return null;
@@ -960,7 +933,6 @@ export function parseSpan(src: string): Span | null {
   return out;
 }
 
-/** Canonical text: "+1年6個月", "−2週3天", "+20工作日", "+40天 10:34:29". parseSpan(fmtSpan(x)) gives x back. */
 export function fmtSpan(sp: Span | null): string {
   if (!sp) return '';
   const date: string[] = [];
@@ -978,7 +950,6 @@ export function fmtSpan(sp: Span | null): string {
   return (sp.sign < 0 ? '−' : '+') + (body || '0天');
 }
 
-/** The span (whole wall-clock days + exact rest) that takes a to b in tz. */
 export function spanBetween(a: number, b: number, tz: string): Span {
   const sign = b < a ? -1 : 1;
   const A = partsInTz(a, tz),
@@ -1017,11 +988,6 @@ export type SpanInput =
 
 const OPS_RE = /[*×xX·⋅乘/÷除()（）]|.[+＋\-−–—加減减]/;
 
-/**
- * What the interval field accepts: a calendar span ("+1年6個月", "20工作日")
- * or duration arithmetic ("1h + 45m", "47m × 16", "3:59:59 ÷ 42.195").
- * Arithmetic that ends in a plain number ("2h ÷ 15m") is a ratio: shown, never applied.
- */
 export function interpretSpanText(src: string): SpanInput {
   const raw = cnDigits(normalizeWide(src)).trim();
   if (!raw) return { kind: 'empty' };
@@ -1055,7 +1021,6 @@ export function interpretSpanText(src: string): SpanInput {
   }
 }
 
-/* ---------- formatting ---------- */
 export const WD = ['日', '一', '二', '三', '四', '五', '六'];
 export const fmtDate = (w: YMD) => `${pad(w.y, 4)}-${pad(w.mo)}-${pad(w.d)}`;
 export const fmtTime = (w: Pick<Wall, 'h' | 'mi' | 's'>) => `${pad(w.h)}:${pad(w.mi)}:${pad(w.s)}`;
@@ -1064,7 +1029,6 @@ export const wdOf = (w: YMD) => weekdayOf(w.y, w.mo, w.d);
 export const wEq = (a: Wall | null, b: Wall | null) =>
   !!a && !!b && a.y === b.y && a.mo === b.mo && a.d === b.d && a.h === b.h && a.mi === b.mi && a.s === b.s;
 
-/** Lunar New Year (春節), checked against the official calendar. */
 export const LNY: YMD[] = [
   '2000-02-05',
   '2001-01-24',

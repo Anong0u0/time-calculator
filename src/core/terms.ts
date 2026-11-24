@@ -1,12 +1,7 @@
-/* ============================================================
-   The 24 solar terms (節氣): the moments the Sun's apparent longitude reaches a multiple of 15°.
-   The Sun is placed with the VSOP87 theory of the Earth, truncated as in Meeus, "Astronomical Algorithms",
-   with nutation, aberration and ΔT (Espenak & Meeus). A term's moment is good to about a minute for 1900–2100;
-   which day it falls on is read on China's clock (as almanacs print it) or on any other zone.
-   ============================================================ */
+/* 24 solar terms via truncated VSOP87 + nutation/aberration/ΔT (Meeus; ~1 min accuracy for 1900–2100). */
 import { DAY, partsInTz, dayNum } from './time';
 
-/** Term k is at longitude 15k°: 0 春分 … 18 冬至 … 23 驚蟄. */
+/** Term k = longitude 15k° (0 春分 … 18 冬至 … 23 驚蟄). */
 export const TERM_NAMES = [
   '春分',
   '清明',
@@ -33,9 +28,7 @@ export const TERM_NAMES = [
   '雨水',
   '驚蟄',
 ];
-/** The terms in the order a civil year meets them: 小寒 in January … 冬至 in December. */
 export const TERMS_IN_YEAR = [19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-/** The clock the almanac reads a term's day on: China, UTC+8 (from 1929; Beijing local mean time before). */
 export const CHINA_TZ = 'Asia/Shanghai';
 
 type Term3 = readonly [number, number, number];
@@ -195,7 +188,6 @@ const sum = (s: Term3[], t: number) => s.reduce((a, [A, B, C]) => a + A * Math.c
 const RAD = Math.PI / 180;
 const norm = (x: number) => ((x % 360) + 360) % 360;
 
-/** The Sun's apparent geocentric longitude in degrees at Julian Ephemeris Day `jde`. */
 export function sunLongitude(jde: number): number {
   const tau = (jde - 2451545) / 365250,
     T = tau * 10;
@@ -276,13 +268,11 @@ export function deltaT(y: number): number {
 }
 const JD_UNIX = 2440587.5;
 const cache = new Map<number, number>();
-/** The instant (ms) of term k in civil year y: 小寒–驚蟄 in its first months, 春分–冬至 after. */
 export function termMoment(y: number, k: number): number {
   const key = y * 24 + k;
   const hit = cache.get(key);
   if (hit != null) return hit;
   const lon = 15 * k;
-  // the March equinox of y, near enough to start from
   const eq = 2451623.81 + 365.2422 * (y - 2000);
   let jde = eq + ((k >= 19 ? -(360 - lon) : lon) / 360) * 365.2422;
   for (let i = 0; i < 12; i++) {
@@ -299,9 +289,7 @@ export interface TermAt {
   k: number;
   ms: number;
 }
-/** The 24 terms of civil year y, in order. */
 export const termsOfYear = (y: number): TermAt[] => TERMS_IN_YEAR.map((k) => ({ k, ms: termMoment(y, k) }));
-/** The last term at or before `ms` and the next one after. */
 export function termAround(ms: number): { prev: TermAt; next: TermAt } {
   const y = new Date(ms).getUTCFullYear();
   const all = [...termsOfYear(y - 1), ...termsOfYear(y), ...termsOfYear(y + 1)];
@@ -309,7 +297,6 @@ export function termAround(ms: number): { prev: TermAt; next: TermAt } {
   if (i <= 0) i = 1;
   return { prev: all[i - 1], next: all[i] };
 }
-/** The day number a term's moment falls on, on this clock. */
 export function termDay(y: number, k: number, tz: string): number {
   const ms = termMoment(y, k);
   if (tz === CHINA_TZ) return chinaDay(ms);
@@ -317,7 +304,6 @@ export function termDay(y: number, k: number, tz: string): number {
   return dayNum(w.y, w.mo, w.d);
 }
 const dayCache = new Map<string, Map<number, number>>();
-/** The term that falls on civil day n on this clock, if any. */
 export function termOnDay(n: number, tz: string): number | null {
   const y = new Date(n * DAY).getUTCFullYear();
   const key = `${tz}|${y}`;
@@ -329,11 +315,9 @@ export function termOnDay(n: number, tz: string): number | null {
   }
   return m.get(n) ?? null;
 }
-/** The position of term k in its civil year (0 = 小寒). */
 export const termIndexInYear = (k: number) => TERMS_IN_YEAR.indexOf(k);
 
-/* ---------- China's clock for the calendar ---------- */
-/** The civil day on China's clock: UTC+8 from 1929, Beijing local mean time (UTC+7:45:40) before, as the calendar was reckoned. */
+/** China calendar day: UTC+8 from 1929, Beijing local mean time (UTC+7:45:40) before. */
 export function chinaDay(ms: number): number {
   const y = new Date(ms).getUTCFullYear();
   const off = y < 1929 ? 27940000 : 28800000;
@@ -401,7 +385,6 @@ export function newMoonMs(k: number): number {
   const y = 2000 + k / 12.3685;
   return Math.round((jde - deltaT(y) / 86400 - JD_UNIX) * DAY);
 }
-/** The number of the last new moon whose day (on China's clock) is on or before day n. */
 export function newMoonOnOrBefore(n: number): number {
   let k = Math.floor((n + JD_UNIX - 2451550.09766) / SYNODIC) + 1;
   while (chinaDay(newMoonMs(k)) > n) k--;

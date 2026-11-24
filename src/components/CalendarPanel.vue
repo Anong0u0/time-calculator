@@ -1,10 +1,4 @@
 <script setup lang="ts">
-/* Month and year scale: the range from ● to ○ on a month grid with ISO weeks, and the whole year as a week strip;
-   or, switched to 年, the whole year as twelve small months (the same days: click, drag ● ○, drag a range).
-   Click a day to move the nearer end there; drag ● or ○ to move that end; drag from any other day to pick a range;
-   click a week number (or a week on the year strip) to pick that week. S or E on a focused day puts the start or end there.
-   On touch, a swipe turns the month and a long press starts a range.
-   The title opens a year and month picker; the wheel turns months over the grid and years over the week strip. */
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
@@ -15,7 +9,6 @@ import {
   now,
   startWall,
   endWall,
-  hasEnd,
   commit,
   setWall,
   toast,
@@ -292,7 +285,7 @@ function putDay(which: End, n: number) {
 }
 function pickDay(n: number) {
   if (eN.value == null && n === sN.value) {
-    toast('這天已經是開始。點別的日期設定結束，或拖曳選一段');
+    toast('點其他日期或拖曳可設定結束');
     return;
   }
   putDay(nearer(n), n);
@@ -538,7 +531,7 @@ const yearWeeks = computed(() => {
       e: eN.value != null && eN.value >= n0 && eN.value <= n0 + 6,
       today: todayN.value >= n0 && todayN.value <= n0 + 6,
       cur: th.mo === view.mo && th.y === view.y,
-      tip: `W${k}：${st.mo}/${st.d}–${en.mo}/${en.d}，點一下選取這一週`,
+      tip: `W${k}（${st.mo}/${st.d}–${en.mo}/${en.d}）`,
     };
   });
 });
@@ -645,9 +638,7 @@ const yearMonths = computed(() => {
 const atStartY = computed(() => view.y === startWall.value.y);
 const atEndY = computed(() => !endWall.value || view.y === endWall.value.y);
 
-/* ---------- the line under it ---------- */
 const mondayOf = (n: number) => n - mod(n + 3, 7);
-/** A week label can be clicked to type another week for that end (it opens the command bar with "W48" selected). */
 type FootSeg = { t: string; b?: boolean; act?: End };
 const foot = computed<FootSeg[]>(() => {
   const sw = startWall.value,
@@ -725,11 +716,6 @@ function weekKey(e: KeyboardEvent) {
 }
 const atStart = computed(() => view.y === startWall.value.y && view.mo === startWall.value.mo);
 const atEnd = computed(() => !endWall.value || (view.y === endWall.value.y && view.mo === endWall.value.mo));
-const tip = computed(() =>
-  hasEnd.value
-    ? '點一下：移動比較近的那一端 · 拖曳 ● ○：移動那一端 · 從別的日子拖曳：選一段 · 按 S／E：設為開始／結束'
-    : '點一下：設為結束日期 · 拖曳：選一段日期',
-);
 </script>
 
 <template>
@@ -743,12 +729,8 @@ const tip = computed(() =>
           class="cal-tbtn"
           :aria-expanded="jump"
           aria-haspopup="dialog"
-          :aria-label="`${view.y} 年 ${view.mo} 月，點一下跳到別的年月`"
-          v-tip="
-            yearMode
-              ? '跳到別的年份：可以直接打年份。也可以在年曆上捲動滾輪換年'
-              : '跳到別的年月：可以直接打年份。也可以在月曆上捲動滾輪換月、在週條上捲動換年'
-          "
+          :aria-label="`${view.y} 年 ${view.mo} 月，跳到年月`"
+          v-tip="'跳到年月（滾輪換月／年）'"
           @click="jump = !jump"
         >
           {{ yearMode ? `${view.y} 年` : `${view.y} 年 ${view.mo} 月` }}<Icon name="chevD" />
@@ -810,7 +792,6 @@ const tip = computed(() =>
         :class="{ lun: yl.lun }"
         role="group"
         :aria-label="`${view.y} 年`"
-        v-tip="tip"
         :style="{
           gridTemplateColumns: `repeat(${yl.cols}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${yl.rows}, minmax(0, 1fr))`,
@@ -829,7 +810,6 @@ const tip = computed(() =>
             class="ym-t"
             :class="{ today: m.today }"
             :aria-label="`打開 ${view.y} 年 ${m.mo} 月`"
-            v-tip="'點一下打開這個月'"
             @click="openMonth(m.mo)"
           >
             {{ m.mo }}月<i v-if="m.s" class="node" /><i v-if="m.e" class="node end" />
@@ -865,23 +845,13 @@ const tip = computed(() =>
         :class="{ lun: S.prefs.lunar && lunRoom }"
         role="grid"
         :aria-label="`${view.y} 年 ${view.mo} 月`"
-        v-tip="tip"
         @pointerdown="gDown"
         @pointermove="gMove"
         @pointerup="gUp"
         @pointercancel="gUp"
       >
         <div class="gh" role="row">
-          <span
-            class="wkc"
-            role="columnheader"
-            v-tip="
-              ws
-                ? 'ISO 週次：週一開始，含 1 月 4 日的那週是第 1 週'
-                : '美式週次：週日開始，含 1 月 1 日的那週是第 1 週（設定裡可以改回週一開始）'
-            "
-            >週</span
-          >
+          <span class="wkc" role="columnheader" v-tip="ws ? 'ISO 週（週一起算）' : '美式週次（週日起算）'">週</span>
           <span v-for="h in heads" :key="h.t" role="columnheader" :class="{ we: h.we }">{{ h.t }}</span>
         </div>
         <div v-for="wk in weeks" :key="wk.n0" class="gr" role="row">
@@ -891,7 +861,7 @@ const tip = computed(() =>
             role="rowheader"
             :class="{ hit: wk.days.some((d) => d.s || d.e) }"
             :aria-label="`選取第 ${wk.wk} 週`"
-            v-tip="`選取 W${wk.wk} 整週（${ws ? '週一到週日' : '週日到週六'}）`"
+            v-tip="`選取 W${wk.wk} 整週`"
             @click="pickWeek(wk.n0)"
           >
             {{ wk.wk }}
@@ -958,7 +928,7 @@ const tip = computed(() =>
             v-else-if="f.act"
             type="button"
             class="wk-ed editable"
-            v-tip="`點一下改週次，把${f.act === 'start' ? '開始' : '結束'}移到那一週的同一天`"
+            v-tip="'點選改寫週次'"
             @click="typeWeek(f.act)"
           >
             {{ f.t }}</button
@@ -989,7 +959,7 @@ const tip = computed(() =>
               class="jp-in mono"
               inputmode="numeric"
               maxlength="4"
-              aria-label="年份（1–9999），打完四位數就跳過去"
+              aria-label="年份（1–9999）"
               @input="yearLive"
               @keydown.enter.prevent="yearEnter"
               @keydown.up.prevent="yearStep(1)"
@@ -1037,7 +1007,6 @@ const tip = computed(() =>
             <i class="node end" aria-hidden="true" />結束 {{ endWall.y }}/{{ endWall.mo }}
           </button>
         </div>
-        <p class="jp-hint">跳過去之後點一天，就把比較近的那一端移到那天。</p>
       </div>
     </Popover>
   </section>
@@ -1185,11 +1154,6 @@ const tip = computed(() =>
   height: 0.45rem;
   border-radius: 50%;
   background: var(--now);
-}
-.jp-hint {
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  line-height: 1.5;
 }
 .cal-nav {
   display: flex;

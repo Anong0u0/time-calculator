@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* One box for any text. Each reading becomes a suggestion with a preview; Enter applies the first. */
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import Icon from './Icon.vue';
 import { interpret, type Suggestion } from '../state/command';
@@ -15,19 +14,16 @@ const root = ref<HTMLElement | null>(null);
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 const EXAMPLES: [string, string][] = [
-  ['2026-12-25 18:00', '日期與時刻'],
-  ['1795380034', 'Unix 時間戳（秒、毫秒都可以）'],
-  ['2000/1/1/20:34', '日期的寫法隨意：明天下午3點、下週五、民國115年…'],
-  ['+30天', '結束 = 開始 + 30 天'],
-  ['3天前', '從現在往前或往後算'],
-  ['2000/1/1 到 現在', '一次設定開始和結束'],
-  ['東京 15:00', '某個城市的時間'],
-  ['47m × 16', '時長加減乘除'],
-  ['明年中秋晚上8點', '詞可以自由組合：明晚、下個月底、冬至那一刻…'],
-  ['開始那個月的月底', '從另一端算：結束前最後一個週五'],
+  ['2026-12-25 18:00', '任意日期格式'],
+  ['1795380034', 'Unix 時間戳'],
+  ['+30天', '設為間隔'],
+  ['2000/1/1 到 現在', '起訖範圍'],
+  ['東京 15:00', '指定時區'],
+  ['47m × 16', '時長計算'],
+  ['明年中秋晚上8點', '自然語言規則'],
+  ['開始那個月的月底', '從另一端算'],
 ];
 const items = computed<Suggestion[]>(() => (text.value.trim() ? interpret(text.value) : []));
-const actionable = computed(() => items.value.filter((s) => s.apply));
 watch(text, () => {
   sel.value = Math.max(
     0,
@@ -106,7 +102,7 @@ const KIND_ICON: Record<Suggestion['kind'], string> = {
   chip: 'bolt',
 };
 const placeholder = computed(() =>
-  props.compact ? '輸入日期、+30天、東京 15:00…' : '輸入任何東西：日期、時間戳、+30天、東京 15:00、W12、47m × 16',
+  props.compact ? '日期、+30天、東京 15:00…' : '日期、時間戳、+30天、1/1 到 3/1、東京 15:00、47m × 16',
 );
 </script>
 
@@ -175,8 +171,7 @@ const placeholder = computed(() =>
       </ul>
       <div v-else class="cmd-examples">
         <p class="cmd-hint">
-          一個框吃所有格式。先看預覽，再按 Enter 套用；<b>{{ S.active === 'start' ? '● 開始' : '○ 結束' }}</b
-          >（剛碰過的那一端）排第一。
+          預覽後按 Enter 套用，優先改 <b>{{ S.active === 'start' ? '● 開始' : '○ 結束' }}</b>
         </p>
         <ul aria-label="範例">
           <li v-for="[ex, what] in EXAMPLES" :key="ex">
@@ -186,10 +181,6 @@ const placeholder = computed(() =>
           </li>
         </ul>
       </div>
-      <p v-if="actionable.length > 1 && text.trim()" class="cmd-foot">
-        <span class="kbd">↑</span><span class="kbd">↓</span> 選擇 · <span class="kbd">Enter</span> 套用 ·
-        <span class="kbd">Esc</span> 清除
-      </p>
     </div>
   </div>
 </template>
@@ -355,15 +346,5 @@ const placeholder = computed(() =>
 .cmd-ex span {
   font-size: var(--fs-s);
   color: var(--ink-3);
-}
-.cmd-foot {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.45rem 0.7rem 0.2rem;
-  font-size: var(--fs-s);
-  color: var(--ink-3);
-  border-top: 1px solid var(--hair);
-  margin-top: 0.35rem;
 }
 </style>

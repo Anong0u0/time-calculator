@@ -1,6 +1,4 @@
 <script setup lang="ts">
-/* One end of the equation: a label, the date and time, its zone, and shortcuts.
-   Both ends work alike: either can follow the clock (即時), and the span can compute either one. */
 import { ref, computed } from 'vue';
 import Icon from './Icon.vue';
 import SegmentedDateTime from './SegmentedDateTime.vue';
@@ -43,8 +41,6 @@ import { useSize, remPx } from '../composables/size';
 import { textToEnd } from '../state/command';
 import { useFlash } from '../composables/flash';
 
-/** big: the equation has the screen's height to itself, so the date and time grow to fill it.
-    stage: sits in the wide bottom tier under the hero span. wideStage: the only endpoint in that bottom tier. */
 const props = defineProps<{
   which: End;
   compact?: boolean;
@@ -59,9 +55,7 @@ const SUBJ = computed(() => (isStart.value ? '開始' : '結束'));
 const OTHER = computed(() => (isStart.value ? '結束' : '開始'));
 const live = computed(() => isLive(props.which));
 const derived = computed(() => isDerived(props.which));
-/** The rule this end was set by (下個月底, 中秋 …), if any. */
 const rule = computed(() => S.rules[props.which]);
-/** The link tag sits on the end the span computes, or would compute. */
 const linkTag = computed(
   () => !rule.value && hasEnd.value && (isLinked(props.which) || (!S.link && linkTarget() === props.which)),
 );
@@ -87,7 +81,7 @@ function pickTz(id: string) {
   const name = zoneName(id);
   commit(() => setTz(props.which, id), {
     label: `${SUBJ.value}時區：${name}`,
-    say: `${SUBJ.value}改用${name}時區，同一個時刻`,
+    say: `${SUBJ.value}時區：${name}`,
   });
   bump(props.which);
 }
@@ -133,9 +127,7 @@ function toggleFollow() {
 const ruleTip = computed(() => {
   const r = rule.value;
   if (!r) return '';
-  return r.follow
-    ? `${SUBJ.value}跟著「${r.name}」：時間過去、另一端改了都會重新算。點一下固定在目前的時刻`
-    : `${SUBJ.value}用「${r.name}」設定，固定在那時算出的時刻。點一下改成一直跟著這個規則`;
+  return r.follow ? `跟著「${r.name}」自動重算（點選固定）` : `由「${r.name}」設定（點選改為跟著規則）`;
 });
 
 const root = ref<HTMLElement | null>(null);
@@ -186,15 +178,9 @@ const noteText = computed(() =>
       ? '這個時刻出現兩次，取較早的一次'
       : '',
 );
-const linkTip = computed(() =>
-  S.link
-    ? `連動中：${linkSentence()}。${followText()}。點一下改成固定在目前的時刻`
-    : `${SUBJ.value}固定在這個時刻。點一下改成連動：保持目前的間隔，${SUBJ.value}跟著${OTHER.value}移動`,
-);
+const linkTip = computed(() => (S.link ? `${linkSentence()}（點選固定）` : '固定時刻（點選改為連動）'));
 const linkLabel = computed(() => (S.link ? linkSentence().replace(/^(開始|結束) /, '') : '固定'));
-const liveTip = computed(() =>
-  live.value ? `${SUBJ.value}跟著現在走。點一下固定在這一秒` : `點一下讓${SUBJ.value}變成現在，並跟著時間走`,
-);
+const liveTip = computed(() => (live.value ? '即時（點選固定）' : `設為即時「現在」`));
 /* ---------- drop a date (text from anywhere) onto this end ---------- */
 const dropping = ref(false);
 function dragOver(e: DragEvent) {
@@ -256,12 +242,7 @@ function drop(e: DragEvent) {
       >
         <i class="dot" aria-hidden="true" /><span>{{ live ? '即時' : '現在' }}</span>
       </button>
-      <span
-        v-if="!isStart && S.endSample"
-        class="tag sample"
-        v-tip="'第一次開啟時放的範例：距離跨年。改掉它或按 × 清除就會消失'"
-        >範例</span
-      >
+      <span v-if="!isStart && S.endSample" class="tag sample" v-tip="'初始範例，修改或清除即消失'">範例</span>
       <button
         v-if="rule"
         type="button"
@@ -290,7 +271,7 @@ function drop(e: DragEvent) {
         type="button"
         class="tzb tzb-head"
         :aria-expanded="tzOpen"
-        v-tip="`${zoneName(tz)}（${tz}）。點一下換時區，時刻不變`"
+        v-tip="`${tz}（點選切換時區）`"
         @click="tzOpen = !tzOpen"
       >
         <Icon name="globe" /><span class="tzb-n">{{ zoneName(tz) }}</span
@@ -340,7 +321,7 @@ function drop(e: DragEvent) {
         type="button"
         class="tzb"
         :aria-expanded="tzOpen"
-        v-tip="`${zoneName(tz)}（${tz}）。點一下換時區，時刻不變`"
+        v-tip="`${tz}（點選切換時區）`"
         @click="tzOpen = !tzOpen"
       >
         <Icon name="globe" /><span class="tzb-n">{{ zoneName(tz) }}</span
@@ -348,7 +329,7 @@ function drop(e: DragEvent) {
         ><Icon name="chevD" class="tzb-c" />
       </button>
       <span v-if="has" class="rel">{{ rel }}</span>
-      <span v-else class="rel hint">未設定：按「現在」、選快捷、打日期，或在間隔輸入 +30天</span>
+      <span v-else class="rel hint">未設定</span>
       <span v-if="noteText" class="tag warn" v-tip="noteText">夏令時間</span>
     </div>
 
@@ -530,7 +511,6 @@ button.tag:hover {
 .tag.live span {
   overflow: visible;
 }
-/* A narrow header keeps 即時／現在 as just its dot; the tooltip and label still say it. */
 @container (max-width: 19rem) {
   .compact .tag.live {
     width: 1.6rem;
@@ -541,7 +521,6 @@ button.tag:hover {
     display: none;
   }
 }
-/* A narrow header keeps the link tag as a clean round icon before its text would truncate; the tooltip still says what it does. */
 @container (max-width: 19rem) {
   .tag.link {
     flex: none;
@@ -564,7 +543,6 @@ button.tag:hover {
     display: none;
   }
 }
-/* The compact header also carries the time zone, so it gets tight sooner. */
 @container (max-width: 27rem) {
   .compact .tag.link {
     flex: none;
@@ -659,7 +637,6 @@ button.tag:hover {
 .pre-pop {
   padding: 0.8rem;
 }
-/* the whole height: the time and its zone sit together in the middle, the shortcuts stay at the bottom */
 .ep.corner-pad .ep-head {
   padding-right: 2.25rem;
 }
@@ -713,7 +690,6 @@ button.tag:hover {
   display: flex;
   justify-content: center;
 }
-/* wide top ribbon: date+time on the left, zone + shortcuts on the right */
 .ep.ribbon {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
@@ -745,7 +721,6 @@ button.tag:hover {
   opacity: 0.9;
 }
 
-/* compact: phones and short screens */
 .ep.compact {
   padding: 0.6rem 0.8rem 0.65rem;
   gap: 0.25rem;

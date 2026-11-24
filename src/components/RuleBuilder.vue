@@ -1,7 +1,4 @@
 <script setup lang="ts">
-/* Building a rule from blocks: a starting point, then steps, each showing where it lands.
-   Click a block to change it, drag it to reorder (drag it off the row to remove it), add steps from the palette.
-   Nothing needs typing; the text box at the top reads words into blocks for those who like to type. */
 import { ref, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import NumDial from './NumDial.vue';
@@ -375,7 +372,7 @@ defineExpose({ name });
         type="text"
         spellcheck="false"
         autocomplete="off"
-        placeholder="也可以用打的：明晚、下個月底、中秋晚上8點…"
+        placeholder="輸入規則：明晚、下個月底、中秋晚上8點…"
         aria-label="用文字寫規則"
         @keydown.enter.prevent="readTyped"
         @blur="readTyped"
@@ -489,7 +486,7 @@ defineExpose({ name });
           @change="setDate(($event.target as HTMLInputElement).value)"
         />
       </div>
-      <p class="rb-note">「另一端」放在開始就是結束、放在結束就是開始，所以同一個快捷兩端都能用。</p>
+      <p class="rb-note">「另一端」隨所在端點自動對應開始或結束。</p>
     </div>
 
     <!-- a step -->
@@ -776,7 +773,7 @@ defineExpose({ name });
             {{ pad(h) }}:00
           </button>
         </div>
-        <p class="rb-note">24:00 是當天結束（隔天 0:00）。</p>
+        <p class="rb-note">24:00 = 隔天 0:00</p>
       </template>
       <template v-else-if="cur.t === 'word'">
         <div class="rb-row wrap">

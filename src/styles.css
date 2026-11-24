@@ -1,7 +1,4 @@
-/* ============================================================
-   Design tokens. One material for every surface; emphasis comes
-   from size and the accent, not from a second color world.
-   ============================================================ */
+/* tokens */
 :root {
   color-scheme: light;
   --bg: #e9ecf2;
@@ -49,7 +46,6 @@
   --r-sm: 0.7rem;
   --gap: 0.75rem;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  /* density: set from the display settings. The smallest text follows it, never below 9px. */
   --density: 1;
   --floor: max(9px, calc(11px * var(--density)));
   --face: #f2f4f8;
@@ -435,7 +431,6 @@ input[type='text']:focus-visible {
     0 0 0 1px var(--hair);
 }
 
-/* a value you can copy: the icon is always there, louder on hover, a check once copied */
 .copy {
   display: inline-flex;
   align-items: center;
@@ -488,7 +483,6 @@ input[type='text']:focus-visible {
   }
 }
 
-/* a value you can type over: a dashed baseline says so */
 .editable {
   cursor: text;
   background-image: linear-gradient(to right, var(--ink-4) 45%, transparent 45%);
@@ -576,22 +570,7 @@ input[type='text']:focus-visible {
   }
 }
 
-/* ============================================================
-   The face. This is the app's only look: the base rules above are the parts,
-   these decide emphasis. There are no boxes: everything is printed on one face.
-
-   Reading: one pair of hands, ● start and ○ end, read on several scales.
-   - the span scale: the rail under start + span = end, the horizon of the face;
-   - the day scale: the 24-hour axis in 時區;
-   - the month and year scales: the calendar grid and its week track;
-   - notation: the same two instants written every common way.
-   Every scale is drawn the same way: ticks, the two hands in lume, red for now.
-
-   Emphasis, strongest first: the hands and the main reading → each scale's
-   readings → the scales themselves → labels → controls (quiet until touched).
-   ============================================================ */
-/* light falls on the main reading: the centre of the face is brightest and clean, the guilloché and a little
-   shade gather toward the edges, so the eye lands on start + span = end before anything else */
+/* dial face */
 .app.dial {
   background:
     radial-gradient(62% 40% at 50% 17%, color-mix(in srgb, var(--surface-2) 80%, transparent), transparent 78%),
@@ -629,7 +608,6 @@ input[type='text']:focus-visible {
   }
 }
 
-/* ---------- labels: each section is named like text printed on a dial, over an engraved line ---------- */
 .app.dial > .panel > .panel-head {
   margin: 0 1rem;
   padding: 0.35rem 0 0.5rem;
@@ -664,12 +642,9 @@ input[type='text']:focus-visible {
   letter-spacing: 0.1em;
 }
 
-/* ---------- the main reading ---------- */
-/* the span is the centre of the face: lit softly from within, no frame */
 .app.dial .sc {
   background: radial-gradient(70% 90% at 50% 40%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%);
 }
-/* the end you touched last: its hand glows */
 .app.dial .ep.active .ep-head .node {
   box-shadow: 0 0 0 0.3em var(--accent-wash-2);
 }
@@ -678,7 +653,6 @@ input[type='text']:focus-visible {
     inset 0 0 0 0.14em var(--accent),
     0 0 0 0.3em var(--accent-wash-2);
 }
-/* stacked band: the rail has its own lane on the left only when drawn; the readings sit to its right */
 .app.dial .eq.stack.has-vrail .ep,
 .app.dial .eq.stack.has-vrail .sc {
   padding-left: 2.05rem;
@@ -688,8 +662,6 @@ input[type='text']:focus-visible {
   margin-right: 0.2rem;
 }
 
-/* ---------- scales, all drawn the same way ---------- */
-/* the day scale: 24 hour ticks across the axis, every 6 hours taller */
 .app.dial .strip.axis {
   background-image:
     repeating-linear-gradient(to right, var(--ink-4) 0 1px, transparent 1px 25%),
@@ -707,7 +679,6 @@ input[type='text']:focus-visible {
   margin-top: -0.5px;
   background: var(--hair-2);
 }
-/* the year scale: one tick per week; the shown month taller, the range in lume, the hands full height */
 .app.dial .yw {
   gap: 0;
   align-items: stretch;
@@ -756,7 +727,6 @@ input[type='text']:focus-visible {
   background: var(--accent);
   opacity: 1;
 }
-/* the two hands on this scale too: ● over the start's week, ○ over the end's */
 .app.dial .w.s {
   background: radial-gradient(circle at 50% 0.2rem, var(--accent) 0 0.17rem, transparent 0.19rem);
 }
@@ -772,7 +742,6 @@ input[type='text']:focus-visible {
   height: 85%;
   background: var(--ink-2);
 }
-/* the world map is printed on the face, not set in a frame */
 .app.dial .wm {
   background: none;
   border: 0;
@@ -780,8 +749,6 @@ input[type='text']:focus-visible {
   overflow: visible;
 }
 
-/* ---------- detail recedes with distance from the hands ----------
-   In each scale the marks of ● and ○ (and red now) are full strength; the rest of the scale is quieter. */
 .app.dial .gh span,
 .app.dial .wkc {
   color: var(--ink-4);
@@ -813,7 +780,6 @@ input[type='text']:focus-visible {
 .app.dial .len .rd-v .copy {
   color: var(--accent);
 }
-/* the week track is the year scale: named in the gutter like a subdial's printed scale */
 .app.dial .year {
   position: relative;
 }
@@ -837,7 +803,6 @@ input[type='text']:focus-visible {
 .app.dial .zt small {
   color: var(--ink-4);
 }
-/* unit conversions: quiet sub-readings on the dial, no cells */
 .app.dial .units {
   background: none;
   border: 0;
@@ -870,7 +835,6 @@ input[type='text']:focus-visible {
   background: none;
   padding: 0.25rem 0;
 }
-/* work and night: a coloured word, not a badge */
 .app.dial .zs,
 .app.dial .zs-work,
 .app.dial .zs-off,
@@ -896,7 +860,6 @@ input[type='text']:focus-visible {
 .app.dial .zs-wkend {
   color: var(--ink-4);
 }
-/* the 24-hour strips are a scale, not the headline: a softer night in light mode */
 :root:not([data-theme='dark']) .app.dial {
   --h0: #5e6995;
   --h0-ink: #eef1fa;
@@ -917,7 +880,6 @@ input[type='text']:focus-visible {
   }
 }
 
-/* ---------- controls are quiet until touched ---------- */
 .app.dial .chip {
   background-color: transparent;
   border-color: var(--hair-2);
@@ -943,7 +905,6 @@ input[type='text']:focus-visible {
 .app.dial .icon-btn:hover:not(:disabled) {
   color: var(--ink);
 }
-/* every copyable value keeps its copy mark: quiet at rest, so the face stays calm, but always there to be found */
 .app.dial .copy .ic {
   opacity: 0.5;
   color: var(--accent);
@@ -968,7 +929,6 @@ input[type='text']:focus-visible {
   background: var(--surface-2);
 }
 
-/* ---------- fingers: what can be hit is larger than what is drawn ---------- */
 @media (pointer: coarse) {
   .op,
   .tag,

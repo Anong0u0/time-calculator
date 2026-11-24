@@ -1,6 +1,3 @@
-/* One box that takes any text: a date in any common writing, a timestamp, "+30天", "東京 15:00", "W12",
-   "47m × 16", a range ("1/1 到 3/1", "2000/1/1 ~ 現在"), or a moment and a length ("2026/1/1 + 30天").
-   Each reading of the text becomes a suggestion with a live preview; Enter applies the first. */
 import {
   type Wall,
   type Span,
@@ -75,17 +72,14 @@ export interface Suggestion {
 const SUBJ = { start: '開始', end: '結束' } as const;
 const whenText = (w: Wall) => `${fmtDT(w)}（${WD[wdOf(w)]}）`;
 
-/** Today on this end's clock, and the year a date without one falls in: what 明天, 下週五 and 12/25 are read against. */
 export function parseOptsFor(which: End): ParseOpts {
   const n = Date.now();
   const t = partsInTz(n, tzOf(which));
   return { year: startWall.value.y, today: { y: t.y, mo: t.mo, d: t.d }, now: n, tz: tzOf(which) };
 }
-/** A time typed into a row: 15:00, 下午3點, 3pm, or a whole date and time. `base` is that row's current moment. */
 function clockOf(raw: string, base: Wall): Wall | null {
   const t = normalizeWide(raw).trim().replace(/\s+/g, ' ');
   if (!t) return null;
-  // 15 alone in a time field is the hour
   if (/^\d{1,2}$/.test(t) && +t <= 23) return { ...base, h: +t, mi: 0, s: 0 };
   const r = parseDateTimeText(t, { year: base.y, today: base });
   if (r && r.kind === 'time') return { ...base, h: r.h, mi: r.mi, s: r.s };
@@ -99,7 +93,6 @@ function endsOrder(): End[] {
 }
 const LINK_TXT = (to: End, expr: string) => linkSentence(to, expr);
 
-/* ---------- a side of a range ---------- */
 type Side =
   | { live: true }
   | { live: false; ms: number }
@@ -115,7 +108,6 @@ function sideOf(t: string, opts: ParseOpts): Side | null {
   if (p.offset != null) return { live: false, ms: wallKey(p.wall) - p.offset };
   return { live: false, wall: p.wall };
 }
-/** Where a side lands on this end: a time alone takes the other side's date, or this end's own. */
 function sideWall(sd: Side, which: End, otherSide: Side | null): { wall?: Wall; ms?: number; live?: boolean } | null {
   if (sd.live) return { live: true };
   if ('ms' in sd) return { ms: sd.ms };
@@ -164,9 +156,7 @@ function wallSuggestions(w: Wall, how: string, out: Suggestion[], idPre = 'set')
     });
   }
 }
-/** A rule read from words (下個月底, 明晚, 中秋 …): set either end by it, let an end keep following it, or keep it as a shortcut. */
 function ruleSuggestions(rule: Rule, name: string, out: Suggestion[]) {
-  // an end cannot be counted from itself: 開始那個月的月底 is for the end
   const ends = endsOrder().filter((w) => !ruleReads(rule, w, wordRule).has(w));
   if (!ends.length) return;
   for (const which of ends) {
@@ -192,7 +182,7 @@ function ruleSuggestions(rule: Rule, name: string, out: Suggestion[]) {
       id: 'rule-follow',
       kind: which,
       title: `${SUBJ[which]}跟著「${name}」`,
-      detail: `隨時重新計算${ruleUsesNow(rule) ? '：時間過去了，' + SUBJ[which] + '也跟著往後' : ''}`,
+      detail: '隨時間或另一端自動重算',
       apply: () =>
         commit(() => applyRule(which, rule, { name, follow: true }), {
           label: `${SUBJ[which]}跟著${name}`,
@@ -206,19 +196,17 @@ function ruleSuggestions(rule: Rule, name: string, out: Suggestion[]) {
     out.push({
       id: 'rule-chip',
       kind: 'chip',
-      title: `把「${name}」加到${SUBJ[which]}的快捷`,
-      detail: '之後點一下就能套用',
+      title: `加到${SUBJ[which]}快捷：「${name}」`,
       apply: () =>
         commit(
           () => {
             S.chips[row].push({ code, ...(name ? { name } : {}) });
           },
-          { label: `新增快捷：${name}`, say: `已加到${SUBJ[which]}的快捷：${name}` },
+          { label: `新增快捷：${name}`, say: `已加到${SUBJ[which]}快捷：${name}` },
         ),
     });
   }
 }
-/** Suggestions for one reading of a date text (and its other reading, when day and month could swap). */
 function parsedSuggestions(p: ParsedText, out: Suggestion[], text = '') {
   if (p.kind === 'wall' && p.rule && p.relative) {
     ruleSuggestions(p.rule, text.trim() || p.how, out);
@@ -470,7 +458,7 @@ export function interpret(input: string): Suggestion[] {
         id: 'calc',
         kind: 'calc',
         title: '在時長計算機開啟',
-        detail: `${exprTxt || text} · 只計算，不改變開始或結束`,
+        detail: exprTxt || text,
         apply: () => openDuration(text),
       });
     return out;
@@ -480,19 +468,17 @@ export function interpret(input: string): Suggestion[] {
       id: 'ratio',
       kind: 'calc',
       title: `= ${nfMax(r.value, 4)} 倍`,
-      detail: '在時長計算機開啟 · 倍數不會改變開始或結束',
+      detail: '在時長計算機開啟',
       apply: () => openDuration(text),
     });
     return out;
   }
 
-  // a place
   if (/[a-z一-鿿]/i.test(text) || /^(utc|gmt)?\s*[+\-−]\d/i.test(text)) {
     const hits = searchZones(text, Date.now(), 2);
     for (const h of hits) zoneSuggestions(h.z.id, out);
     if (out.length) return out;
   }
-  // 46350 or 46350.75: an Excel / Google Sheets date serial
   if (/^\d{5}(\.\d+)?$/.test(text)) {
     const w = excelSerial(+text);
     if (w) wallSuggestions(w, 'Excel 日期序號', out, 'xl');
@@ -503,12 +489,11 @@ export function interpret(input: string): Suggestion[] {
       id: 'err',
       kind: 'info',
       title: '看不懂這段文字',
-      detail: '試試 2000/1/1 20:34、明天下午3點、1795380034、+30天、1/1 到 3/1、東京 15:00 或 47m × 16',
+      detail: '例：2026/1/1、明天3點、+30天、1/1 到 3/1、東京 15:00、47m × 16',
     });
   return out;
 }
 
-/** Text dropped (or handed) onto one end: read it for that end and put the end there. */
 export function textToEnd(which: End, raw: string): boolean {
   const text = normalizeWide(raw).replace(/\s+/g, ' ').trim().slice(0, 200);
   if (!text) return false;
@@ -538,7 +523,6 @@ function zoneSuggestions(zid: string, out: Suggestion[]) {
       id: `add-${zid}`,
       kind: 'zone',
       title: `加入時區：${name}`,
-      detail: '出現在時區列表',
       apply: () => commit(() => addZoneRow(zid), { label: `加入${name}`, say: `已加入${name}` }),
     });
   if (!sameZone(S.startTz, zid))
@@ -546,16 +530,15 @@ function zoneSuggestions(zid: string, out: Suggestion[]) {
       id: `stz-${zid}`,
       kind: 'start',
       title: `開始改用${name}時區`,
-      detail: '同一刻，改用當地時間表示',
-      apply: () =>
-        commit(() => setStartTz(zid), { label: `開始時區：${name}`, say: `開始改用${name}時區，同一個時刻` }),
+      detail: '同一刻，改用當地時間',
+      apply: () => commit(() => setStartTz(zid), { label: `開始時區：${name}`, say: `開始時區：${name}` }),
     });
   if (!sameZone(S.endTz, zid) && wallOf('end'))
     out.push({
       id: `etz-${zid}`,
       kind: 'end',
       title: `結束改用${name}時區`,
-      detail: '同一刻，改用當地時間表示',
-      apply: () => commit(() => setEndTz(zid), { label: `結束時區：${name}`, say: `結束改用${name}時區，同一個時刻` }),
+      detail: '同一刻，改用當地時間',
+      apply: () => commit(() => setEndTz(zid), { label: `結束時區：${name}`, say: `結束時區：${name}` }),
     });
 }

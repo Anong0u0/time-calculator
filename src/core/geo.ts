@@ -1,7 +1,6 @@
-/* Geography for the world map: a 1.5° land mask (bit-packed), city coordinates and the sun's position. */
 import { DAY, mod, clamp } from './time';
 
-/** Land cells: 240 columns × 94 rows of 1.5°, from 84°N down; bit k = row × cols + col. */
+/** 240×94 land mask (1.5° grid from 84°N); bit k = row × cols + col. */
 export const LAND = { step: 1.5, top: 84, cols: 240, rows: 94 };
 const LAND_B64 =
   'AAAAAAAAAADUOwD8/wEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPT///////8AAAAAAAAAAJAAAAAAAAAAAAAAAAAAIP///////z8AgPkDgPMHAOADAAAAAAAAAAAAAABAvP8//////wcAgP8AAAAAAIA/AAAAAAAAAAAAAIC3kPsP/////w8AAM4AAAAwAAB4AwAAAAAAAAAAAMD///8H3P///w8AAAAAAMAfAPj/DwD4DQAAAAAAAOA3Yv8HAPz//wcAAAAAAPAAAP//DwBwCAAAAAAAAPD/+/c/APj//wMAAAAAADjA/f///z/ABwAAA+ADAOD+5/P/A/j//wMAAIANADzw/////////wOAAPj/z//938f/D/D//wEAAPj/AIH3///////////9B/7////////zH/D/fwAAAPz/Z///////////////P/z///////+Df/D/AyAAAP7/////////////////P//////////xP+B/AH8AgP//////////////////QPD//////9+TH+AfAD4A4P////////////////9/AP7//////wf1DsAPAAAA+M//////////////////AP7//////wPwA4APAAAA+M////////////////wHAPAL/P///wPwMwAAAAAA+J//////////////fzwAAMAH4P///w/wfwAAAAB48Nf///////////8/AB8AAHAAwP///3/w/wAAAABw4Mf///////////8PAB8AAAQAgP/////5/wMAAAD+wP3///////////8PgA8AAAEAgP7////7/wcAAADu+f//////////////AAcAAAAAAPz//////wcAAADu/f//////////////AAMAAAAAAPj//////wcAAADg////////////////AAAAAAAAAPD/////fx8AAADg////////////////AAAAAAAAAOD/////Hx4AAADA///////////////fAAAAAAAAAOD//////wAAAACA//////3///////9PAAAAAAAAAOD/////NwAAAACA//1H/vz////////HAQAAAAAAAOD/////AQAAAAD8g/sH+Pz////////jAQAAAAAAAOD/////AQAAAAD8Y+////n//////38gAAAAAAAAAOD///9/AAAAAAD8YOz+//n//////z5gAAAAAAAAAMD///8/AAAAAAD+AMf///H//////zlwAAAAAAAAAMD///8/AAAAAAB8f8L8/////////3M4AAAAAAAAAID///8/AAAAAADw/wBh/////////zA/AAAAAAAAAAD+//8PAAAAAAD8/wCA/////////8EHAAAAAAAAAAD8//8HAAAAAAD+/+OB/////////8EAAAAAAAAAAAD8//8DAAAAAAD+/////////////wEAAAAAAAAAAAD4/x8DAAAAAAD+//////7//////wEAAAAAAAAAAADY/wAGAAAAAID///////3//////wEAAAAAAAAAAACwfwAGAAAAAMD///9//9P//////wAAAAAAAAAAAABgfwAAAAAAAMD//////jfy/////wMAAAAAAAAAAABAfgAHAAAAAOD//////v/g////PwEAAAAAAEAAAAAAfrAfAAAAAPD//////f/A////HwAAAAAAAIABAAAA/jiwAQAAAOD//////X8A/8N/AgAAAAAAAAAAAAAA/D+QDwAAAOD/////+38A/8F/AwEAAAAAAAAAAAAA8D8AAAAAAOD/////8x8A/4D/AAMAAAAAAAAAAAAAwP8AgAAAAOD/////9wcAPoD+AQEAAAAAAAAAAAAAAPwBAAAAAPD//////wEAPgD+AQcAAAAAAAAAAAAAAOABAAAAAOD/////PwAAPAD+AQ0AAQAAAAAAAAAAAMDBRwAAAOD/////3wMAPAD2gQoAAAAAAAAAAAAAAIDp/wAAAMD//////wMAOABGAAwAAAAAAAAAAAAAAAD//wEAAID//////wMAaAAGAB4AAAAAAAAAAAAAAADw/wMAAAD//////wEAYAAMYB4AAAAAAAAAAAAAAADw/x8AAAD++f///wEAAIAZcAAAAAAAAAAAAAAAAADw/z8AAAAAwP///wAAAAAbeAAAAAAAAIAAAAAAAAD4/38AAAAAwP//fwAAAAA+fCAAAAAAAAAAAAAAAAD8/38AAAAAwP//PwAAAAA8fy8AAAAAAAAAAAAAAAj8//8BAAAAwP//HwAAAAA+/oMDAAAAAAAAAAAAAAD8//8PAAAAwP//DwAAAAB4vgM/AAAAAAAAAAAAAAD8//9/AAAAgP//BwAAAABwuHP/IQAAAAAAAAAAAAD8////AQAAAP//AwAAAABggAP4OwAAAAAAAAAAAAD8////AQAAAP//AwAAAADADwDwhwAAAAAAAAAAAAD4////AQAAAP//BwAAAAAAfxnwBwAAAAAAAAAAAAD4////AQAAAP7/BwAAAAAAgA1AHAgAAAAAAAAAAADw////AAAAAP7/BwAAAAAAAIDBAAAAAAAAAAAAAADw//9/AAAAAP//BwEAAAAAAIDHAAAAQAAAAAAAAADg//8/AAAAAP//hwMAAAAAAPDHAQAAAAAAAAAAAADA//8/AAAAAP//xwMAAAAAAPjPAYABAAAAAAAAAAAA//8/AAAAgP//4wEAAAAAAP7/AwDAAAAAAAAAAAAA/v8/AAAAAP//4QEAAAAAAP7/AwBAAAAAAAAAAAAA/v8/AAAAAP//4AEAAAAAwP//BwAAAAAAAAAAAAAA/v8fAAAAAP7/4AAAAAAA8P//D0AAAAAAAAAAAAAA/v8PAAAAAP7/4AAAAAAA+P//HwAAAAAAAAAAAAAA/v8BAAAAAP7/4AAAAAAA+P//PwAAAAAAAAAAAAAA/v8AAAAAAPw/AAAAAAAA+P//PwAAAAAAAAAAAAAA//8AAAAAAPw/AAAAAAAA8P//fwAAAAAAAAAAAAAA/38AAAAAAPgfAAAAAAAA8P//fwAAAAAAAAAAAAAA/38AAAAAAPgfAAAAAAAA8P//PwAAAAAAAAAAAAAA/z8AAAAAAPAPAAAAAAAA4D//PwAAAAAAAAAAAAAA/x8AAAAAAPADAAAAAAAA4Af8HwAAAAAAAAAAAACA/w8AAAAAAAAAAAAAAAAAYAD4HwAIAAAAAAAAAACA/wMAAAAAAAAAAAAAAAAAAADgDwAQAAAAAAAAAACA/wMAAAAAAAAAAAAAAAAAAADADwBwAAAAAAAAAACAfwAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAADAPwAAAAAAAAAAAAAAAAAAAAAABwA8AAAAAAAAAADAPwAAAAAAAAAAAAAAAAAAAAAABgAOAAAAAAAAAADAHwAAAAAAAAAAAAAAAAAAAAAAAAAHAAAAAAAAAADADwAAAAAAAAAAAAAAAAAAAAAAAIADAAAAAAAAAADADwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADgDwAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAADgBwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAgwEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACABwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
@@ -20,7 +19,6 @@ export function isLand(row: number, col: number): boolean {
   return ((landBits()[k >> 3] >> (k & 7)) & 1) === 1;
 }
 
-/** Latitude, longitude of each curated city (by IANA id). */
 export const COORDS: Record<string, [number, number]> = {
   'Pacific/Pago_Pago': [-14.28, -170.7],
   'Pacific/Honolulu': [21.31, -157.86],
@@ -100,7 +98,6 @@ export const COORDS: Record<string, [number, number]> = {
 
 const rad = (d: number) => (d * Math.PI) / 180;
 const deg = (r: number) => (r * 180) / Math.PI;
-/** Where the sun is overhead at an instant (low-precision solar position, good to a fraction of a degree). */
 export function subsolar(ms: number): { lat: number; lon: number } {
   const d = (ms - 946728000000) / DAY; // days since J2000.0
   const g = rad(357.529 + 0.98560028 * d);
@@ -112,7 +109,6 @@ export function subsolar(ms: number): { lat: number; lon: number } {
   const gmst = mod(280.46061837 + 360.98564736629 * d, 360);
   return { lat: deg(dec), lon: mod(deg(ra) - gmst + 180, 360) - 180 };
 }
-/** Height of the sun above the horizon, in degrees, at a place. */
 export function sunAltitude(sun: { lat: number; lon: number }, lat: number, lon: number): number {
   return deg(
     Math.asin(
@@ -125,7 +121,6 @@ export function sunAltitude(sun: { lat: number; lon: number }, lat: number, lon:
     ),
   );
 }
-/** The day/night line: latitude of the terminator at a longitude (sun not on the equator). */
 export function terminatorLat(sun: { lat: number; lon: number }, lon: number): number {
   return deg(Math.atan(-Math.cos(rad(lon - sun.lon)) / Math.tan(rad(sun.lat))));
 }

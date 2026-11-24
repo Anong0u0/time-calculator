@@ -1,14 +1,3 @@
-/* ============================================================
-   Reading a moment out of free text.
-
-   Not a list of formats: the text is taken apart. Words that carry meaning are lifted out first
-   (weekdays, 今天/明天/下週五, month names, 上午/下午/pm, a UTC offset, 民國), Chinese numerals
-   become digits, the time of day is found wherever it is (20:34, 8點34分, 3點半, 8pm, 20h34), and the
-   numbers left over become the date by their size and order. So 2000/1/1/20:34, 2000.1.1 20.34,
-   1 Jan 2000 8:34 pm, 二〇〇〇年一月一日晚上八點三十四分 and 20000101 2034 all read the same.
-
-   When the order of day and month cannot be told (1/2/2026), the other reading comes back as `alt`.
-   ============================================================ */
 import { parseRuleText, evalReading, readingName } from './ruletext';
 import { lunarOf, ganzhi } from './lunar';
 import { termMoment, TERM_NAMES } from './terms';
@@ -35,21 +24,17 @@ import {
 } from './time';
 
 export interface ParseOpts {
-  /** The year a date without one falls in. */
   year?: number;
-  /** Today on the clock the text is read on: for 明天, 下週五, 15號 and the like. */
   today?: YMD;
-  /** Now, and the clock the text is read on (rules with 3小時後, 下個月底 … are read from here). Without them: today at 00:00 UTC. */
   now?: number;
   tz?: string;
-  /** A lone part (15號, 3月) is a date here: the words around it said so. */
+  /** Allow a single part (15號, 3月) when surrounding rule text implies a date. */
   lone?: boolean;
 }
 export interface Reading {
   wall: Wall;
   how: string;
 }
-/** Which parts of the date were written (the rest came from today). */
 export interface Given {
   y: boolean;
   mo: boolean;
@@ -70,7 +55,6 @@ export type ParsedText =
   | { kind: 'time'; h: number; mi: number; s: number; roll?: number }
   | { kind: 'instant'; ms: number; unit: TsUnit | 'text' };
 
-/* ---------- words ---------- */
 const CN_DIGIT: Record<string, number> = {
   〇: 0,
   零: 0,
@@ -86,7 +70,6 @@ const CN_DIGIT: Record<string, number> = {
   八: 8,
   九: 9,
 };
-/** 二〇二六 → 2026 (digit by digit), 二十四 → 24, 一百一十五 → 115. */
 export function cnNumber(s: string): number {
   if (!/[十百千]/.test(s)) return +[...s].map((c) => CN_DIGIT[c]).join('');
   let total = 0,
@@ -180,8 +163,6 @@ function applyMer(h: number, mer: Mer | null): { h: number; roll: number } | nul
   return { h: h === 12 ? 12 : h + 12, roll: 0 };
 }
 
-/* ---------- small formats on their own ---------- */
-/** 2026-W48, 2026W48-2, 2026 年第 48 週 → the Monday of that week, or the given weekday (1 = Monday). */
 export function parseIsoWeek(text: string): YMD | null {
   const t = normalizeWide(text).trim();
   const m = /^(\d{4})\s*[-/年]?\s*(?:W|第)\s*(\d{1,2})\s*(?:週|周)?(?:\s*-?\s*([1-7]))?$/i.exec(t);
@@ -192,7 +173,6 @@ export function parseIsoWeek(text: string): YMD | null {
   const st = isoWeekStart(y, k);
   return addDaysWall(st, (m[3] ? +m[3] : 1) - 1);
 }
-/** 2026-328 (ISO ordinal date), 2026 年第 328 天, 第 328 天 (this year). */
 export function parseOrdinal(text: string, year?: number): YMD | null {
   const t = normalizeWide(text).trim();
   const m = /^(\d{4})-(\d{3})$/.exec(t) || /^(?:(\d{3,4})\s*年?\s*)?第\s*(\d{1,3})\s*天$/.exec(t);
@@ -203,14 +183,12 @@ export function parseOrdinal(text: string, year?: number): YMD | null {
   if (n < 1 || n > daysInYear(y)) return null;
   return fromDayNum(dayNum(y, 1, 1) + n - 1);
 }
-/** An Excel / Google Sheets date serial (days since 1899-12-30, local time). */
 export function excelSerial(v: number): Wall | null {
   if (!Number.isFinite(v) || v < 1 || v > 2958465.99999) return null;
   const w = wallOfKey(Math.round((utcMs(1899, 12, 30) + v * DAY) / 1000) * 1000);
   return validWall(w) ? w : null;
 }
 
-/* ---------- the general reader ---------- */
 const ALL: Given = { y: true, mo: true, d: true };
 interface Num {
   v: number;
@@ -219,7 +197,6 @@ interface Num {
 }
 const KEEP = /[^\s,./\-_'’()（）、，:：;；t@]/i;
 
-/** A date written out (any order, any separators, 民國, Chinese numerals …), without words that count from today. */
 export function parseAbsoluteText(input: string, ref?: number | ParseOpts): ParsedText | null {
   const opts: ParseOpts = typeof ref === 'number' ? { year: ref } : ref || {};
   let s = normalizeWide(input).replace(/[–—−]/g, '-').replace(/\s+/g, ' ').trim();
@@ -625,8 +602,6 @@ export function parseAbsoluteText(input: string, ref?: number | ParseOpts): Pars
   return out;
 }
 
-/* ---------- any text: written out, or counted with words (rules) ---------- */
-/** A moment in any writing. Words that count (明晚, 下個月底, 中秋, 3天後 …) are read as a rule from today or `now`; the rule comes back too. */
 export function parseDateTimeText(input: string, ref?: number | ParseOpts): ParsedText | null {
   const opts: ParseOpts = typeof ref === 'number' ? { year: ref } : ref || {};
   const r = parseRuleText(input, opts);
@@ -651,8 +626,6 @@ export function parseDateTimeText(input: string, ref?: number | ParseOpts): Pars
   };
 }
 
-/* ---------- two moments, or a moment and a length ---------- */
-/** Where a range splits: 到, 至, ~, →, to, until, or a dash with spaces around it. */
 export function splitRange(text: string): [string, string] | null {
   const t = normalizeWide(text)
     .trim()
@@ -661,7 +634,6 @@ export function splitRange(text: string): [string, string] | null {
     /^(.+?)\s*(?:到|至|~|～|→|->|⇒)\s*(.+)$/.exec(t) || /^(.+?)\s+(?:-|–|—|to|until|till|through)\s+(.+)$/i.exec(t);
   return m ? [m[1].trim(), m[2].trim()] : null;
 }
-/** 2026/1/1 + 30天, 2026-01-01 18:00 − 3h: the moment, the sign and the length. */
 export function splitDatePlusSpan(text: string): { date: string; sign: 1 | -1; span: string } | null {
   const t = normalizeWide(text).trim();
   const m = /^(.*\S)\s*([+＋]|\s[-−]\s?|[-−]\s)\s*(\d.*)$/.exec(t);
@@ -669,7 +641,6 @@ export function splitDatePlusSpan(text: string): { date: string; sign: 1 | -1; s
   return { date: m[1].trim(), sign: /[+＋]/.test(m[2]) ? 1 : -1, span: m[3].trim() };
 }
 
-/* ---------- a reading typed back in ---------- */
 export type ReadBack = { live: true } | { ms: number } | { wall: Wall } | null;
 export interface ReadCtx {
   now: number;
@@ -677,7 +648,6 @@ export interface ReadCtx {
   cur: Wall;
   parseSpanText: (t: string) => { sign: 1 | -1; ms: (from: number) => number } | null;
 }
-/** The text of one reading (ISO, Unix 秒, 民國, ISO 週 …) read back into a moment. A date without a time keeps `cur`'s time of day. */
 export function parseReading(k: string, text: string, ctx: ReadCtx): ReadBack {
   const t = normalizeWide(text).trim();
   if (!t) return null;

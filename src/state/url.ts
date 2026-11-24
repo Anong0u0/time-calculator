@@ -1,25 +1,10 @@
-/* ============================================================
-   The time state in the address bar, so a moment can be bookmarked or shared.
-
-     ?s=2026-11-24T16:13&tz=Asia/Taipei&e=2027-01-01&etz=Europe/London&z=Asia/Tokyo,Europe/London
-
-   s     start (date, date and time, or Unix seconds). Absent (or now): the start is now and follows the clock.
-   tz    the start's time zone. Dates without a zone use the opening device's local time.
-   e     a fixed end, or now: the end follows the clock.  etz: the end's zone, defaults to the start's.
-   d     the end follows the start by a span (1mo7d, -3h, 28bd for working days).
-   ds    the start follows the end back by a span: ?e=now&ds=30d is always the last 30 days.
-   er    the rule the end was set by (下個月底, 中秋 …, as a short code; ! in front: the end keeps following it).
-         With a live start and no e, it is worked out when the link is opened: a bookmark of "until 中秋" always counts
-         to the next one.  sr: the same for the start.  en, sn: their names, when not the rule's own.
-   p     (older links) the end of a period: day, week, month, newyear, lny.
-   z     the zone list.
-   calc  the duration calculator's expression, only when it is not the sample.
-   v     the panels shown (span.rail is a full-screen countdown).  cm=year: the calendar shows the year.
-
-   When the link carries any of s, e, d, ds, p, tz, the time comes from the link alone: no end in it means no end.
-   z, calc, v and cm replace yours only when they are there.
-   The address keeps the incoming parameters and adds only the fields changed since the page opened.
-   ============================================================ */
+/* URL query schema:
+   s / e       start / end (date, datetime, Unix ts, or 'now'); absent s = live now
+   tz / etz    start / end IANA zone
+   d / ds      linked span (end = start + d, or start = end − ds)
+   er / sr     end / start rule code ('!' prefix = following); en / sn = custom name; p = legacy preset
+   z / calc / v / cm   zones, duration expr, visible panels, calendar mode ('year'|'month')
+   Sync preserves incoming params and only writes fields changed during the session. */
 import { computed, watch, type ComputedRef } from 'vue';
 import {
   type Wall,
@@ -62,14 +47,11 @@ interface UrlRule {
   follow: boolean;
 }
 
-/* ---------- values ---------- */
-/** 2026-11-24, 2026-11-24T16:13 or 2026-11-24T16:13:05: the shortest form that keeps the time. */
 export function wallParam(w: Wall): string {
   const date = `${pad(w.y, 4)}-${pad(w.mo)}-${pad(w.d)}`;
   if (!w.h && !w.mi && !w.s) return date;
   return `${date}T${pad(w.h)}:${pad(w.mi)}${w.s ? ':' + pad(w.s) : ''}`;
 }
-/** A wall time, or an instant when the value is a Unix timestamp (seconds, or milliseconds from 12 digits). */
 export function parseWallParam(v: string, tz: string): HeldWall | null {
   const t = v.trim();
   if (/^-?\d{5,}$/.test(t)) {
@@ -83,9 +65,8 @@ export function parseWallParam(v: string, tz: string): HeldWall | null {
   const w = { y: +m[1], mo: +m[2], d: +m[3], h: +(m[4] || 0), mi: +(m[5] || 0), s: +(m[6] || 0) };
   return validWall(w) ? w : null;
 }
-/** Unix milliseconds disambiguate the later occurrence. Ordinary links keep their readable date. */
+// Unix ms disambiguates the later DST occurrence; ordinary links keep readable dates.
 const heldParam = (w: HeldWall, tz: string) => (w.later ? pad(wallToInstant(w, tz, true).ms, 12) : wallParam(w));
-/** 1y2mo3w4d5h6m7s, with - in front for a span backwards and bd for working days. */
 export function spanParam(sp: Span): string {
   let out = sp.sign < 0 ? '-' : '';
   if (sp.y) out += sp.y + 'y';
@@ -102,7 +83,6 @@ function linkParam(v: string): Link | null {
   return r.kind === 'span' ? { expr: fmtSpan(r.span), span: r.span } : null;
 }
 
-/* ---------- reading a link ---------- */
 export interface UrlState {
   time: boolean;
   tz?: string;
@@ -175,11 +155,9 @@ export function parseQuery(search: string): UrlState | null {
   return out.time || out.z || out.calc != null || out.v || out.cm ? out : null;
 }
 
-/** Bring a link's state in as one undoable step. When it replaces what was saved here, the toast offers the way back. */
 export function applyUrl(search = location.search, hadSaved = true): UrlState | null {
   const u = parseQuery(search);
   if (!u) return null;
-  // the panels are a display setting, outside the undo history: the toast takes them back with the rest
   const view = viewSnap();
   if (u.v) showOnly(u.v);
   if (u.cm) S.calMode = u.cm;
@@ -234,7 +212,6 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
   return u;
 }
 
-/* ---------- writing the address ---------- */
 function queryFields(): URLSearchParams {
   const out = new URLSearchParams();
   const rule = (which: End, key: string, nameKey: string) => {
@@ -262,7 +239,6 @@ function queryFields(): URLSearchParams {
   return out;
 }
 
-/** Take the baseline after local storage, the incoming link and the sample have been applied. */
 export function sessionSearch(search: string) {
   const initial = queryFields();
   return computed(() => {
@@ -294,7 +270,6 @@ export function sessionSearch(search: string) {
     return query ? '?' + query : '';
   });
 }
-/** Readable: : / , stay as they are. */
 const enc = (v: string) => encodeURIComponent(v).replace(/%3A/gi, ':').replace(/%2F/gi, '/').replace(/%2C/gi, ',');
 
 export function startUrlSync(search: ComputedRef<string>) {

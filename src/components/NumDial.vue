@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* A number you can set without typing: − and +, drag left or right, the wheel, ↑ ↓. Typing still works. */
 import { ref, watch } from 'vue';
 
 const props = withDefaults(

@@ -1,5 +1,3 @@
-/* In-place tooltips: the explanation appears next to the thing it explains.
-   Mouse: after a short hover. Keyboard: on focus. Touch: on a long press. */
 import type { Directive } from 'vue';
 
 type TipEl = HTMLElement & { _tip?: string; _tipOff?: () => void };
@@ -36,7 +34,6 @@ export function hideTip() {
   cur = null;
   box?.classList.remove('show');
 }
-/** A tooltip for something that is not an element of its own, such as a spot on a strip. */
 export function tipAt(text: string | null, r?: { left: number; right: number; top: number; bottom: number }) {
   if (!text || !r) {
     if (!cur) box?.classList.remove('show');

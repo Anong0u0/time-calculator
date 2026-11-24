@@ -1,9 +1,3 @@
-/* ============================================================
-   App state: two instants (start, end) and the span between.
-   The two ends are alike: either can be a fixed moment or follow the clock (now), and the span can tie
-   either one to the other (end = start + span, or start = end − span). Every lens reads both ends;
-   nothing switches silently.
-   ============================================================ */
 import { reactive, computed, ref, watch } from 'vue';
 import {
   type Wall,
@@ -42,7 +36,6 @@ import { setVocab, setRulePrefs, wordRule, type MyWord } from '../core/vocab';
 export type End = 'start' | 'end';
 export type Lens = 'zones' | 'cal' | 'read' | 'dur';
 export type Theme = 'system' | 'light' | 'dark';
-/** Display density in percent of the normal size; the smallest text follows it (never below 9px). */
 export const DENSITY: { v: number; name: string }[] = [
   { v: 80, name: '極緊湊' },
   { v: 87, name: '緊湊' },
@@ -56,24 +49,19 @@ export interface Link {
   expr: string;
   span: Span;
 }
-/** The rule an end was set by: its name, whether the end keeps following it (read again as time passes or the other end moves),
-    and where its period began (for how far through it now is). */
 export interface EndRule {
   code: string;
   name: string;
   follow: boolean;
   from: number | null;
 }
-/** A shortcut: a rule, with a name of the user's choosing. */
 export interface Chip {
   code: string;
   name?: string;
 }
 export type ChipRow = 'start' | 'end' | 'span';
 export interface AppPrefs extends RulePrefs {
-  /** A rule counted from now, once applied: the end keeps following it, or stays at the moment it gave. */
   followNow: boolean;
-  /** The calendar shows lunar dates and 節氣 under the days. */
   lunar: boolean;
 }
 export const DEFAULT_APP_PREFS: AppPrefs = { ...DEFAULT_PREFS, followNow: false, lunar: true };
@@ -95,10 +83,8 @@ export const DEFAULT_CHIPS: Record<ChipRow, Chip[]> = {
   ],
   span: ['+1d', '+7d', '+30d', '+3mo', '+6mo', '+1y'].map((c) => ({ code: 'o/' + c })),
 };
-/** The most shortcuts one row keeps. */
 export const CHIP_MAX = 40;
 
-/* ---------- what is on the face: every part can be put away, like the boxes of a system monitor ---------- */
 export type Panel = 'top' | 'start' | 'span' | 'end' | 'rail' | 'chips' | 'zones' | 'map' | 'cal' | 'read' | 'dur';
 export interface PanelDef {
   k: Panel;
@@ -107,21 +93,19 @@ export interface PanelDef {
   tip: string;
   part?: boolean;
 }
-/** In menu order; key is its keyboard toggle. part: a part of another panel (it is not a panel of its own). */
 export const PANELS: PanelDef[] = [
-  { k: 'start', name: '開始', key: '1', tip: '開始的時刻、時區與快捷' },
-  { k: 'span', name: '間隔', key: '2', tip: '中間的間隔或倒數' },
-  { k: 'end', name: '結束', key: '3', tip: '結束的時刻、時區與快捷' },
-  { k: 'zones', name: '時區', key: '4', tip: '各地時刻與 24 小時條' },
-  { k: 'cal', name: '月曆', key: '5', tip: '月曆或年曆' },
-  { k: 'read', name: '讀法', key: '6', tip: 'ISO、Unix、民國等各種寫法' },
-  { k: 'dur', name: '時長', key: '7', tip: '時長計算機（隱藏時從間隔的計算機按鈕打開）' },
-  { k: 'top', name: '頂列', key: '8', tip: '輸入框與右上的按鈕（隱藏時角落有一個小按鈕）', part: true },
-  { k: 'chips', name: '快捷', key: '9', tip: '開始、間隔、結束下面的快捷列', part: true },
-  { k: 'rail', name: '刻度軌', key: 'r', tip: '方程式下方的進度軌與拖曳把手', part: true },
-  { k: 'map', name: '世界地圖', key: 'm', tip: '時區裡的晝夜地圖（有空間才顯示）', part: true },
+  { k: 'start', name: '開始', key: '1', tip: '開始時刻與快捷' },
+  { k: 'span', name: '間隔', key: '2', tip: '間隔與倒數' },
+  { k: 'end', name: '結束', key: '3', tip: '結束時刻與快捷' },
+  { k: 'zones', name: '時區', key: '4', tip: '各地時刻與 24 小時軸' },
+  { k: 'cal', name: '月曆', key: '5', tip: '月曆／年曆' },
+  { k: 'read', name: '讀法', key: '6', tip: 'ISO、Unix、民國等格式' },
+  { k: 'dur', name: '時長', key: '7', tip: '時長計算機' },
+  { k: 'top', name: '頂列', key: '8', tip: '輸入框與工具列', part: true },
+  { k: 'chips', name: '快捷', key: '9', tip: '方程式快捷列', part: true },
+  { k: 'rail', name: '刻度軌', key: 'r', tip: '進度與拖曳刻度軌', part: true },
+  { k: 'map', name: '世界地圖', key: 'm', tip: '時區晝夜地圖', part: true },
 ];
-/** The panels that hold something by themselves; at least one of them stays. */
 export const MAIN_PANELS: Panel[] = ['start', 'span', 'end', 'zones', 'cal', 'read', 'dur'];
 export type CalMode = 'month' | 'year';
 export interface ViewPreset {
@@ -132,18 +116,18 @@ export interface ViewPreset {
   tip: string;
 }
 export const VIEW_PRESETS: ViewPreset[] = [
-  { k: 'all', name: '全部', show: PANELS.map((p) => p.k), tip: '每個面板都顯示' },
-  { k: 'countdown', name: '滿版倒數', show: ['span', 'rail'], tip: '只留間隔：整個畫面就是倒數或已過的時間' },
-  { k: 'clock', name: '滿版時鐘', show: ['start'], tip: '只留開始：整個畫面就是大時鐘或指定時刻' },
+  { k: 'all', name: '全部', show: PANELS.map((p) => p.k), tip: '顯示全部面板' },
+  { k: 'countdown', name: '滿版倒數', show: ['span', 'rail'], tip: '只留間隔與刻度軌' },
+  { k: 'clock', name: '滿版時鐘', show: ['start'], tip: '只留開始時刻' },
   {
     k: 'eq',
     name: '方程式',
     show: ['top', 'start', 'span', 'end', 'rail', 'chips'],
-    tip: '只留開始 + 間隔 = 結束，放到最大',
+    tip: '開始 + 間隔 = 結束',
   },
   { k: 'month', name: '滿版月曆', show: ['cal'], cal: 'month', tip: '只留月曆' },
-  { k: 'year', name: '滿版年曆', show: ['cal'], cal: 'year', tip: '只留年曆：整年 12 個月' },
-  { k: 'zones', name: '時區看板', show: ['zones', 'map'], tip: '只留時區與世界地圖' },
+  { k: 'year', name: '滿版年曆', show: ['cal'], cal: 'year', tip: '整年 12 個月' },
+  { k: 'zones', name: '時區看板', show: ['zones', 'map'], tip: '時區與世界地圖' },
 ];
 
 export const ZMAX = 8;
@@ -154,44 +138,32 @@ export const now = ref(Date.now());
 export const S = reactive({
   startTz: LOCAL_TZ,
   start: partsInTz(Date.now(), LOCAL_TZ) as HeldWall,
-  /** The start follows the clock. */
   live: true,
   end: null as HeldWall | null,
   endTz: LOCAL_TZ,
-  /** The end follows the clock. */
   endLive: false,
   endSample: false,
-  /** The rules the ends were set by, if any. */
   rules: { start: null as EndRule | null, end: null as EndRule | null },
-  /** The span that ties the ends together, if any. */
   link: null as Link | null,
-  /** Which end the span computes: 'end' = start + span, 'start' = end − span. */
   linkTo: 'end' as End,
   zones: [] as string[],
   active: 'start' as End,
   theme: 'system' as Theme,
   lens: 'zones' as Lens,
   readEnd: 'start' as End,
-  /** The order of the readings (keys of the formats); formats not listed follow in their usual order. */
   readOrder: [] as string[],
   density: 100,
   map: true,
-  /** The panels put away (the world map is S.map). */
   hidden: [] as Panel[],
-  /** The calendar shows a month, or the whole year. */
   calMode: 'month' as CalMode,
   dur: DUR_SAMPLE,
   durSample: true,
-  /** The shortcut rows, each a list of rules. */
   chips: JSON.parse(JSON.stringify(DEFAULT_CHIPS)) as Record<ChipRow, Chip[]>,
-  /** The user's own words, and the built-in words they removed. */
   words: [] as MyWord[],
   wordsOff: [] as string[],
   prefs: { ...DEFAULT_APP_PREFS } as AppPrefs,
 });
 
-/* ---------- the vocabulary and the general settings, for every rule ---------- */
-/** Changes when a word or a setting changes, so every rule is read again. */
 export const ruleTick = ref(0);
 watch(
   () => [S.words, S.wordsOff],
@@ -210,17 +182,11 @@ watch(
   { deep: true, immediate: true },
 );
 
-/* ---------- derived ---------- */
 export const other = (which: End): End => (which === 'start' ? 'end' : 'start');
-/** This end follows the clock. */
 export const isLive = (which: End) => (which === 'start' ? S.live : S.endLive);
-/** This end is computed from the other one and the span. */
 export const isLinked = (which: End) => !!S.link && S.linkTo === which;
-/** This end keeps following a rule. */
 export const isFollowing = (which: End) => !!S.rules[which]?.follow;
-/** This end is computed (by the span, or by the rule it follows), not held by itself. */
 export const isDerived = (which: End) => isLinked(which) || isFollowing(which);
-/** The end a span would compute: the one not held at now (the start when only the end follows the clock). */
 export const linkTarget = (): End => (S.link ? S.linkTo : S.endLive && !S.live ? 'start' : 'end');
 
 interface Point {
@@ -230,14 +196,12 @@ interface Point {
 }
 const NONE = { wall: null, ms: null, note: null as WallNote };
 const followRule = (which: End): Rule | null => (S.rules[which]?.follow ? decodeRule(S.rules[which]!.code) : null);
-/** The end follows a rule that reads the other end. */
 const readsOther = (which: End) => {
   const r = followRule(which);
   return !!r && ruleReads(r, which, wordRule).has(other(which));
 };
 // A span is counted on its anchor's clock. Other rules read dates on the clock they set.
 const ruleZone = (rule: Rule, which: End) => tzOf(spanOfRule(rule, which) ? other(which) : which);
-/** Read a rule for this end, now. */
 export function runRule(rule: Rule, which: End, otherMs?: number | null): RuleResult {
   void ruleTick.value;
   const o = other(which);
@@ -331,7 +295,6 @@ export const wallOf = (which: End) => (which === 'start' ? startWall.value : end
 export const msOf = (which: End) => (which === 'start' ? startMs.value : endMs.value);
 export const tzOf = (which: End) => (which === 'start' ? S.startTz : S.endTz);
 
-/** Whole-second gap end − start. */
 export const gapSec = computed(() => (endMs.value == null ? null : Math.round((endMs.value - startMs.value) / 1000)));
 export const calGap = computed(() => {
   if (endMs.value == null) return null;
@@ -340,7 +303,6 @@ export const calGap = computed(() => {
   return { ...diffCalendar(lo, hi, S.startTz), sign: (endMs.value < startMs.value ? -1 : 1) as 1 | -1 };
 });
 
-/* ---------- toasts (also the screen reader's announcements) ---------- */
 export interface ToastMsg {
   id: number;
   text: string;
@@ -503,7 +465,6 @@ export function restoreView(v: ViewSnap) {
   S.calMode = v.cal;
 }
 const panelDef = (k: Panel) => PANELS.find((p) => p.k === k)!;
-/** Show or put away one panel. The last panel that holds something stays. */
 export function setShown(k: Panel, on: boolean): boolean {
   if (shown(k) === on) return true;
   if (!on && MAIN_PANELS.includes(k) && !MAIN_PANELS.some((p) => p !== k && shown(p))) {
@@ -519,9 +480,8 @@ export function togglePanel(k: Panel) {
   const on = !shown(k);
   if (!setShown(k, on)) return;
   const d = panelDef(k);
-  toast(on ? `顯示「${d.name}」` : `已隱藏「${d.name}」，按 ${d.key.toUpperCase()} 再顯示`, () => restoreView(before));
+  toast(on ? `顯示「${d.name}」` : `已隱藏「${d.name}」（按 ${d.key.toUpperCase()} 顯示）`, () => restoreView(before));
 }
-/** The panels a preset puts away. The world map is only touched when the preset shows the zones. */
 function presetHidden(p: ViewPreset): Panel[] {
   return PANELS.map((x) => x.k).filter((k) => k !== 'map' && !p.show.includes(k));
 }
@@ -541,41 +501,33 @@ export function applyPreset(p: ViewPreset, quiet = false) {
   S.hidden = presetHidden(p);
   if (p.show.includes('zones')) S.map = p.show.includes('map');
   if (p.cal) S.calMode = p.cal;
-  if (!quiet) toast(p.k === 'all' ? '全部顯示' : `${p.name}：按 0 全部顯示，P 換下一種`, () => restoreView(before));
+  if (!quiet) toast(p.k === 'all' ? '全部顯示' : `${p.name}（0 全部顯示 · P 切換）`, () => restoreView(before));
 }
-/** Show exactly these panels (a link's v=). The world map is only touched when the zones are among them.
-    Nothing changes when none of them holds anything. */
 export function showOnly(list: Panel[]): boolean {
   if (!MAIN_PANELS.some((k) => list.includes(k))) return false;
   S.hidden = PANELS.map((p) => p.k).filter((k) => k !== 'map' && !list.includes(k));
   if (list.includes('zones')) S.map = list.includes('map');
   return true;
 }
-/** The panels shown, as a link writes them: the world map counts only with the zones. */
 export const shownList = (): Panel[] =>
   PANELS.map((p) => p.k).filter((k) => (k === 'map' ? S.map && shown('zones') : shown(k)));
-/** P: the next preset (Shift+P the one before). */
 export function cyclePreset(dir = 1) {
   const cur = presetNow();
   const i = cur ? VIEW_PRESETS.indexOf(cur) : dir > 0 ? -1 : 0;
   applyPreset(VIEW_PRESETS[(i + dir + VIEW_PRESETS.length) % VIEW_PRESETS.length]);
 }
 
-/* ---------- attention: a panel glows briefly where a change landed ---------- */
 export const pulse = reactive({ start: 0, end: 0, span: 0, zones: 0 });
 export function bump(k: keyof typeof pulse) {
   pulse[k]++;
 }
 
-/* ---------- mutations ---------- */
-/** An end that follows a rule reading `which` stops following it (it stays where it is): `which` is about to depend on it. */
 function unhookFrom(which: End) {
   const o = other(which);
   if (isFollowing(o) && readsOther(o)) {
     pinRule(o);
   }
 }
-/** The end keeps the moment its rule gives now; the rule stays as its name. */
 function pinRule(which: End) {
   const r = S.rules[which];
   if (!r?.follow) return;
@@ -583,7 +535,6 @@ function pinRule(which: End) {
   if (ms != null) S[which] = heldWallAt(ms, tzOf(which));
   S.rules[which] = { ...r, follow: false };
 }
-/** Puts this end at a moment. If the span was computing this end, it stops; if it computes the other end, that one follows. */
 export function setWall(which: End, w: Wall): boolean {
   if (!validWall(w)) {
     toast(RANGE_ERR);
@@ -608,7 +559,6 @@ export function setInstant(which: End, ms: number): boolean {
   }
   return setWall(which, heldWallAt(ms, tzOf(which)));
 }
-/** This end follows the clock (on), or stays at the second it shows now (off). */
 export function setLive(which: End, on: boolean) {
   if (on) {
     if (isLinked(which)) S.link = null;
@@ -625,7 +575,6 @@ export function setLive(which: End, on: boolean) {
   if (which === 'start') S.live = false;
   else S.endLive = false;
 }
-/** Keeps the instant; the end follows when it shared the start's zone. */
 export function setStartTz(id: string, keepInstant = true) {
   const prev = S.startTz;
   const follow = sameZone(S.endTz, prev) || !hasEnd.value;
@@ -660,16 +609,12 @@ export function mkLink(text: string): Link | null {
   return r.kind === 'span' ? { expr: fmtSpan(r.span), span: r.span } : null;
 }
 const SUBJ_NAME = { start: '開始', end: '結束' } as const;
-/** The span as the computed end sees it: +30天 from the start is −30天 from the end. */
 export const negExpr = (expr: string) =>
   expr.startsWith('−') ? '+' + expr.slice(1) : expr.startsWith('+') ? '−' + expr.slice(1) : '−' + expr;
-/** "結束 = 開始 +30天" or "開始 = 結束 −30天". */
 export function linkSentence(to: End = S.linkTo, expr = S.link?.expr || ''): string {
   return to === 'end' ? `結束 = 開始 ${expr}` : `開始 = 結束 ${negExpr(expr)}`;
 }
-/** What happens when the other end moves. */
 export const followText = (to: End = S.linkTo) => `${SUBJ_NAME[other(to)]}改了，${SUBJ_NAME[to]}跟著動`;
-/** Where `to` would land with this span (end = start + span, or start = end − span). */
 export function checkSpan(
   sp: Span,
   to: End = linkTarget(),
@@ -696,14 +641,12 @@ export function setLink(sp: Span, to: End = linkTarget()): boolean {
   } else S.live = false;
   return true;
 }
-/** The end the span was computing stays where it is right now; the span no longer ties them. */
 export function freezeLink(): boolean {
   if (!S.link) return false;
   const which = S.linkTo;
   const ms = msOf(which);
   return ms != null && setInstant(which, ms);
 }
-/** Keep the current gap: the end not held at now follows the other. */
 export function linkFromMeasured(to: End = linkTarget()): boolean {
   if (endMs.value == null) return false;
   return setLink(spanBetween(startMs.value, endMs.value, to === 'end' ? S.startTz : S.endTz), to);
@@ -718,7 +661,6 @@ export function clearEnd() {
   S.rules.end = null;
   S.active = 'start';
 }
-/** A rule's starting point at the other end, after the ends trade places. */
 function swapRule(r: EndRule | null): EndRule | null {
   if (!r) return null;
   const x = decodeRule(r.code);
@@ -727,7 +669,6 @@ function swapRule(r: EndRule | null): EndRule | null {
   else if (x.o.t === 'end') x.o = { t: 'start' };
   return { ...r, code: encodeRule(x) };
 }
-/** Start and end trade places: moments, zones, which one follows the clock, and which one the span computes. */
 export function swapEnds(): boolean {
   if (!endWall.value) return false;
   const s = isDerived('start') || S.live ? heldWallAt(startMs.value, S.startTz) : S.start,
@@ -754,12 +695,6 @@ export function swapEnds(): boolean {
   return true;
 }
 
-/* ---------- rules: what shortcuts, words and typed text set an end by ---------- */
-/**
- * Set an end by a rule. 現在 makes the end follow the clock; the other end plus a length (+30天) becomes the link;
- * any other rule puts the end where it lands now, and the end keeps following it when `follow` (by default: when the
- * rule reads the other end, or when the settings say rules from now keep following).
- */
 export function applyRule(which: End, rule: Rule, opts: { name?: string; follow?: boolean } = {}): boolean {
   if (isNowRule(rule)) {
     setLive(which, true);
@@ -793,7 +728,6 @@ export function applyRule(which: End, rule: Rule, opts: { name?: string; follow?
   S.rules[which] = { code: encodeRule(rule), name: opts.name || ruleName(rule, S.prefs), follow, from: res.from };
   return true;
 }
-/** Keep following the rule this end was set by, or stay where it is now. */
 export function setFollow(which: End, on: boolean): boolean {
   const r = S.rules[which];
   if (!r || r.follow === on) return false;
@@ -809,9 +743,7 @@ export const chipName = (c: Chip) => {
   const r = chipRule(c);
   return c.name || (r ? ruleName(r, S.prefs) : '?');
 };
-/** The end a span shortcut sets: the one the span computes. */
 export const chipTarget = (row: ChipRow): End => (row === 'span' ? linkTarget() : row);
-/** The chip is what the end is now. */
 export function chipOn(row: ChipRow, c: Chip): boolean {
   const r = chipRule(c);
   if (!r) return false;
@@ -827,7 +759,6 @@ export function chipOn(row: ChipRow, c: Chip): boolean {
     );
   return S.rules[which]?.code === c.code;
 }
-/** How far now is through the period the chip ends (月底: through this month), for the chip to fill like a bar. */
 export function chipProgress(row: ChipRow, c: Chip): number | null {
   const r = chipRule(c);
   if (!r || row === 'span' || isNowRule(r)) return null;
@@ -845,15 +776,12 @@ export function applyChip(row: ChipRow, c: Chip): boolean {
   return applyRule(chipTarget(row), r, { name: chipName(c) });
 }
 
-/* ---------- progress from start to end (the rail under the span) ---------- */
-/** With a live start and an end set by a rule with a period (本月結束, 跨年, 中秋 …): how far through that period now is. */
 export const presetProgress = computed(() => {
   const r = S.rules.end;
   if (!S.live || !r || r.from == null || S.link || endMs.value == null) return null;
   const f = (now.value - r.from) / (endMs.value - r.from);
   return f >= 0 && f <= 1 ? f : null;
 });
-/** The fill of the rail (0–1) and where now sits on it (null when now is outside start–end). */
 export const railProgress = computed<{ f: number; now: number | null }>(() => {
   if (presetProgress.value != null) return { f: presetProgress.value, now: presetProgress.value };
   const sMs = startMs.value,
@@ -863,15 +791,12 @@ export const railProgress = computed<{ f: number; now: number | null }>(() => {
   return { f, now: now.value >= sMs && now.value <= eMs ? f : null };
 });
 
-/* ---------- zones ---------- */
-/** The rows in the order they were put in (dragged into); the start's and the end's zones are always among them. */
 export const zoneRows = computed(() => {
   const list: string[] = [];
   for (const z of S.zones) if (!list.some((x) => sameZone(x, z))) list.push(z);
   if (!list.some((x) => sameZone(x, S.startTz))) list.unshift(S.startTz);
   if (!list.some((x) => sameZone(x, S.endTz)))
     list.splice(list.findIndex((x) => sameZone(x, S.startTz)) + 1, 0, S.endTz);
-  // too many: drop from the bottom, but never the start's or the end's zone
   while (list.length > ZMAX) {
     let i = list.length - 1;
     while (i >= 0 && (sameZone(list[i], S.startTz) || sameZone(list[i], S.endTz))) i--;
@@ -879,7 +804,6 @@ export const zoneRows = computed(() => {
   }
   return list;
 });
-/** Put the rows in this order. */
 export function orderZones(ids: string[]) {
   S.zones = [...ids];
 }

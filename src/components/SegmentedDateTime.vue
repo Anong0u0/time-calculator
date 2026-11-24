@@ -1,7 +1,4 @@
 <script setup lang="ts">
-/* Year-month-day hour:minute:second as six small fields that type like one.
-   Type digits and it moves on; ↑↓ or the wheel step; paste any format; "+" in the end jumps to the span.
-   Focusing changes nothing: a live end keeps ticking until a value is actually changed, and Esc puts back what was there. */
 import { reactive, computed, ref } from 'vue';
 import {
   type Wall,

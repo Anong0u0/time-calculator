@@ -17,11 +17,6 @@ const shared = reactive({
 </script>
 
 <script setup lang="ts">
-/* A row of shortcuts, every one of them a rule the user can change. Click to apply.
-   Right-click (or a long press) opens the editor on that shortcut; + adds one. With a mouse, drag a shortcut
-   to reorder the row, onto another row to move it there, or off the rows to remove it.
-   On the face a row keeps to one line, however many shortcuts it has: the ones that do not fit wait behind +N,
-   which opens the whole row (wrap: the whole row, as in that popover). */
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
@@ -97,9 +92,7 @@ watch([() => list.value.map(chipName).join('\u0001'), boxW, fontsTick, remPx, ()
 onMounted(() => nextTick(measure));
 const moreBtn = ref<HTMLElement | null>(null);
 const moreOpen = ref(false);
-const moreTip = computed(
-  () => `還有 ${hiddenN.value} 個：${list.value.slice(count.value).map(chipName).join('、')}。點一下看全部`,
-);
+const moreTip = computed(() => `還有 ${hiddenN.value} 個：${list.value.slice(count.value).map(chipName).join('、')}`);
 watch(hiddenN, (n) => {
   if (!n) moreOpen.value = false;
 });
@@ -119,7 +112,7 @@ function landing(c: Chip): string {
   const w = partsInTz(res.ms, tzOf(which.value));
   return `${w.y}/${w.mo}/${w.d}（${WD[wdOf(w)]}）${pad(w.h)}:${pad(w.mi)}`;
 }
-const tipOf = (c: Chip) => `${SUBJ[which.value]} → ${landing(c)}。右鍵或長按可以修改`;
+const tipOf = (c: Chip) => `${landing(c)}（右鍵／長按編輯）`;
 
 let skipClick = false;
 function apply(i: number) {
@@ -352,7 +345,7 @@ function hover(c: Chip | null, e?: PointerEvent) {
       class="chip add"
       :class="{ before: dropEnd && !hiddenN }"
       :aria-label="`${row === 'span' ? '間隔' : SUBJ[row as 'start']}的快捷：新增或修改`"
-      v-tip="'自訂快捷：新增、修改、排序，或把規則存成詞'"
+      v-tip="'新增／管理快捷'"
       @click="openEditor(null, $event.currentTarget as HTMLElement)"
     >
       <Icon name="plus" />

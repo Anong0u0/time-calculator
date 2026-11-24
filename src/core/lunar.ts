@@ -1,11 +1,5 @@
-/* ============================================================
-   The Chinese lunisolar calendar (農曆), reckoned here the way the almanac is:
-   a month begins on the day of a new moon (on China's clock); the month holding 冬至 is the eleventh;
-   when twelve months from one such month to the next are not enough (thirteen new moons fall between),
-   the first month holding no major term (中氣) is the leap month and repeats the number before it.
-   New moons and terms come from terms.ts, so no table is shipped and every year works the same way.
-   Outside about 1900–2100 the dates are computed, not checked against a printed almanac.
-   ============================================================ */
+/* Chinese lunisolar calendar (農曆): month starts on China-clock new moon,
+   冬至 falls in month 11, and in a 13-new-moon 歲 the first month without a 中氣 is leap. */
 import { type YMD, dayNum, fromDayNum } from './time';
 import { newMoonMs, newMoonOnOrBefore, chinaDay, termDay, CHINA_TZ } from './terms';
 
@@ -32,9 +26,7 @@ export interface LunarDate {
 export const LUNAR_MIN = 2,
   LUNAR_MAX = 9998;
 
-/* ---------- a 歲: from the month of one 冬至 to the month of the next ---------- */
 const suiCache = new Map<number, LunarMonth[]>();
-/** The months from the one holding 冬至 of year y−1 to the one before the month holding 冬至 of year y. */
 function sui(y: number): LunarMonth[] {
   const hit = suiCache.get(y);
   if (hit) return hit;
@@ -65,7 +57,6 @@ function sui(y: number): LunarMonth[] {
   return out;
 }
 const yearCache = new Map<number, LunarYear>();
-/** The months of lunar year y: from its 正月初一 to the day before the next one. */
 export function lunarYear(y: number): LunarYear | null {
   if (!Number.isFinite(y) || y < LUNAR_MIN || y > LUNAR_MAX) return null;
   const hit = yearCache.get(y);
@@ -79,7 +70,6 @@ export function lunarYear(y: number): LunarYear | null {
   yearCache.set(y, out);
   return out;
 }
-/** The lunar date of a civil day. */
 export function lunarOfDay(n: number): LunarDate | null {
   const gy = fromDayNum(n).y;
   let ly = lunarYear(gy);
@@ -97,19 +87,16 @@ export const lunarOf = (w: YMD) => lunarOfDay(dayNum(w.y, w.mo, w.d));
 export function lunarMonthOf(y: number, m: number, leap = false): LunarMonth | null {
   return lunarYear(y)?.months.find((x) => x.m === m && x.leap === leap) ?? null;
 }
-/** The civil day of a lunar date, or null when that month (a leap month) or that day (30 in a short month) does not exist. */
 export function fromLunar(y: number, m: number, d: number, leap = false): number | null {
   const mo = lunarMonthOf(y, m, leap);
   if (!mo || d < 1 || d > mo.len) return null;
   return mo.start + d - 1;
 }
-/** 春節 (正月初一) of the lunar year that begins in civil year y. */
 export function lunarNewYear(y: number): YMD | null {
   const ly = lunarYear(y);
   return ly ? fromDayNum(ly.start) : null;
 }
 
-/* ---------- names ---------- */
 export const LUNAR_MONTHS = [
   '正月',
   '二月',
@@ -137,8 +124,6 @@ const STEMS = '甲乙丙丁戊己庚辛壬癸',
   BRANCHES = '子丑寅卯辰巳午未申酉戌亥',
   ANIMALS = '鼠牛虎兔龍蛇馬羊猴雞狗豬';
 const m60 = (n: number, k: number) => ((n % k) + k) % k;
-/** 丙午 for 2026. */
 export const ganzhi = (y: number) => STEMS[m60(y - 4, 10)] + BRANCHES[m60(y - 4, 12)];
 export const zodiac = (y: number) => ANIMALS[m60(y - 4, 12)];
-/** 丙午年 十月十六 */
 export const fmtLunar = (l: LunarDate) => `${ganzhi(l.y)}年 ${lunarMonthName(l.m, l.leap)}${lunarDayName(l.d)}`;

@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/* The same two moments written every common way. Each row gives ● start and ○ end.
-   Every value shows what it does: click it to copy, the pen types over it right where it is (any reading can be
-   written back: ISO, Unix, 民國, 週次, Excel …). A row's label turns into 已複製 for a moment.
-   Drag a row by its grip (or ↑↓ on the grip) to put the formats you use on top; 全部寫法 lists them all, with a line
-   where the panel's room ends, so a format is brought into view by dragging it above that line. */
 import { ref, computed, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import CopyBtn from './CopyBtn.vue';
@@ -84,15 +79,15 @@ const DEFS: Def[] = [
   {
     k: 'iso',
     label: 'ISO 8601',
-    tip: '含時差的標準格式',
+    tip: '含時差標準格式',
     f: (ms, tz, w) => `${fmtDate(w)}T${fmtTime(w)}${isoOffset(offsetAt(ms, tz))}`,
   },
-  { k: 'unix', label: 'Unix 秒', tip: '1970-01-01 UTC 起算的秒數', f: (ms) => String(Math.floor(ms / 1000)) },
-  { k: 'unixms', label: 'Unix 毫秒', tip: 'JavaScript Date.now() 的格式', f: (ms) => String(ms) },
+  { k: 'unix', label: 'Unix 秒', tip: '1970 UTC 起算秒數', f: (ms) => String(Math.floor(ms / 1000)) },
+  { k: 'unixms', label: 'Unix 毫秒', tip: '毫秒時間戳', f: (ms) => String(ms) },
   {
     k: 'utc',
     label: 'UTC',
-    tip: '換成世界協調時間',
+    tip: '協調世界時',
     f: (ms) => {
       const u = partsInTz(ms, 'UTC');
       return `${fmtDate(u)}T${fmtTime(u)}Z`;
@@ -102,22 +97,22 @@ const DEFS: Def[] = [
     k: 'rel',
     label: '相對時間',
     sans: true,
-    tip: '離現在多久（可以改寫成「3 天後」「2 小時前」「現在」）',
+    tip: '可改寫如「3天後」「現在」',
     f: (ms) => relative(ms, now.value),
   },
   {
     k: 'zh',
     label: '中文',
     sans: true,
-    tip: '中文日期',
+    tip: '',
     f: (_ms, _tz, w) => `${w.y}年${w.mo}月${w.d}日 星期${WD[wdOf(w)]} ${fmtTime(w)}`,
   },
-  { k: 'roc', label: '民國', sans: true, tip: '民國紀年', f: (_ms, _tz, w) => `${rocYear(w.y)} ${w.mo} 月 ${w.d} 日` },
+  { k: 'roc', label: '民國', sans: true, tip: '', f: (_ms, _tz, w) => `${rocYear(w.y)} ${w.mo} 月 ${w.d} 日` },
   {
     k: 'lunar',
     label: '農曆',
     sans: true,
-    tip: '農曆日期（干支年與生肖）。可以改寫成「十月十七」「丙午年正月初一」',
+    tip: '干支與生肖（可改寫如「正月初一」）',
     f: (_ms, _tz, w) => {
       const l = lunarOf(w);
       return l ? `${ganzhi(l.y)}年（${zodiac(l.y)}）${lunarMonthName(l.m, l.leap)}${lunarDayName(l.d)}` : '—';
@@ -127,7 +122,7 @@ const DEFS: Def[] = [
     k: 'term',
     label: '節氣',
     sans: true,
-    tip: '這一刻在哪個節氣的第幾天，以及下一個節氣。可以改寫成「冬至」「清明 第 3 天」',
+    tip: '節氣天數（可改寫如「冬至」）',
     f: (ms, tz) => termText(ms, tz),
   },
   {
@@ -142,35 +137,35 @@ const DEFS: Def[] = [
   {
     k: 'usweek',
     label: '美式週次',
-    tip: '週日開始、含 1 月 1 日的那週是第 1 週（美國、Excel WEEKNUM 的算法）',
+    tip: '週日起算（Excel WEEKNUM）',
     f: (_ms, _tz, w) => `${w.y} 年 W${pad(usWeek(w.y, w.mo, w.d))}`,
   },
   {
     k: 'doy',
     label: '第幾天',
     sans: true,
-    tip: '一年中的第幾天、季度與閏年',
+    tip: '年內天數、季度與閏年',
     f: (_ms, _tz, w) =>
       `第 ${dayOfYear(w.y, w.mo, w.d)} 天 · Q${Math.ceil(w.mo / 3)} · ${isLeap(w.y) ? '閏年' : `平年（下次閏年 ${nextLeap(w.y)}）`}`,
   },
   {
     k: 'rfc',
     label: 'RFC 2822',
-    tip: '電子郵件標頭的格式',
+    tip: '郵件標頭格式',
     f: (ms, tz, w) =>
       `${EN_WD[wdOf(w)]}, ${w.d} ${EN_MO[w.mo - 1]} ${w.y} ${fmtTime(w)} ${isoOffset(offsetAt(ms, tz)).replace(':', '')}`,
   },
-  { k: 'sql', label: 'SQL', tip: 'DATETIME 字面值（不含時區）', f: (_ms, _tz, w) => `${fmtDate(w)} ${fmtTime(w)}` },
+  { k: 'sql', label: 'SQL', tip: 'DATETIME（無時區）', f: (_ms, _tz, w) => `${fmtDate(w)} ${fmtTime(w)}` },
   {
     k: 'excel',
     label: 'Excel',
-    tip: 'Excel／Google 試算表的日期序號（當地時間）',
+    tip: 'Excel／試算表日期序號',
     f: (_ms, _tz, w) => plainNum((wallKey(w) - utcMs(1899, 12, 30)) / DAY, 6),
   },
   {
     k: 'http',
     label: 'HTTP',
-    tip: 'HTTP 標頭的 GMT 格式',
+    tip: 'HTTP GMT 格式',
     f: (ms) => {
       const u = partsInTz(ms, 'UTC');
       return `${EN_WD[wdOf(u)]}, ${pad(u.d)} ${EN_MO[u.mo - 1]} ${u.y} ${fmtTime(u)} GMT`;
@@ -373,18 +368,10 @@ function editKey(e: KeyboardEvent) {
     <header class="panel-head">
       <Icon name="list" class="ph-ic" />
       <h2>讀法</h2>
-      <span class="rd-how" aria-hidden="true"
-        ><span><Icon name="copy" />點值複製</span><span><Icon name="edit" />改寫</span></span
-      >
       <span v-if="cols && hasEnd" class="rd-legend" aria-hidden="true"
         ><i class="node" />開始 <i class="node end" />結束</span
       >
-      <CopyBtn
-        class="rd-now mono"
-        :text="nowSec"
-        k="rd-now"
-        label="現在的 Unix 秒"
-        :tip="`現在的 Unix 時間戳（秒），每秒更新。點一下複製`"
+      <CopyBtn class="rd-now mono" :text="nowSec" k="rd-now" label="現在的 Unix 秒" tip="現在的 Unix 秒（點選複製）"
         ><i class="dot" aria-hidden="true" /><em>現在</em>{{ nowSec }}</CopyBtn
       >
     </header>
@@ -406,7 +393,7 @@ function editKey(e: KeyboardEvent) {
               type="button"
               class="rd-grip"
               :aria-label="`拖曳或按 ↑↓ 調整「${r.label}」的位置`"
-              v-tip="'拖曳調整順序；也可以按 ↑↓'"
+              v-tip="'拖曳排序（↑↓）'"
               @pointerdown="panelSort.down($event, i)"
               @pointermove="panelSort.move"
               @pointerup="panelSort.up"
@@ -483,7 +470,7 @@ function editKey(e: KeyboardEvent) {
           type="button"
           class="rd-more"
           :aria-expanded="more"
-          v-tip="'全部的寫法：拖曳排序，拖到線上面就會顯示在這裡'"
+          v-tip="'全部寫法與排序'"
           @click="more = !more"
         >
           <span v-if="rest.length" class="ell"
@@ -494,7 +481,7 @@ function editKey(e: KeyboardEvent) {
           type="button"
           class="rd-table"
           :class="{ ok: copiedKey === 'rd-table' }"
-          v-tip="'把所有寫法複製成表格（Tab 分隔，可以直接貼進試算表）'"
+          v-tip="'複製為 TSV 表格'"
           @click="copyTable"
         >
           <Icon :name="copiedKey === 'rd-table' ? 'check' : 'copy'" />{{
@@ -505,9 +492,7 @@ function editKey(e: KeyboardEvent) {
     </div>
     <Popover :open="more" :anchor="moreBtn" label="全部寫法" width="30rem" @close="more = false">
       <div class="rd-pop" :class="{ one: !hasEnd }">
-        <p class="rd-pop-how">
-          <Icon name="grip" />拖曳排序，線上面的會顯示在面板　<Icon name="copy" />點值複製　<Icon name="edit" />改寫
-        </p>
+        <p class="rd-pop-how"><Icon name="grip" />拖曳至線上方即顯示於面板</p>
         <div ref="popList" class="rd-pop-list">
           <template v-for="(r, i) in vals" :key="r.k">
             <div v-if="i === shown.length && rest.length" class="rd-cut" aria-hidden="true">
@@ -823,28 +808,6 @@ function editKey(e: KeyboardEvent) {
   color: var(--good);
   border-color: var(--good);
   background: var(--good-wash);
-}
-/* how the rows work, said once where they are */
-.rd-how {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.rd-how > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.22rem;
-}
-.rd-how .ic {
-  width: 1.05em;
-  height: 1.05em;
-  color: var(--accent);
-  opacity: 0.8;
 }
 .rd-now em {
   font-style: normal;

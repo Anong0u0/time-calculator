@@ -1,8 +1,3 @@
-/* ============================================================
-   Adaptive grid layout: picks the best arrangement for whatever
-   panels remain visible and whatever shape the window has.
-   Pure logic so every viewport × panel combination can be tested.
-   ============================================================ */
 import type { Lens } from './store';
 
 export type Layout = 'xwide' | 'wide' | 'square' | 'phone' | 'short';
@@ -10,27 +5,22 @@ export type EqMode = 'row' | 'stack' | 'stage';
 
 export const LENS_ORDER: Lens[] = ['zones', 'cal', 'read', 'dur'];
 
-/** Column weights for side-by-side lenses. */
 const FR: Record<'wide' | 'xwide', Record<Lens, number>> = {
   wide: { zones: 1.32, cal: 1, read: 0.98, dur: 0.92 },
   xwide: { zones: 1.3, cal: 1, read: 1, dur: 0.92 },
 };
 const TWO_FR: Record<Lens, number> = { zones: 1.25, cal: 1.05, read: 1, dur: 0.9 };
-/** Side-by-side split when one equation piece pairs with one lens on landscape screens. */
 const HERO_SPLIT: Record<Lens, [number, number]> = {
   zones: [0.85, 1.35],
   cal: [0.9, 1.25],
   read: [0.9, 1.15],
   dur: [1.05, 0.95],
 };
-/** Side-by-side split when a multi-part equation (with span) pairs with one non-zones lens on wide screens. */
 const STAGE_SPLIT: Record<Exclude<Lens, 'zones'>, [number, number]> = {
   cal: [1.08, 1],
   read: [1.05, 1],
   dur: [1.18, 0.88],
 };
-
-/** Side-by-side split when start + end (no span) pairs with one non-zones lens on wide screens. */
 const TWIN_SPLIT: Record<Exclude<Lens, 'zones'>, [number, number]> = {
   cal: [0.92, 1.15],
   read: [0.92, 1.1],
@@ -46,7 +36,6 @@ export interface LayoutInput {
   eqSpan: boolean;
   eqEnd: boolean;
   shownLenses: Lens[];
-  /** Whether the world map is enabled inside ZonesPanel (defaults to true). */
   showMap?: boolean;
 }
 
@@ -65,7 +54,7 @@ export interface LayoutPlan {
   cols: string[];
   rows: string[];
   areas: string[][];
-  /** The grid area occupying the top-right corner (used to clear the floating panels button when top is hidden). */
+  /** Grid area in the top-right corner, used to reserve room for the corner menu when TopBar is hidden. */
   topRightArea: string;
 }
 

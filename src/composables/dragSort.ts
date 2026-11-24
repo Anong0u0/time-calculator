@@ -1,13 +1,8 @@
-/* Reorder a list by dragging a handle: mouse, touch and pen alike. The rows trade places as the pointer
-   passes their middle, and the dragged row follows the pointer. ↑ ↓ on a focused handle move it by one. */
 import { ref, nextTick } from 'vue';
 
 export interface DragSortOpts {
-  /** The row elements, in the order shown. */
   rows: () => HTMLElement[];
-  /** Move the item at `from` to `to` (the list re-renders in the new order). */
   move: (from: number, to: number) => void;
-  /** The drag is over: `from` is where it started, `to` where it ended. */
   done?: (from: number, to: number) => void;
 }
 export function useDragSort(opts: DragSortOpts) {
@@ -113,10 +108,8 @@ export function useDragSort(opts: DragSortOpts) {
     opts.move(idx, to);
     opts.done?.(idx, to);
   }
-  /** Bind on the handle: @pointerdown, @pointermove, @pointerup, @pointercancel, @keydown. */
   return { dragging, down, move: moveP, up, key };
 }
-/** A copy of `list` with the item at `from` moved to `to`. */
 export function moved<T>(list: T[], from: number, to: number): T[] {
   const out = list.slice();
   const [x] = out.splice(from, 1);

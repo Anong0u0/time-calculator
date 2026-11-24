@@ -1,6 +1,4 @@
 <script setup lang="ts">
-/* The general rules every rule is read with, and the vocabulary: every word (built in or one's own) can be changed,
-   removed or brought back; a new word is built from blocks like any shortcut. */
 import { ref, computed } from 'vue';
 import Icon from './Icon.vue';
 import RuleBuilder from './RuleBuilder.vue';
@@ -69,7 +67,7 @@ function remove(name: string) {
       S.words = S.words.filter((w) => w.name !== name);
       if (builtinOf(name) && !S.wordsOff.includes(name)) S.wordsOff.push(name);
     },
-    { label: `移除詞彙：${name}`, say: `已移除「${name}」，打字時不再認得它` },
+    { label: `移除詞彙：${name}`, say: `已移除詞彙「${name}」` },
   );
   if (edit.value?.name === name) edit.value = null;
 }
@@ -161,9 +159,7 @@ const autoName = computed(() => ruleName(draft.value, S.prefs));
       <h3>
         詞彙<button type="button" class="chip sm" @click="openNew"><Icon name="plus" />新的詞</button>
       </h3>
-      <p class="vp-note">
-        打字和積木都認得這些詞，也能自由組合：<code>明年中秋晚上8點</code>、<code>下個月月底</code>。點一個詞可以改它的意思。
-      </p>
+      <p class="vp-note">點選詞彙可修改定義，打字與積木皆可組合使用。</p>
       <div v-for="[k, list] in groups" :key="k" class="vp-g">
         <span class="vp-k">{{ KIND_NAME[k] }}</span>
         <div class="vp-words">
@@ -183,9 +179,7 @@ const autoName = computed(() => ruleName(draft.value, S.prefs));
           </button>
         </div>
       </div>
-      <p v-if="!S.prefs.lunar" class="vp-note">
-        農曆節日與節氣已隱藏（在「顯示」打開「農曆與節氣」）。打字仍然認得它們。
-      </p>
+      <p v-if="!S.prefs.lunar" class="vp-note">農曆與節氣已隱藏（打字仍可辨識）。</p>
       <div v-if="removed.length" class="vp-g">
         <span class="vp-k">已移除</span>
         <div class="vp-words">
@@ -216,8 +210,7 @@ const autoName = computed(() => ruleName(draft.value, S.prefs));
       /></label>
       <RuleBuilder v-model="draft" self="end" :text="true" />
       <p class="vp-note">
-        這個詞會被當成一步：<b>{{ autoName }}</b
-        >。「挑一天」用「下一個」時，前面有「明年」「下個月」就會改成在那一年、那個月裡找。
+        展開為：<b>{{ autoName }}</b>
       </p>
       <div class="vp-acts">
         <button type="button" class="btn" @click="save"><Icon name="check" />儲存</button>

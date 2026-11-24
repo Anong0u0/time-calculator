@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* One stroke style for every icon. */
 const P: Record<string, string> = {
   copy: 'M9 9h9.5A1.5 1.5 0 0 1 20 10.5V19.5A1.5 1.5 0 0 1 18.5 21H10.5A1.5 1.5 0 0 1 9 19.5Z M15 9V5.5A1.5 1.5 0 0 0 13.5 4H5.5A1.5 1.5 0 0 0 4 5.5V13.5A1.5 1.5 0 0 0 5.5 15H9',
   check: 'M5 12.5l4.5 4.5L19 7.5',

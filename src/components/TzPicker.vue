@@ -1,5 +1,4 @@
 <script setup lang="ts">
-/* Find a time zone by city (中文或英文), country, IANA id or offset. The list never scrolls: it shows the best matches that fit. */
 import { ref, computed, watch, nextTick } from 'vue';
 import Popover from './Popover.vue';
 import Icon from './Icon.vue';
@@ -118,9 +117,9 @@ function pick(id: string) {
             >{{ timeIn(h.z.id) }}<small>{{ dayIn(h.z.id) }}</small></span
           >
         </li>
-        <li v-if="!hits.length" class="tzp-empty">找不到「{{ q }}」。試試英文城市名、國家或 UTC+9</li>
+        <li v-if="!hits.length" class="tzp-empty">找不到「{{ q }}」</li>
       </ul>
-      <p v-if="total > hits.length" class="tzp-more">另有 {{ total - hits.length }} 個符合，繼續輸入可縮小範圍</p>
+      <p v-if="total > hits.length" class="tzp-more">另有 {{ total - hits.length }} 筆，輸入關鍵字篩選</p>
     </div>
   </Popover>
 </template>

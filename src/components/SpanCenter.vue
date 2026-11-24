@@ -1,8 +1,4 @@
 <script setup lang="ts">
-/* The answer: the gap between start and end, in the middle of the equation.
-   Fixed ends: the measured gap (a countdown or a count-up while one end is now).
-   Linked: end = start + this span, or start = end − this span when the end is held at now.
-   Typing or dragging a number here links; a date typed here moves the end there. */
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
@@ -65,29 +61,24 @@ import { fitText } from '../composables/fit';
 import { useSize, fontsTick, remPx } from '../composables/size';
 import { useFlash } from '../composables/flash';
 
-/** big: the equation has the screen to itself (or beside one lens): the hero grows to the room it has. */
 const props = defineProps<{ compact?: boolean; tight?: boolean; big?: boolean; solo?: boolean; cornerPad?: boolean }>();
 const mode = computed(() => (S.link ? 'link' : hasEnd.value ? 'fixed' : 'empty'));
 const N = { start: '開始', end: '結束' } as const;
-/** The one end that is now, when exactly one is. */
 const liveEnd = computed(() => (S.live && !S.endLive ? 'start' : S.endLive && !S.live ? 'end' : null));
 const title = computed(() => {
   if (mode.value === 'link') return '連動';
   if (mode.value === 'fixed' && liveEnd.value) {
     const g = gapSec.value ?? 0;
-    // start = now: what is left until the end; end = now: what has passed since the start
     return (liveEnd.value === 'start' ? g >= 0 : g < 0) ? '倒數' : '已過';
   }
   return '間隔';
 });
 const titleTip = computed(() => {
-  if (title.value === '連動') return `${linkSentence()}。${followText()}`;
-  if (title.value === '倒數')
-    return liveEnd.value === 'start' ? '開始是現在，所以這是到結束還剩多少時間' : '結束是現在，所以這是到開始還有多久';
-  if (title.value === '已過')
-    return liveEnd.value === 'start' ? '開始是現在，結束已經過去了這麼久' : '結束是現在，所以這是從開始到現在過了多久';
-  if (!hasEnd.value) return '輸入一段間隔，結束就會算出來；也可以直接輸入結束的日期';
-  return `開始到結束相隔多久。改這裡會讓${N[linkTarget()]}跟著移動`;
+  if (title.value === '連動') return linkSentence();
+  if (title.value === '倒數') return `距離${liveEnd.value === 'start' ? '結束' : '開始'}剩餘時間`;
+  if (title.value === '已過') return `自${liveEnd.value === 'start' ? '結束' : '開始'}已過時間`;
+  if (!hasEnd.value) return '輸入間隔或結束日期';
+  return `開始到結束的間隔（修改會移動${N[linkTarget()]}）`;
 });
 
 const heroSpan = computed<Span | null>(() => {
@@ -497,24 +488,17 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
     const d = typedDate.value;
     if (d)
       return {
-        segs: [{ t: `${N[d.to]} → ` }, { t: whenFull(d.wall), b: true }, { t: ' · Enter 確定，Esc 取消' }],
+        segs: [{ t: `${N[d.to]} → ` }, { t: whenFull(d.wall), b: true }],
         tone: 'pre',
       };
     if (p.kind === 'error') return { segs: [{ t: p.message }], tone: p.soft ? 'soft' : 'err' };
-    if (p.kind === 'empty')
-      return { segs: [{ t: '輸入 +30天、1年6個月、20工作日、47m × 16，或結束的日期' }], tone: 'soft' };
-    if (p.kind === 'ratio')
-      return { segs: [{ t: tape(p), b: true }, { t: ' · 結果是倍數，只顯示，不會改變結束' }], tone: 'pre' };
+    if (p.kind === 'empty') return { segs: [{ t: '輸入 +30天、1年6個月、20工作日、47m × 16 或日期' }], tone: 'soft' };
+    if (p.kind === 'ratio') return { segs: [{ t: tape(p), b: true }, { t: ' · 倍數僅顯示' }], tone: 'pre' };
     const to = linkTarget();
     const c = checkSpan(p.span, to);
     if (!c.ok) return { segs: [{ t: c.err }], tone: 'err' };
     return {
-      segs: [
-        ...(p.expr ? [{ t: tape(p) + ' ', b: false }] : []),
-        { t: `${N[to]} → ` },
-        { t: whenFull(c.w), b: true },
-        { t: ' · Enter 確定，Esc 取消' },
-      ],
+      segs: [...(p.expr ? [{ t: tape(p) + ' ', b: false }] : []), { t: `${N[to]} → ` }, { t: whenFull(c.w), b: true }],
       tone: 'pre',
     };
   }
@@ -525,7 +509,7 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
     n = now.value;
   if (eMs == null) {
     if (!S.live && sMs > n) return { segs: [{ t: '還有 ' }, { t: left(sMs - n), b: true }, { t: ' 開始' }], tone: '' };
-    return { segs: [{ t: '點上面輸入 +30天、3個月，或直接填結束的日期' }], tone: 'soft' };
+    return { segs: [{ t: '輸入間隔或設定結束' }], tone: 'soft' };
   }
   if (S.link) {
     const ex = S.link.expr,
@@ -544,7 +528,7 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
     return { segs: [{ t: `${linkSentence()}，${followText()}` }], tone: '' };
   }
   const endName = S.rules.end?.name || '結束';
-  if (S.live && S.endLive) return { segs: [{ t: '開始和結束都是現在 · 把其中一端改成別的時刻' }], tone: 'soft' };
+  if (S.live && S.endLive) return { segs: [{ t: '兩端皆為現在' }], tone: 'soft' };
   if (S.endLive) {
     if (sMs > n) return { segs: [{ t: '結束是現在 · 開始還有 ' }, { t: left(sMs - n), b: true }], tone: '' };
     return { segs: [{ t: '從 ' }, { t: whenShort(sMs, S.startTz), b: true }, { t: ' 到現在' }], tone: '' };
@@ -565,7 +549,7 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
       tone: '',
     };
   }
-  if (eMs < sMs) return { segs: [{ t: '結束早於開始 · 按 ⇄ 可以交換' }], tone: 'soft' };
+  if (eMs < sMs) return { segs: [{ t: '結束早於開始' }], tone: 'soft' };
   if (n < sMs) return { segs: [{ t: '尚未開始 · ' }, { t: left(sMs - n), b: true }, { t: ' 後開始' }], tone: '' };
   if (n > eMs) return { segs: [{ t: '已經結束 · ' }, { t: left(n - eMs), b: true }, { t: ' 前' }], tone: '' };
   const f = (n - sMs) / (eMs - sMs);
@@ -588,7 +572,7 @@ const calcBtnC = ref<HTMLElement | null>(null);
 const calcOpen = ref(false);
 const calcRef = ref<InstanceType<typeof DurationCalc> | null>(null);
 const calcHere = computed(() => !ui.durLens);
-const calcTip = computed(() => (calcHere.value ? '時長計算機：加減乘除時間長度' : '打開時長計算機'));
+const calcTip = '時長計算機';
 function toggleCalc() {
   if (calcHere.value) calcOpen.value = !calcOpen.value;
   else openDuration();
@@ -690,9 +674,7 @@ watch(calcHere, (h) => {
             mode === 'empty' ? '輸入間隔' : `間隔 ${toks.map((t) => ('v' in t ? t.v : ':')).join('')}，點一下修改`
           "
           :style="{ cursor: canHover ? 'ew-resize' : 'text' }"
-          v-tip="
-            mode === 'empty' ? '點一下輸入間隔，例如 +30天' : '點一下輸入；按住數字左右拖曳，或在數字上捲動滾輪調整'
-          "
+          v-tip="mode === 'empty' ? '輸入間隔（如 +30天）' : '點選輸入 · 拖曳或滾輪調整數字'"
           @pointerdown="onDown"
           @pointermove="onMove"
           @pointerup="onUp"
@@ -774,7 +756,7 @@ watch(calcHere, (h) => {
         type="button"
         class="chip biz"
         :aria-pressed="!!S.link?.span.biz"
-        v-tip="'只算週一到週五：僅扣週末，不含國定假日與補班'"
+        v-tip="'僅扣週末（不含國定假日）'"
         @click="toggleBiz"
       >
         <Icon name="brief" />工作日
@@ -790,7 +772,7 @@ watch(calcHere, (h) => {
       @close="calcOpen = false"
     >
       <div class="calc-pop">
-        <p class="calc-pop-t"><Icon name="calc" /><b>時長計算機</b><span>不會動到開始和結束</span></p>
+        <p class="calc-pop-t"><Icon name="calc" /><b>時長計算機</b></p>
         <DurationCalc ref="calcRef" compact />
       </div>
     </Popover>

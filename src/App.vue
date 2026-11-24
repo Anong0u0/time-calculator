@@ -1,8 +1,4 @@
 <script setup lang="ts">
-/* One screen, never scrolls. The layout follows the window's shape:
-   xwide (four lenses side by side), wide (three), square (zones on top), phone and short (one lens at a time).
-   Every panel can be put away (keys 1–9, R, M; P for presets; 0 brings everything back): the grid is built from
-   what is left, so a lone panel fills the screen (a full-screen countdown, calendar or year). */
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import TopBar from './components/TopBar.vue';
 import Equation from './components/Equation.vue';
@@ -102,7 +98,6 @@ watch(
   { immediate: true },
 );
 
-/* ---------- what is shown, and the grid built from it ---------- */
 const lenses = computed<Lens[]>(() => plan.value.lenses);
 watch(
   lenses,
@@ -113,7 +108,6 @@ watch(
 );
 const lens = computed<Lens>(() => (lenses.value.includes(S.lens) ? S.lens : (lenses.value[0] ?? 'zones')));
 const showTabs = computed(() => plan.value.showTabs);
-/** Nothing below the equation, or the equation owns the full height beside one lens. */
 const eqBig = computed(() => plan.value.eqBig);
 const eqSolo = computed(() => plan.value.eqSolo);
 const eqMode = computed(() => plan.value.eqMode);
@@ -129,7 +123,6 @@ const grid = computed(() => ({
   gridTemplateRows: plan.value.rows.join(' '),
   gridTemplateAreas: plan.value.areas.map((r) => `"${r.join(' ')}"`).join(' '),
 }));
-/** The calculator was asked for, but it has no place on the face and its button (in the span) is put away. */
 watch(
   () => ui.durReq,
   () => {
@@ -137,20 +130,17 @@ watch(
       if (tabbed.value) S.lens = 'dur';
       return;
     }
-    if (!shown('span')) toast('時長計算機在「間隔」或「時長」面板裡：按 2 或 7 顯示');
+    if (!shown('span')) toast('時長計算機在「間隔」或「時長」面板：按 2 或 7 顯示');
   },
 );
 
-/* ---------- the corner: the panels menu, for when the top bar is put away ---------- */
 const cornerBtn = ref<HTMLElement | null>(null);
 const cornerOpen = ref(false);
 
-/* ---------- keys ---------- */
 const typing = (t: EventTarget | null) => {
   const el = t as HTMLElement | null;
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
 };
-/** Panel keys, like a system monitor's: a digit (or R, M) for each panel, 0 all, P presets, Y month or year, F full screen. */
 function panelKey(e: KeyboardEvent): boolean {
   if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return false;
   const k = e.key.toLowerCase();
@@ -313,15 +303,14 @@ const tabs = computed(() => LENSES.filter(([k]) => lenses.value.includes(k)));
       :style="{ gridArea: areaOf('dur') }"
       :role="tabbed ? 'tabpanel' : undefined"
     />
-    <!-- with the top bar put away, the panels menu stays in reach in the corner -->
     <button
       v-if="!showTop"
       ref="cornerBtn"
       type="button"
       class="corner icon-btn"
       :class="{ on: cornerOpen }"
-      aria-label="面板：顯示或隱藏"
-      v-tip="'面板：顯示或隱藏（按 0 全部顯示，8 叫回頂列）'"
+      aria-label="面板"
+      v-tip="'面板（0 全部 · 8 頂列）'"
       :aria-expanded="cornerOpen"
       @click="cornerOpen = !cornerOpen"
     >
@@ -374,7 +363,6 @@ const tabs = computed(() => LENSES.filter(([k]) => lenses.value.includes(k)));
   width: 100%;
 }
 
-/* ---------- the face: one dial in a case (see styles.css for the face itself) ---------- */
 .app.dial[data-layout='wide'],
 .app.dial[data-layout='xwide'],
 .app.dial[data-layout='square'] {
@@ -390,7 +378,6 @@ const tabs = computed(() => LENSES.filter(([k]) => lenses.value.includes(k)));
   row-gap: 0.5rem;
   column-gap: 1.2rem;
 }
-/* browser full screen: true edge-to-edge face with no outer bezel */
 .app.dial.fullscreen[data-layout='wide'],
 .app.dial.fullscreen[data-layout='xwide'],
 .app.dial.fullscreen[data-layout='square'] {
@@ -417,7 +404,6 @@ const tabs = computed(() => LENSES.filter(([k]) => lenses.value.includes(k)));
 .app[data-layout='short'] .a-eq {
   min-height: 0;
 }
-/* the top bar put away: the corner button aligns with the top-right header instead of pushing the whole face down */
 .app.no-top .a-tabs.has-corner {
   width: auto;
   margin-right: 2.3rem;

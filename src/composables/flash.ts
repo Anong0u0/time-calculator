@@ -1,7 +1,5 @@
 import { ref, watch, type WatchSource } from 'vue';
 
-/** A panel glows briefly where a change landed: `flash()` (or a change of `source`) restarts the animation;
-    the panel clears `flashing` on animationend. */
 export function useFlash(source?: WatchSource) {
   const flashing = ref(false);
   const flash = () => {

@@ -1,9 +1,4 @@
 <script setup lang="ts">
-/* Day scale: the same moment in every zone. Each row shows both ends; the strips share one 24-hour axis
-   where ● and ○ can be dragged. A click moves whichever end is nearer (with no end yet, it makes one, as the calendar does).
-   ‹ › walk the axis a day at a time; the axis holds still while something is dragged on it.
-   On touch, sliding the finger away from the strip while dragging gives minutes instead of quarter hours.
-   Rows are put in order by dragging their grip. */
 import { ref, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
@@ -511,12 +506,12 @@ function pinMenu(id: string, el: HTMLElement) {
   menuFor.value = menuFor.value === id ? null : id;
 }
 function asStart(id: string) {
-  commit(() => setStartTz(id), { label: `開始時區：${zoneName(id)}`, say: `開始改用${zoneName(id)}時區，同一個時刻` });
+  commit(() => setStartTz(id), { label: `開始時區：${zoneName(id)}`, say: `開始時區：${zoneName(id)}` });
   menuFor.value = null;
   bump('start');
 }
 function asEnd(id: string) {
-  commit(() => setEndTz(id), { label: `結束時區：${zoneName(id)}`, say: `結束改用${zoneName(id)}時區，同一個時刻` });
+  commit(() => setEndTz(id), { label: `結束時區：${zoneName(id)}`, say: `結束時區：${zoneName(id)}` });
   menuFor.value = null;
   bump('end');
 }
@@ -582,14 +577,14 @@ const awayText = (which: End) => {
       <Icon name="globe" class="ph-ic" />
       <h2>時區</h2>
       <span class="zday">
-        <button type="button" class="icon-btn xs" aria-label="前一天" v-tip="'時區條看前一天'" @click="walk(-1)">
+        <button type="button" class="icon-btn xs" aria-label="前一天" v-tip="'前一天'" @click="walk(-1)">
           <Icon name="chevL" />
         </button>
         <span class="panel-sub">{{ stacked ? winShort : `${winLabel} 的 24 小時` }}</span>
-        <button type="button" class="icon-btn xs" aria-label="後一天" v-tip="'時區條看後一天'" @click="walk(1)">
+        <button type="button" class="icon-btn xs" aria-label="後一天" v-tip="'後一天'" @click="walk(1)">
           <Icon name="chevR" />
         </button>
-        <button v-if="dayOff" type="button" class="chip xs" v-tip="'回到端點那一天'" @click="dayOff = 0">
+        <button v-if="dayOff" type="button" class="chip xs" v-tip="'回到端點日'" @click="dayOff = 0">
           回到 {{ winEnd === 'end' ? '○' : '●' }}
         </button>
       </span>
@@ -598,7 +593,7 @@ const awayText = (which: End) => {
           type="button"
           :aria-pressed="winEnd === 'start'"
           aria-label="開始日"
-          v-tip="'時區條顯示開始那一天'"
+          v-tip="'顯示開始日'"
           @click="showEnd('start')"
         >
           <i class="node" /><span class="sl">開始日</span>
@@ -607,7 +602,7 @@ const awayText = (which: End) => {
           type="button"
           :aria-pressed="winEnd === 'end'"
           aria-label="結束日"
-          v-tip="'時區條顯示結束那一天'"
+          v-tip="'顯示結束日'"
           @click="showEnd('end')"
         >
           <i class="node end" /><span class="sl">結束日</span>
@@ -619,9 +614,7 @@ const awayText = (which: End) => {
         :class="{ on: S.map && !mapNoRoom }"
         :aria-pressed="S.map"
         aria-label="世界地圖"
-        v-tip="
-          !S.map ? '顯示世界地圖' : mapNoRoom ? '地圖：這裡的空間不夠，放大視窗或在顯示設定調緊湊' : '隱藏世界地圖'
-        "
+        v-tip="!S.map ? '顯示世界地圖' : mapNoRoom ? '空間不足，調緊湊或放大視窗顯示地圖' : '隱藏世界地圖'"
         @click="S.map = !S.map"
       >
         <Icon name="map" />
@@ -723,7 +716,7 @@ const awayText = (which: End) => {
               type="button"
               class="edge r"
               :aria-label="`看${outRight === 'end' ? '結束' : '開始'}那一天`"
-              v-tip="`${outRight === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outRight)}，點一下看那一天`"
+              v-tip="`${outRight === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outRight)}`"
               @pointerdown.stop
               @click="showEnd(outRight)"
             />
@@ -732,7 +725,7 @@ const awayText = (which: End) => {
               type="button"
               class="edge l"
               :aria-label="`看${outLeft === 'end' ? '結束' : '開始'}那一天`"
-              v-tip="`${outLeft === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outLeft)}，點一下看那一天`"
+              v-tip="`${outLeft === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outLeft)}`"
               @pointerdown.stop
               @click="showEnd(outLeft)"
             />
@@ -751,7 +744,7 @@ const awayText = (which: End) => {
               type="button"
               class="zgrip"
               :aria-label="`拖曳或按 ↑↓ 調整${r.name}的位置`"
-              v-tip="'拖曳調整順序；也可以按 ↑↓'"
+              v-tip="'拖曳排序（↑↓）'"
               @pointerdown="rowSort.down($event, ri)"
               @pointermove="rowSort.move"
               @pointerup="rowSort.up"
@@ -795,7 +788,7 @@ const awayText = (which: End) => {
                 v-else
                 type="button"
                 class="zt-v mono editable"
-                v-tip="`${r.name}的開始時間。點一下輸入，例如 15:00`"
+                v-tip="`${r.name} 開始時間（點選改寫）`"
                 @click="startEditCell(r.id, 'start', r.sW)"
               >
                 {{ hm(r.sW) }}
@@ -819,7 +812,7 @@ const awayText = (which: End) => {
                 v-else
                 type="button"
                 class="zt-v mono editable"
-                v-tip="`${r.name}的結束時間（${eDate(r.eW)}）。點一下輸入時刻`"
+                v-tip="`${r.name} 結束時間（${eDate(r.eW)} · 點選改寫）`"
                 @click="startEditCell(r.id, 'end', r.eW)"
               >
                 {{ sameDay ? hm(r.eW) : `${eDate(r.eW)} ${hm(r.eW)}` }}

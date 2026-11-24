@@ -1,6 +1,4 @@
 <script setup lang="ts">
-/* A scratch calculator for lengths of time: "2h 45m + 1:30:20 − 15m", "3:59:59 ÷ 42.195".
-   It never touches start or end until you press 設為間隔. */
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import CopyBtn from './CopyBtn.vue';
@@ -211,11 +209,11 @@ onMounted(refit);
       >
         {{ name }}
       </button>
-      <button type="button" class="chip" v-tip="'把開始到結束的間隔帶入算式'" @click="fromInterval">帶入間隔</button>
+      <button type="button" class="chip" v-tip="'帶入目前間隔'" @click="fromInterval">帶入間隔</button>
     </div>
     <p id="dc-tape" class="dc-tape mono" :class="{ err: st.k === 'err', cal: st.k === 'cal' }" aria-live="polite">
       <template v-if="st.k === 'err'">{{ st.pos != null ? `第 ${st.pos + 1} 個字附近：` : '' }}{{ st.msg }}</template>
-      <template v-else-if="st.k === 'cal'">日曆長度：年、月和工作日的長短不固定，不換算成時分秒</template>
+      <template v-else-if="st.k === 'cal'">日曆長度不固定，不換算成時分秒</template>
       <template v-else
         ><template v-for="(t, i) in tape" :key="i"
           ><span v-if="t.op" class="op">{{ t.op }}</span
@@ -231,7 +229,7 @@ onMounted(refit);
         type="button"
         class="btn dc-set"
         :disabled="!spanOut"
-        v-tip="spanOut ? `結束 = 開始 ${fmtSpan(spanOut)}，之後跟著開始移動` : '結果是時間長度時才能設為間隔'"
+        v-tip="spanOut ? `設為間隔：${fmtSpan(spanOut)}` : '結果須為時間長度'"
         @click="toSpan"
       >
         <Icon name="arrowR" />設為間隔
@@ -239,8 +237,8 @@ onMounted(refit);
     </div>
     <p class="dc-words">
       <template v-if="st.k === 'dur'">{{ durWords(st.value) }}</template>
-      <template v-else-if="st.k === 'ratio'">結果是倍數，只顯示，不能設為間隔</template>
-      <template v-else-if="st.k === 'cal'">可以直接設為開始到結束的間隔</template>
+      <template v-else-if="st.k === 'ratio'">倍數僅顯示</template>
+      <template v-else-if="st.k === 'cal'">可設為間隔</template>
     </p>
     <div v-if="totals.length" class="dc-totals" aria-label="換算">
       <CopyBtn

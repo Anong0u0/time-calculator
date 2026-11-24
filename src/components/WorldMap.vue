@@ -1,7 +1,4 @@
 <script setup lang="ts">
-/* Day and night on a dotted world map: shading follows the sun's height at one instant (● start or ○ end),
-   the dashed line is the terminator, and each listed zone gets a pin with its local time.
-   Click a pin for its menu. Anywhere else, the nearest city not yet listed shows with its time; click to add it. */
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { S, type End, startMs, endMs, hasEnd, tzOf } from '../state/store';
 import { partsInTz, pad, MIN, clamp } from '../core/time';
@@ -319,7 +316,7 @@ onMounted(() => requestAnimationFrame(layoutPins));
           v-if="sun2Pos"
           class="sun2"
           :style="{ left: sun2Pos.left + '%', top: sun2Pos.top + '%' }"
-          v-tip="`○ 另一端時刻的太陽位置`"
+          v-tip="'另一端時刻的太陽'"
         />
         <i class="sun" :style="{ left: sunPos.left + '%', top: sunPos.top + '%' }" v-tip="sunTip" />
         <div
@@ -332,7 +329,7 @@ onMounted(() => requestAnimationFrame(layoutPins));
           role="button"
           tabindex="0"
           :aria-label="`${p.name} ${p.t}，打開選單`"
-          v-tip="`${p.name}：設為開始或結束的時區，或移除`"
+          v-tip="`${p.name}（點選設定時區或移除）`"
           @keydown.enter.prevent="emit('pin', p.id, $event.currentTarget as HTMLElement)"
         >
           <i /><span
@@ -349,13 +346,10 @@ onMounted(() => requestAnimationFrame(layoutPins));
           <i /><span
             ><em>{{ full ? '已滿' : '+' }}</em
             >{{ ghost.name }}<b>{{ ghost.t }}</b
-            ><template v-if="touchPreview && !full"> · 再點一下加入</template></span
+            ><template v-if="touchPreview && !full"> · 再點加入</template></span
           >
         </div>
       </div>
-      <span class="wm-hint" aria-hidden="true">{{
-        lastType === 'mouse' ? '點地圖加入城市' : '點地圖看城市，再點一下加入'
-      }}</span>
     </div>
   </div>
 </template>
@@ -455,23 +449,6 @@ onMounted(() => requestAnimationFrame(layoutPins));
   font-weight: 500;
   margin-left: 0.35rem;
   opacity: 0.85;
-}
-/* bottom left is the South Pacific: no curated city and never the sun */
-.wm-hint {
-  position: absolute;
-  left: 0.3rem;
-  bottom: 0.2rem;
-  padding: 0 0.3rem;
-  border-radius: 0.3rem;
-  background: color-mix(in srgb, var(--face) 80%, transparent);
-  font-size: var(--fs-xs);
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  pointer-events: none;
-  transition: opacity 0.15s;
-}
-.wm:hover .wm-hint {
-  opacity: 0;
 }
 .pin i {
   position: absolute;

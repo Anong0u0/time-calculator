@@ -1,7 +1,6 @@
 import { ref } from 'vue';
 import { toast } from '../state/store';
 
-/** Which copy button shows its check mark right now. */
 export const copiedKey = ref<string | null>(null);
 let timer: ReturnType<typeof setTimeout> | undefined;
 

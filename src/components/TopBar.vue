@@ -15,15 +15,14 @@ const THEME_NAME: Record<Theme, string> = { system: '跟隨系統', light: '淺�
 const THEME_ICON: Record<Theme, string> = { system: 'auto', light: 'sun', dark: 'moon' };
 const undoTip = computed(() =>
   history.undo.length
-    ? `復原：${history.undo[history.undo.length - 1].label || '上一步'}（${mod}Z）。右鍵或長按：看全部步驟`
-    : '沒有可以復原的步驟',
+    ? `復原：${history.undo[history.undo.length - 1].label || '上一步'}（${mod}Z · 右鍵看步驟）`
+    : '無可復原步驟',
 );
 const redoTip = computed(() =>
   history.redo.length
-    ? `重做：${history.redo[history.redo.length - 1].label || '下一步'}（${isMac ? '⇧⌘Z' : 'Ctrl Y'}）。右鍵或長按：看全部步驟`
-    : '沒有可以重做的步驟',
+    ? `重做：${history.redo[history.redo.length - 1].label || '下一步'}（${isMac ? '⇧⌘Z' : 'Ctrl Y'} · 右鍵看步驟）`
+    : '無可重做步驟',
 );
-/* ---------- every step, to go back (or forward) several at once ---------- */
 const histBtn = ref<HTMLElement | null>(null);
 const hist = ref(false);
 let holdTimer: ReturnType<typeof setTimeout> | undefined,
@@ -59,7 +58,6 @@ function clickRedo() {
   }
   redo();
 }
-/** Go back to just before step i of the undo list (0 = the oldest), or forward through redo step j (0 = the next one). */
 function backTo(i: number) {
   const n = history.undo.length - i;
   for (let k = 0; k < n; k++) undo();
@@ -74,11 +72,9 @@ function copyLink() {
 const helpBtn = ref<HTMLElement | null>(null);
 const help = ref(false);
 
-/* ---------- display settings ---------- */
 const setBtn = ref<HTMLElement | null>(null);
 const settings = ref(false);
 const setTab = ref<'show' | 'panels' | 'rules'>('show');
-/* ---------- the panels menu: what is on the face ---------- */
 const panBtn = ref<HTMLElement | null>(null);
 const panels = ref(false);
 const THEMES: Theme[] = ['system', 'light', 'dark'];
@@ -93,10 +89,8 @@ const dIdx = computed({
   },
 });
 const dNow = computed(() => DENSITY[dIdx.value]);
-const floorPx = computed(() => Math.max(9, (11 * S.density) / 100));
-const setTip = computed(() => `顯示設定：${THEME_NAME[S.theme]} · 字級 ${dNow.value.name}`);
+const setTip = computed(() => `顯示設定（${THEME_NAME[S.theme]} · ${dNow.value.name}）`);
 
-/* ---------- the dial logo: a watch face whose hands follow the start's clock ---------- */
 const hands = computed(() => {
   const w = startWall.value;
   const sec = S.live ? Math.floor(now.value / 1000) % 60 : w.s;
@@ -134,7 +128,7 @@ const hands = computed(() => {
         type="button"
         class="icon-btn"
         :class="{ ok: linkCopied }"
-        v-tip="'複製連結，可加入書籤或分享'"
+        v-tip="'複製連結'"
         aria-label="複製這個畫面的連結"
         @click="copyLink"
       >
@@ -176,8 +170,8 @@ const hands = computed(() => {
         ref="helpBtn"
         type="button"
         class="icon-btn"
-        v-tip="'怎麼用'"
-        aria-label="怎麼用"
+        v-tip="'快捷鍵與操作'"
+        aria-label="快捷鍵與操作"
         :aria-expanded="help"
         @click="help = !help"
       >
@@ -188,7 +182,7 @@ const hands = computed(() => {
         ref="panBtn"
         type="button"
         class="icon-btn"
-        v-tip="'面板：顯示或隱藏每一塊，或放到滿版（數字鍵、P、F）'"
+        v-tip="'面板（1–9、P、F）'"
         aria-label="面板"
         :aria-expanded="panels"
         @click="panels = !panels"
@@ -275,11 +269,6 @@ const hands = computed(() => {
               ><b>{{ dNow.name }}</b> {{ dNow.v }}%</span
             >
           </div>
-          <p class="set-note">
-            越緊湊，一個畫面放得越多。最小的字約 {{ floorPx.toFixed(1) }}px<template v-if="floorPx < 11"
-              >（比預設的 11px 小）</template
-            >。
-          </p>
         </div>
         <div class="set">
           <span class="set-k">農曆與節氣</span>
@@ -287,9 +276,6 @@ const hands = computed(() => {
             <button type="button" :aria-pressed="S.prefs.lunar" @click="S.prefs.lunar = true">顯示</button>
             <button type="button" :aria-pressed="!S.prefs.lunar" @click="S.prefs.lunar = false">隱藏</button>
           </div>
-          <p class="set-note">
-            月曆每天下面的農曆、節氣與節日，讀法的農曆與節氣，以及積木和詞彙裡的農曆、節氣選項。隱藏後打字仍然讀得懂「中秋」「冬至」。
-          </p>
         </div>
         <div class="set">
           <span class="set-k">世界地圖</span>
@@ -302,7 +288,7 @@ const hands = computed(() => {
     </Popover>
     <Popover :open="hist" :anchor="histBtn" label="全部步驟" width="20rem" align="end" @close="hist = false">
       <div class="hist">
-        <p class="hist-k">點一個步驟，回到做完它的那時候</p>
+        <p class="hist-k">點選回到該步驟</p>
         <ol>
           <li v-for="(r, j) in [...history.redo].reverse()" :key="'r' + j">
             <button
@@ -335,63 +321,35 @@ const hands = computed(() => {
         <p v-if="!history.undo.length && !history.redo.length" class="hist-k">還沒有任何步驟</p>
       </div>
     </Popover>
-    <Popover :open="help" :anchor="helpBtn" label="怎麼用" width="25rem" align="end" @close="help = false">
+    <Popover :open="help" :anchor="helpBtn" label="快捷鍵與操作" width="24rem" align="end" @close="help = false">
       <div class="help">
-        <p class="help-lead"><b>開始 + 間隔 = 結束。</b>改任何一個，另外兩個跟著算好。</p>
+        <p class="help-lead"><b>開始 + 間隔 = 結束</b>，改任一處自動連動。</p>
         <ul>
           <li>
-            <span class="hk hk-dash">虛線底</span>的字可以直接改。數字欄可以打字、按 <span class="kbd">↑</span
-            ><span class="kbd">↓</span> 或滾輪。
+            <span class="kbd">{{ mod }}K</span> <span class="kbd">/</span> 輸入（空白處可直接貼上）
           </li>
           <li>
-            <span class="hk"><Icon name="copy" /></span>旁邊有複製圖示的，點一下就複製；<span class="hk"
-              ><Icon name="edit" /></span
-            >可以改寫。
+            <span class="kbd">{{ mod }}Z</span> 復原 · <span class="kbd">{{ isMac ? '⇧⌘Z' : 'Ctrl Y' }}</span>
+            重做（右鍵看全部步驟）
           </li>
           <li>
-            月曆標題可以直接<b>打年份</b>跳過去；在月曆上捲動滾輪換月，在週條上換年；點週次選整週。標題旁的「月／年」切換成<b
-              >整年 12 個月</b
-            >，點月份名稱回到那個月。
+            <span class="kbd">1</span>–<span class="kbd">9</span> <span class="kbd">R</span>
+            <span class="kbd">M</span> 開關面板 · <span class="kbd">P</span> 預設 · <span class="kbd">0</span> 全部
           </li>
           <li>
-            網址會保留原有參數，只同步這次開啟後改過的項目，可以直接<b>加入書籤或分享</b>（右上
-            <span class="hk"><Icon name="link" /></span> 複製連結）。
-          </li>
-          <li>中間的間隔可以<b>左右拖曳</b>數字，或點一下輸入 <code>+30天</code>、<code>47m × 16</code>。</li>
-          <li>
-            時區條和月曆上的 <i class="node" />
-            <i class="node end" /> 可以拖曳，只移動那一端；點一下會移動比較近的那一端。手機上月曆滑動換月。
+            <span class="kbd">Y</span> 月／年曆 · <span class="kbd">F</span> 全螢幕 · 日期上按
+            <span class="kbd">S</span> / <span class="kbd">E</span> 設起訖
           </li>
           <li>
-            任何文字都可以打在最上面的框，或在空白處直接貼上：日期怎麼寫都行（<code>2000/1/1/20:34</code>、<code>明天下午3點</code>、<code>民國115年</code>），也可以是範圍（<code
-              >2000/1/1 到 現在</code
-            >）或 <code>3天前</code>。
+            <span class="hk hk-dash">虛線底</span>可直接改寫；數字欄支援 <span class="kbd">↑</span
+            ><span class="kbd">↓</span> 與滾輪
           </li>
+          <li>拖曳 <i class="node" /> <i class="node end" /> 與間隔數字調整；拖曳 <code>=</code> 切換連動方向</li>
           <li>
-            開始和結束都可以設成<b>現在</b>；結束是現在時輸入 <code>+30天</code>，開始會跟著變成「現在 − 30 天」。
-          </li>
-          <li>讀法、時區列可以<b>拖曳把手</b>排順序；讀法的每個值都可以點筆在原地改寫。</li>
-          <li>
-            所有快捷都能<b>自訂</b>：按 <span class="hk"><Icon name="plus" /></span>，用積木組合（從哪裡開始 → 往後幾天
-            → 對齊月底 → 挑週五 → 晚上 8
-            點），不用打字；右鍵或長按快捷可以修改，用滑鼠可以拖曳排序、拖到另一排、拖出去移除。
-          </li>
-          <li>
-            詞可以自由組合：<code>明晚</code>、<code>本週三 3點</code
-            >、<code>下個月底</code>、<code>明年中秋晚上8點</code>、<code>開始那個月的月底</code>、<code>冬至那一刻</code>；也能把規則<b>存成自己的詞</b>（<code>下班</code>、<code>發薪日</code>），在設定的「規則與詞彙」管理。
-          </li>
-          <li>
-            每一塊都能<b>隱藏</b>（右上 <span class="hk"><Icon name="panels" /></span>，或數字鍵
-            <span class="kbd">1</span>–<span class="kbd">9</span>、<span class="kbd">R</span>、<span class="kbd">M</span
-            >）；只剩一塊時放到滿版。<span class="kbd">P</span> 換預設組合（滿版倒數、滿版月曆、滿版年曆…），<span
-              class="kbd"
-              >0</span
-            >
-            全部顯示，<span class="kbd">Y</span> 月曆／年曆，<span class="kbd">F</span> 全螢幕。
-          </li>
-          <li>
-            <span class="kbd">{{ mod }}K</span> 或 <span class="kbd">/</span> 輸入，<span class="kbd">{{ mod }}Z</span>
-            復原，<span class="kbd">{{ isMac ? '⇧⌘Z' : 'Ctrl Y' }}</span> 重做。
+            快捷右鍵／長按編輯、拖曳排序或套用；<span class="hk"><Icon name="copy" /></span> 複製、<span class="hk"
+              ><Icon name="edit"
+            /></span>
+            原地改寫
           </li>
         </ul>
       </div>
@@ -593,11 +551,6 @@ button.hist-i:hover {
 .set-v b {
   color: var(--ink);
   font-weight: 650;
-}
-.set-note {
-  font-size: var(--fs-xs);
-  line-height: 1.5;
-  color: var(--ink-3);
 }
 .dial-mark {
   width: 2.3rem;

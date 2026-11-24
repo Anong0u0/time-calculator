@@ -1,9 +1,3 @@
-/* ============================================================
-   The vocabulary: named rules that text and blocks can use as one step.
-   Built in: parts of the day (晚上 = 20:00), the parts of a period (月底, 週末), festivals (中秋, 母親節),
-   the 24 節氣. Every one of them can be changed or removed, and any rule can be given a name and added.
-   Along with the general settings rules are read with (the week's first day, which day a 節氣 falls on …).
-   ============================================================ */
 import { type Rule, type RulePrefs, DEFAULT_PREFS, decodeRule } from './rule';
 import { TERM_NAMES } from './terms';
 
@@ -82,7 +76,6 @@ export const BUILTIN: WordDef[] = [
   })),
 ];
 
-/* ---------- the vocabulary in use: built-ins (less the removed and the redefined) and the user's own ---------- */
 export interface MyWord {
   name: string;
   code: string;
@@ -106,7 +99,6 @@ export function setRulePrefs(p: RulePrefs) {
 export const rulePrefs = () => prefs;
 export const vocabVersion = () => version;
 export const builtinOf = (name: string) => BUILTIN.find((b) => b.name === name || b.alias?.includes(name));
-/** Every word in use, built-ins first (with the user's definition where they redefined one), then the user's own. */
 export function vocab(): (WordDef & { custom: boolean; builtin: boolean })[] {
   const out: (WordDef & { custom: boolean; builtin: boolean })[] = [];
   for (const b of BUILTIN) {
@@ -119,7 +111,6 @@ export function vocab(): (WordDef & { custom: boolean; builtin: boolean })[] {
       out.push({ name: m.name, code: m.code, kind: 'mine', custom: true, builtin: false });
   return out;
 }
-/** The rule a word (or one of its other names) stands for. */
 export function wordRule(name: string): Rule | null {
   if (ruleCache.has(name)) return ruleCache.get(name)!;
   const m = mine.find((x) => x.name === name);
