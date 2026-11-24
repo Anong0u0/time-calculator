@@ -34,6 +34,8 @@ export function utcMs(y: number, mo: number, d: number, h = 0, mi = 0, s = 0): n
   return dt.getTime();
 }
 export const isLeap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+/** The first leap year after y. */
+export function nextLeap(y: number): number { let n = y + 1; while (!isLeap(n)) n++; return n; }
 const MDAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export const daysInMonth = (y: number, mo: number) => (mo === 2 && isLeap(y) ? 29 : MDAYS[mo - 1]);
 /** Days since 1970-01-01. */

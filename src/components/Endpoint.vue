@@ -198,9 +198,9 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
 .tzb-o { font-size: var(--fs-s); color: var(--ink-3); }
 .tzb-c { width: .85em !important; height: .85em !important; }
 .rel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.rel.hint { white-space: normal; line-height: 1.35; font-size: max(11px, .84rem); }
+.rel.hint { white-space: normal; line-height: 1.35; font-size: max(var(--floor), .84rem); }
 .ep-pre { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: auto; padding-top: .15rem; }
-.ep-pre .chip, .pre-pop .chip { height: 1.95rem; padding: 0 .65rem; font-size: max(11px, .84rem); }
+.ep-pre .chip, .pre-pop .chip { height: 1.95rem; padding: 0 .65rem; font-size: max(var(--floor), .84rem); }
 .fillchip { background-image: linear-gradient(to right, var(--accent-wash-2) calc(var(--p) * 100%), transparent calc(var(--p) * 100%)); }
 .pre-pop { display: flex; flex-wrap: wrap; gap: .4rem; padding: .8rem; }
 .pre-pop .chip { height: 2.4rem; padding: 0 .9rem; font-size: .9rem; }
@@ -209,7 +209,7 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
 /* compact: phones and short screens */
 .ep.compact { padding: .6rem .8rem .65rem; gap: .25rem; border-radius: var(--r-md); }
 .compact .ep-head { min-height: 1.9rem; gap: .4rem; }
-.tzb.tzb-head { margin-left: auto; height: 1.85rem; font-size: max(11px, .84rem); padding: 0 .45rem; flex: 0 1 auto; overflow: hidden; }
+.tzb.tzb-head { margin-left: auto; height: 1.85rem; font-size: max(var(--floor), .84rem); padding: 0 .45rem; flex: 0 1 auto; overflow: hidden; }
 .tzb.tzb-head + .ep-tools, .tag.warn + .ep-tools { margin-left: 0; }
 .compact .tag.link { max-width: 9.5rem; }
 </style>

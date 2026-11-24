@@ -79,7 +79,7 @@ function pick(id: string) { emit('pick', id); emit('close'); }
 .tzp { display: flex; flex-direction: column; padding: .75rem; gap: .55rem; }
 .tzp-head { display: flex; align-items: baseline; gap: .6rem; padding: 0 .25rem; }
 .tzp-title { font-weight: 650; }
-.tzp-cur { font-size: max(11px, .85rem); color: var(--ink-3); margin-left: auto; }
+.tzp-cur { font-size: max(var(--floor), .85rem); color: var(--ink-3); margin-left: auto; }
 .tzp-search { display: flex; align-items: center; gap: .5rem; height: 2.6rem; padding: 0 .8rem; border-radius: .8rem; background: var(--well); border: 1px solid var(--hair-2); color: var(--ink-3); }
 .tzp-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash-2); }
 .tzp-search input { flex: 1; min-width: 0; border: 0; background: none; height: 100%; font-size: .95rem; color: var(--ink); }

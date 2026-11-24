@@ -42,5 +42,5 @@ const cells = computed(() => {
 .u { display: flex; flex-direction: column; justify-content: center; gap: .1rem; padding: .45rem .65rem .5rem; background: var(--surface); min-width: 0; }
 .u dt { font-size: var(--fs-xs); color: var(--ink-3); font-weight: 600; letter-spacing: .02em; }
 .u dd { min-width: 0; display: flex; }
-.u-v { font-size: max(11px, .86rem); font-weight: 500; color: var(--ink); gap: .35rem; margin: -.12rem -.35rem; }
+.u-v { font-size: max(var(--floor), .86rem); font-weight: 500; color: var(--ink); gap: .35rem; margin: -.12rem -.35rem; }
 </style>

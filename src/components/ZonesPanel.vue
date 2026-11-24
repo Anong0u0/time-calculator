@@ -5,6 +5,7 @@ import { ref, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
 import TzPicker from './TzPicker.vue';
+import WorldMap from './WorldMap.vue';
 import {
   S, type End, now, startMs, endMs, hasEnd, wallOf, tzOf, zoneRows, commit, setInstant, setStartTz, setEndTz, addZoneRow, removeZoneRow, toast, undo, pulse, bump, ZMAX,
 } from '../state/store';
@@ -35,13 +36,44 @@ const body = ref<HTMLElement | null>(null);
 const axis = ref<HTMLElement | null>(null);
 const { w: bodyW, h: bodyH } = useSize(body);
 const { w: axisW } = useSize(axis);
-const stacked = computed(() => bodyW.value > 0 && bodyW.value < 31 * remPx.value);
+/* ---------- the map: beside the rows in a wide, short panel; above them otherwise ---------- */
+const MAP_RATIO = 240 / 94;
+const side = computed(() => {
+  if (!S.map || !bodyH.value || !bodyW.value || bodyW.value < bodyH.value * 2.2) return null;
+  const rem = remPx.value;
+  const w = Math.min(bodyW.value * 0.42, bodyH.value * MAP_RATIO);
+  if (w < 15 * rem || bodyW.value - w - 1.2 * rem < 34 * rem) return null;
+  return { w: Math.floor(w), h: Math.floor(Math.min(bodyH.value, w / MAP_RATIO)) };
+});
+/** The width the rows get. */
+const listW = computed(() => (side.value ? bodyW.value - side.value.w - 1.2 * remPx.value : bodyW.value));
+const stacked = computed(() => listW.value > 0 && listW.value < 31 * remPx.value);
 const baseRowH = computed(() => (stacked.value ? 3.4 : 2.95) * remPx.value);
 const gap = computed(() => 0.3 * remPx.value);
 const axisH = computed(() => 1.7 * remPx.value);
+/** Seconds in the times once the row is wide enough. */
+const withSec = computed(() => !stacked.value && listW.value >= 44 * remPx.value);
+/** The work/night badge needs a little room next to the name. */
+const withState = computed(() => listW.value >= 22 * remPx.value);
+
+/** A map above the rows takes the room they leave: prefer every row plus a map at least 7rem tall,
+    otherwise keep four rows and give the map what is left. */
+const mapH = computed(() => {
+  if (!S.map || side.value || !bodyH.value || !bodyW.value) return 0;
+  const per = baseRowH.value + gap.value, rem = remPx.value;
+  const natural = Math.min(bodyW.value / MAP_RATIO, bodyH.value * 0.5);
+  const fixed = axisH.value + gap.value * 2;
+  const allRows = zoneRows.value.length * per;
+  const withAll = bodyH.value - fixed - allRows;
+  if (withAll >= 7 * rem) return Math.floor(Math.min(natural, withAll));
+  const minRows = Math.min(zoneRows.value.length, stacked.value ? 3 : 4);
+  const withMin = bodyH.value - fixed - minRows * per - 2 * rem - gap.value;
+  return withMin >= 5.5 * rem ? Math.floor(Math.min(natural, withMin)) : 0;
+});
+const mapNoRoom = computed(() => S.map && !!bodyH.value && mapH.value === 0 && !side.value);
 /** Rows that fit under the axis; when not all fit, one slot becomes the "還有 N 個" line. */
 const capacity = computed(() => {
-  const avail = bodyH.value - axisH.value - gap.value, per = baseRowH.value + gap.value;
+  const avail = bodyH.value - axisH.value - gap.value - (mapH.value ? mapH.value + gap.value : 0), per = baseRowH.value + gap.value;
   if (!bodyH.value) return ZMAX;
   if (zoneRows.value.length * per - gap.value <= avail) return zoneRows.value.length;
   return Math.max(1, Math.floor((avail - 2 * remPx.value - gap.value) / per));
@@ -116,12 +148,23 @@ const visible = computed(() => allRows.value.slice(0, capacity.value));
 const rowH = computed(() => {
   const n = visible.value.length, base = baseRowH.value;
   if (!bodyH.value || !n) return base;
-  const reserve = hidden.value.length ? 2 * remPx.value + gap.value : 0;
+  const reserve = (hidden.value.length ? 2 * remPx.value + gap.value : 0) + (mapH.value ? mapH.value + gap.value : 0);
   const per = (bodyH.value - axisH.value - reserve) / n - gap.value;
   return Math.max(base, Math.min(base * 1.45, per));
 });
 const hidden = computed(() => allRows.value.slice(visible.value.length));
-const hm = (w: Wall) => `${pad(w.h)}:${pad(w.mi)}`;
+const hm = (w: Wall) => `${pad(w.h)}:${pad(w.mi)}${withSec.value ? ':' + pad(w.s) : ''}`;
+
+/* ---------- work or night at the instant the strips show ---------- */
+type ZState = { k: 'work' | 'off' | 'wkend' | 'night'; t: string; tip: string };
+const STATE_TXT = { work: ['上班', '上班時間（週一到五 9–18 時）'], off: ['下班', '下班時間'], wkend: ['週末', '週末'], night: ['深夜', '深夜（22 時到 6 時）'] } as const;
+function zoneState(id: string): ZState {
+  const ms = winEnd.value === 'end' && endMs.value != null ? endMs.value : startMs.value;
+  const w = partsInTz(ms, id), wd = wdOf(w);
+  const k: ZState['k'] = w.h < 6 || w.h >= 22 ? 'night' : wd === 0 || wd === 6 ? 'wkend' : w.h >= 9 && w.h < 18 ? 'work' : 'off';
+  const at = hasEnd.value ? `${winEnd.value === 'end' ? '○ 結束' : '● 開始'}的時刻` : '這個時刻';
+  return { k, t: STATE_TXT[k][0], tip: `${zoneName(id)} ${pad(w.h)}:${pad(w.mi)}（週${WD[wd]}）在${at}是${STATE_TXT[k][1]}` };
+}
 const dayTag = (n: number) => (n > 0 ? `+${n}天` : n < 0 ? `${n}天` : '');
 const eDate = (w: Wall) => `${w.mo}/${w.d}`;
 
@@ -273,13 +316,18 @@ const awayText = (which: End) => {
         <button type="button" :aria-pressed="winEnd === 'start'" v-tip="'時區條顯示開始那一天'" @click="winPick = 'start'"><i class="node" />開始日</button>
         <button type="button" :aria-pressed="winEnd === 'end'" v-tip="'時區條顯示結束那一天'" @click="winPick = 'end'"><i class="node end" />結束日</button>
       </div>
+      <button type="button" class="icon-btn sm" :class="{ on: S.map && !mapNoRoom }" :aria-pressed="S.map" aria-label="世界地圖"
+        v-tip="!S.map ? '顯示世界地圖' : mapNoRoom ? '地圖：這裡的空間不夠，放大視窗或在顯示設定調緊湊' : '隱藏世界地圖'" @click="S.map = !S.map"><Icon name="map" /></button>
       <button ref="addBtn" type="button" class="icon-btn sm" :disabled="zoneRows.length >= ZMAX" :aria-expanded="addOpen" v-tip="zoneRows.length >= ZMAX ? `最多 ${ZMAX} 個時區` : '加入時區'" aria-label="加入時區" @click="addOpen = !addOpen"><Icon name="plus" /></button>
     </header>
 
-    <div ref="body" class="zbody" :style="{ '--rowh': rowH + 'px' }">
+    <div ref="body" class="zbody" :class="{ sec: withSec, side: !!side }" :style="{ '--rowh': rowH + 'px' }">
+      <WorldMap v-if="side" class="zmap-side" :which="winEnd" :zones="zoneRows" :height="side.h" :width="side.w" />
+      <div class="zlist">
+      <WorldMap v-if="mapH" :which="winEnd" :zones="zoneRows" :height="mapH" :width="bodyW" />
       <!-- the shared axis: ● and ○ live here -->
       <div class="zrow zaxis">
-        <span v-if="!stacked" class="zc-name zc-axis-l">{{ zoneName(win.tz) }}</span>
+        <span v-if="!stacked" class="zc-name zc-axis-l"><em class="scale-cap">一天</em>{{ zoneName(win.tz) }}</span>
         <span v-if="!stacked" class="zc-times" />
         <div ref="axis" class="strip axis" @pointerdown="down($event, $event.currentTarget as HTMLElement)" @pointermove="move($event, $event.currentTarget as HTMLElement)" @pointerup="up" @pointercancel="up" @pointerleave="leave">
           <span v-if="range" class="rng" :style="{ left: range.lo * 100 + '%', width: (range.hi - range.lo) * 100 + '%' }" />
@@ -298,7 +346,7 @@ const awayText = (which: End) => {
 
       <div v-for="r in visible" :key="r.id" class="zrow" :class="{ isS: r.isS, isE: r.isE }">
         <button type="button" class="zc-name" :aria-expanded="menuFor === r.id" v-tip="`${r.id}${tzLongName(r.id, startMs) ? ' · ' + tzLongName(r.id, startMs) : ''}`" @click="openMenu(r.id, $event)">
-          <b>{{ r.name }}</b>
+          <span class="zn-top"><b>{{ r.name }}</b><em v-if="withState" class="zs" :class="`zs-${zoneState(r.id).k}`" v-tip="zoneState(r.id).tip">{{ zoneState(r.id).t }}</em></span>
           <small class="mono">{{ r.offTxt }}<template v-if="r.diff"> · {{ r.diff }}</template><template v-else-if="r.isS"> · 開始</template></small>
         </button>
         <div class="zc-times">
@@ -329,6 +377,7 @@ const awayText = (which: End) => {
       <button v-if="hidden.length" ref="moreBtn" type="button" class="zmore" :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
         <span class="ell">還有 {{ hidden.length }} 個：{{ hidden.map((h) => h.name).join('、') }}</span><Icon name="chevD" />
       </button>
+      </div>
     </div>
 
     <Popover :open="!!menuRow" :anchor="menuAnchor" :label="menuRow?.name || ''" width="17rem" @close="menuFor = null">
@@ -359,20 +408,34 @@ const awayText = (which: End) => {
 .icon-btn.sm { width: 2rem; height: 2rem; border-radius: .65rem; }
 .seg-ctl button { height: 1.7rem; font-size: var(--fs-s); padding: 0 .5rem; gap: .3rem; }
 .seg-ctl .node { font-size: var(--fs-s); }
-.zbody { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: .3rem; padding: .55rem 1rem .8rem; }
+.zbody { flex: 1; min-height: 0; display: flex; gap: 1.2rem; padding: .55rem 1rem .8rem; }
+.zlist { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: .3rem; }
+.zmap-side { align-self: center; }
 .zrow { display: grid; grid-template-columns: var(--zc-name) var(--zc-times) minmax(0, 3.2fr); align-items: center; column-gap: .7rem; height: var(--rowh); flex: none; min-width: 0; }
 .zaxis { height: 1.7rem; }
 .stacked .zrow:not(.zaxis) { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 1.45rem minmax(0, 1fr); row-gap: .2rem; }
 .stacked .zrow:not(.zaxis) .strip { grid-column: 1 / -1; }
 .stacked .zaxis { grid-template-columns: minmax(0, 1fr); }
 .zc-axis-l { font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zc-name.zc-axis-l { flex-direction: row; align-items: baseline; padding: 0; margin: 0; }
+.scale-cap { font-style: normal; font-weight: 600; letter-spacing: .08em; color: var(--ink-4); margin-right: .5em; }
 
 .zc-name { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; padding: .15rem .4rem; margin-left: -.4rem; border-radius: .55rem; line-height: 1.2; transition: background .15s; }
 .zc-name:hover, .zc-name[aria-expanded="true"] { background: var(--well-2); }
 .zc-name b { font-weight: 600; font-size: .93rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.zn-top { display: flex; align-items: center; gap: .35rem; min-width: 0; max-width: 100%; }
+.zn-top b { min-width: 0; }
+.zs { flex: none; font-style: normal; font-size: max(var(--floor), .7rem); font-weight: 650; line-height: 1; padding: .16rem .38rem; border-radius: 99rem; white-space: nowrap; }
+.zs-work { color: var(--good); background: var(--good-wash); }
+.zs-off, .zs-wkend { color: var(--ink-3); background: var(--well-2); }
+.zs-night { color: var(--h0-ink); background: var(--h0); }
+.icon-btn.on { color: var(--accent); }
+.sec { --zc-times: 10.4rem; }
 .zc-name small { font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .isS .zc-name b { color: var(--accent); }
 .stacked .zc-name { flex-direction: row; align-items: baseline; gap: .5rem; }
+.stacked .zn-top { flex: none; max-width: 70%; }
+.stacked .zc-name small { flex: 1 1 auto; min-width: 0; }
 
 .zc-times { display: flex; flex-direction: column; gap: .05rem; min-width: 0; }
 .stacked .zc-times { flex-direction: row; gap: .8rem; }
@@ -412,7 +475,7 @@ const awayText = (which: End) => {
 .edge { position: absolute; top: 50%; width: .7rem; height: .7rem; margin-top: -.35rem; border-top: 2.5px solid var(--accent); border-right: 2.5px solid var(--accent); opacity: .75; }
 .edge.r { right: -.1rem; transform: rotate(45deg); }
 .edge.l { left: -.1rem; transform: rotate(-135deg); }
-.zmore { flex: none; display: flex; align-items: center; gap: .3rem; height: 2rem; padding: 0 .55rem; margin: 0 -.3rem; border-radius: .6rem; font-size: max(11px, .84rem); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zmore { flex: none; display: flex; align-items: center; gap: .3rem; height: 2rem; padding: 0 .55rem; margin: 0 -.3rem; border-radius: .6rem; font-size: max(var(--floor), .84rem); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zmore:hover { background: var(--well-2); color: var(--ink); }
 .zmenu { display: flex; flex-direction: column; padding: .5rem; }
 .zmenu-t { display: flex; flex-direction: column; padding: .4rem .6rem .55rem; line-height: 1.3; }
@@ -421,7 +484,7 @@ const awayText = (which: End) => {
 .zmenu-i:hover:not(:disabled) { background: var(--accent-wash); color: var(--accent); }
 .zmenu-i:disabled { color: var(--ink-3); }
 .zmenu-i.danger:hover { background: var(--now-wash); color: var(--now); }
-.zmenu-i .node { font-size: max(11px, .85rem); }
+.zmenu-i .node { font-size: max(var(--floor), .85rem); }
 .zhidden { display: flex; flex-direction: column; padding: .45rem; }
 .zhidden li { display: flex; align-items: center; gap: .5rem; height: 2.7rem; padding: 0 .3rem 0 .6rem; border-radius: .7rem; }
 .zh-n { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.2; }

@@ -7,6 +7,7 @@ import { S, type End, now, startWall, endWall, hasEnd, commit, setWall, toast, u
 import { type Wall, dayNum, fromDayNum, isoWeek, isoWeeksInYear, isoWeekStart, mod, WD, partsInTz, dayOfYear, fmtDT, daysInYear } from '../core/time';
 import { useSize, remPx } from '../composables/size';
 import { nf } from '../core/format';
+import { focusCommand } from '../state/ui';
 
 const view = reactive({ y: startWall.value.y, mo: startWall.value.mo });
 function setView(w: { y: number; mo: number } | null) { if (w) { view.y = w.y; view.mo = w.mo; } }
@@ -146,19 +147,34 @@ function goWeek(w: { n0: number }) { const th = fromDayNum(w.n0 + 3); view.y = t
 
 /* ---------- the line under it ---------- */
 const mondayOf = (n: number) => n - mod(n + 3, 7);
-const foot = computed(() => {
+/** A week label can be clicked to type another week for that end (it opens the command bar with "W48" selected). */
+type FootSeg = { t: string; b?: boolean; act?: End };
+const foot = computed<FootSeg[]>(() => {
   const sw = startWall.value, iw = isoWeek(sw.y, sw.mo, sw.d);
   if (eN.value == null || !endWall.value) {
-    return [{ t: `W${iw.week}` , b: true }, { t: ` · ${sw.y} 年第 ${dayOfYear(sw.y, sw.mo, sw.d)} 天，共 ${daysInYear(sw.y)} 天` }];
+    const left = isoWeeksInYear(iw.weekYear) - iw.week;
+    return [
+      { t: `W${iw.week}`, b: true, act: 'start' },
+      { t: ` · ${sw.y} 年第 ${dayOfYear(sw.y, sw.mo, sw.d)} 天，共 ${daysInYear(sw.y)} 天 · ` },
+      { t: left ? `今年還剩 ${left} 週（最後一週 W${isoWeeksInYear(iw.weekYear)}）` : `這是 ${iw.weekYear} 年最後一週` },
+    ];
   }
   const ew = endWall.value, ie = isoWeek(ew.y, ew.mo, ew.d);
   const weeksApart = Math.abs(mondayOf(eN.value) - mondayOf(sN.value)) / 7;
   const days = Math.abs(eN.value - sN.value) + 1;
   return [
-    { t: `W${iw.week}${iw.weekYear !== ie.weekYear ? `（${iw.weekYear}）` : ''} → W${ie.week}`, b: true },
+    { t: `W${iw.week}${iw.weekYear !== ie.weekYear ? `（${iw.weekYear}）` : ''}`, b: true, act: 'start' }, { t: ' → ', b: true },
+    { t: `W${ie.week}`, b: true, act: 'end' },
     { t: ` · 相隔 ${weeksApart} 週 · 含頭尾 ` }, { t: `${nf(days)} 天`, b: true },
   ];
 });
+function typeWeek(which: End) {
+  const w = which === 'start' ? startWall.value : endWall.value;
+  if (!w) return;
+  const iw = isoWeek(w.y, w.mo, w.d);
+  S.active = which;
+  focusCommand(`W${iw.week}`, true);
+}
 const atStart = computed(() => view.y === startWall.value.y && view.mo === startWall.value.mo);
 const atEnd = computed(() => !endWall.value || (view.y === endWall.value.y && view.mo === endWall.value.mo));
 const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一端到這天 · 拖曳：選一段日期' : '點一下：設為結束日期 · 拖曳：選一段日期'));
@@ -199,7 +215,7 @@ const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一
         </div>
         <div class="yt" aria-hidden="true"><span v-for="t in monthTicks" :key="t.mo" :style="{ left: t.x * 100 + '%' }">{{ t.mo }}月</span></div>
       </div>
-      <p class="cal-foot"><template v-for="(f, i) in foot" :key="i"><b v-if="f.b">{{ f.t }}</b><template v-else>{{ f.t }}</template></template></p>
+      <p class="cal-foot"><template v-for="(f, i) in foot" :key="i"><button v-if="f.act" type="button" class="wk-ed editable" v-tip="`輸入別的週次，把${f.act === 'start' ? '開始' : '結束'}移到那一週的同一天`" @click="typeWeek(f.act)">{{ f.t }}</button><b v-else-if="f.b">{{ f.t }}</b><template v-else>{{ f.t }}</template></template></p>
     </div>
   </section>
 </template>
@@ -249,5 +265,6 @@ const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一
 .yt { position: relative; height: .95rem; }
 .yt span { position: absolute; top: 0; font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; }
 .cal-foot { flex: none; font-size: .86rem; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal-foot b { font-family: var(--f-mono); font-stretch: 75%; font-weight: 600; font-size: 1em; color: var(--ink); }
+.cal-foot b, .cal-foot .wk-ed { font-family: var(--f-mono); font-stretch: 75%; font-weight: 600; font-size: 1em; color: var(--ink); }
+.cal-foot .wk-ed { padding: 0 .1rem; border-radius: .3rem; }
 </style>

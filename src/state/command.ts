@@ -10,10 +10,11 @@ import {
   S, type End, other, wallOf, tzOf, startWall, commit, setWall, setInstant, setLink, checkSpan, setLive,
   setStartTz, setEndTz, addZoneRow, zoneRows, applyEndPreset, periodBounds, PERIOD_NAMES, type PeriodKey,
 } from './store';
+import { openDuration } from './ui';
 
 export interface Suggestion {
   id: string;
-  kind: End | 'span' | 'zone' | 'info';
+  kind: End | 'span' | 'zone' | 'info' | 'calc';
   title: string;
   detail?: string;
   apply?: () => void;
@@ -153,10 +154,11 @@ export function interpret(input: string): Suggestion[] {
         apply: () => commit(() => setLink(r.span), { label: `間隔 ${fmtSpan(r.span)}`, say: `結束 = 開始 ${fmtSpan(r.span)}` }),
       });
     } else out.push({ id: 'span-err', kind: 'info', title: c.err });
+    if (r.expr) out.push({ id: 'calc', kind: 'calc', title: '在時長計算機開啟', detail: `${exprTxt || text} · 只計算，不改變開始或結束`, apply: () => openDuration(text) });
     return out;
   }
   if (r.kind === 'ratio') {
-    out.push({ id: 'ratio', kind: 'info', title: `= ${nfMax(r.value, 4)} 倍`, detail: '結果是倍數，不會改變開始或結束' });
+    out.push({ id: 'ratio', kind: 'calc', title: `= ${nfMax(r.value, 4)} 倍`, detail: '在時長計算機開啟 · 倍數不會改變開始或結束', apply: () => openDuration(text) });
     return out;
   }
 

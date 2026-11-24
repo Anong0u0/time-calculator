@@ -168,7 +168,7 @@ const aria = (sg: Seg) => `${SUBJ.value}的${sg.name}`;
 .seg.bad { animation: bad .6s; }
 @keyframes bad { 30% { background-color: var(--now-wash); color: var(--now); } }
 .sep { color: var(--ink-4); padding: 0 .01em; }
-.wd { font-family: var(--f-sans); font-size: max(11px, .5em); font-weight: 600; color: var(--ink-3); margin-left: .45em; letter-spacing: .02em; align-self: center; }
+.wd { font-family: var(--f-sans); font-size: max(var(--floor), .5em); font-weight: 600; color: var(--ink-3); margin-left: .45em; letter-spacing: .02em; align-self: center; }
 .empty .seg { color: var(--ink-3); }
 .empty .seg:focus { color: var(--ink); }
 .empty .wd { opacity: .6; }

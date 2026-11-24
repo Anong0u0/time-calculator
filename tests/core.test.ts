@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import {
   isoWeek, isoWeeksInYear, isoWeekStart, usWeek, diffCalendar, toInstant, wallToInstant, partsInTz, addDuration,
   parseSpan, fmtSpan, evalDuration, interpretSpanText, parseDateTimeText, parseTimestamp, addBusinessDays,
-  countWeekdays, dayNum, spanBetween, fmtClock, isoDuration, fmtOffset, offsetAt,
+  countWeekdays, dayNum, spanBetween, fmtClock, isoDuration, fmtOffset, offsetAt, nextLeap,
 } from '../src/core/time';
-import { searchZones, zoneInText } from '../src/core/zones';
+import { searchZones, zoneInText, DIR } from '../src/core/zones';
+import { LAND, COORDS, isLand, subsolar } from '../src/core/geo';
 
 describe('ISO weeks', () => {
   test('known dates', () => {
@@ -94,5 +95,52 @@ describe('free text', () => {
     expect(searchZones('utc+8').some((h) => h.z.id === 'Asia/Taipei')).toBe(true);
     expect(zoneInText('東京 15:00')).toMatchObject({ zone: { id: 'Asia/Tokyo' }, rest: '15:00' });
     expect(zoneInText('3pm in New York')).toMatchObject({ zone: { id: 'America/New_York' }, rest: '3pm' });
+  });
+});
+
+describe('restored instruments', () => {
+  test('next leap year and US week numbers', () => {
+    expect(nextLeap(2026)).toBe(2028);
+    expect(nextLeap(2028)).toBe(2032);
+    expect(nextLeap(2096)).toBe(2104);
+    expect(usWeek(2026, 11, 24)).toBe(48);
+    expect(usWeek(2026, 1, 3)).toBe(1);
+    expect(usWeek(2026, 1, 4)).toBe(2);
+  });
+  test('the sun: declination at the solstice and equinox, overhead near Greenwich at noon UTC', () => {
+    const june = subsolar(Date.UTC(2026, 5, 21, 12));
+    expect(june.lat).toBeGreaterThan(23.3);
+    expect(june.lat).toBeLessThan(23.5);
+    expect(Math.abs(june.lon)).toBeLessThan(2);
+    const march = subsolar(Date.UTC(2026, 2, 20, 12));
+    expect(Math.abs(march.lat)).toBeLessThan(0.5);
+    const dec = subsolar(Date.UTC(2026, 11, 21, 0));
+    expect(dec.lat).toBeLessThan(-23.3);
+    expect(Math.abs(Math.abs(dec.lon) - 180)).toBeLessThan(3);
+  });
+  test('the land mask and city coordinates', () => {
+    const cell = (lat: number, lon: number) => isLand(Math.floor((LAND.top - lat) / LAND.step), Math.floor((lon + 180) / LAND.step));
+    expect(cell(23, 13)).toBe(true); // Sahara
+    expect(cell(0, -140)).toBe(false); // central Pacific
+    expect(cell(25.03, 121.56)).toBe(true); // Taipei
+    for (const z of DIR.filter((d) => d.curated && d.id !== 'UTC')) expect(COORDS[z.id]).toBeDefined();
+  });
+});
+
+describe('command bar and the duration calculator', () => {
+  test('an expression offers the calculator; a ratio opens it instead of being read-only', async () => {
+    const { interpret } = await import('../src/state/command');
+    const { S } = await import('../src/state/store');
+    const { ui } = await import('../src/state/ui');
+    const expr = interpret('47m × 16');
+    expect(expr.map((s) => s.kind)).toEqual(['span', 'calc']);
+    const ratio = interpret('2h ÷ 15m');
+    expect(ratio[0].kind).toBe('calc');
+    expect(ratio[0].title).toBe('= 8 倍');
+    const before = ui.durReq;
+    ratio[0].apply!();
+    expect(S.dur).toBe('2h ÷ 15m');
+    expect(S.durSample).toBe(false);
+    expect(ui.durReq).toBe(before + 1);
   });
 });

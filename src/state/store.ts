@@ -13,6 +13,11 @@ import { LOCAL_TZ, sameZone, zoneName } from '../core/zones';
 export type End = 'start' | 'end';
 export type Lens = 'zones' | 'cal' | 'read';
 export type Theme = 'system' | 'light' | 'dark';
+/** Display density in percent of the normal size; the smallest text follows it (never below 9px). */
+export const DENSITY: { v: number; name: string }[] = [
+  { v: 80, name: '極緊湊' }, { v: 87, name: '緊湊' }, { v: 93, name: '稍緊' }, { v: 100, name: '標準' }, { v: 108, name: '稍大' }, { v: 116, name: '大' },
+];
+export const DUR_SAMPLE = '2h 45m + 1:30:20 − 15m';
 export interface Link { expr: string; span: Span }
 
 export const ZMAX = 8;
@@ -34,6 +39,10 @@ export const S = reactive({
   theme: 'system' as Theme,
   lens: 'zones' as Lens,
   readEnd: 'start' as End,
+  density: 100,
+  map: true,
+  dur: DUR_SAMPLE,
+  durSample: true,
 });
 
 /* ---------- derived ---------- */
@@ -278,6 +287,24 @@ export function applyEndPreset(key: PeriodKey): boolean {
   return setInstant('end', b[1], { preset: key });
 }
 
+/* ---------- progress from start to end (the rail under the span) ---------- */
+/** With a live start and a period end (本月結束, 跨年…): how far through that period now is. */
+export const presetProgress = computed(() => {
+  if (!S.live || !S.endPreset || S.link) return null;
+  const b = periodBounds(S.endPreset);
+  if (!b || b[0] == null) return null;
+  const f = (now.value - b[0]) / (b[1] - b[0]);
+  return f >= 0 && f <= 1 ? f : null;
+});
+/** The fill of the rail (0–1) and where now sits on it (null when now is outside start–end). */
+export const railProgress = computed<{ f: number; now: number | null }>(() => {
+  if (presetProgress.value != null) return { f: presetProgress.value, now: presetProgress.value };
+  const sMs = startMs.value, eMs = endMs.value;
+  if (eMs == null || S.live || eMs <= sMs) return { f: 0, now: null };
+  const f = Math.min(1, Math.max(0, (now.value - sMs) / (eMs - sMs)));
+  return { f, now: now.value >= sMs && now.value <= eMs ? f : null };
+});
+
 /* ---------- zones ---------- */
 export const zoneRows = computed(() => {
   const list = [S.startTz];
@@ -324,11 +351,15 @@ export function loadState(): boolean {
   if (o.theme === 'light' || o.theme === 'dark' || o.theme === 'system') S.theme = o.theme;
   if (o.lens === 'zones' || o.lens === 'cal' || o.lens === 'read') S.lens = o.lens;
   if (o.readEnd === 'end') S.readEnd = 'end';
+  if (typeof o.density === 'number' && DENSITY.some((d) => d.v === o.density)) S.density = o.density;
+  if (typeof o.map === 'boolean') S.map = o.map;
+  if (typeof o.dur === 'string' && o.dur.length <= 400) { S.dur = o.dur; S.durSample = !!o.durSample; }
   return true;
 }
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 export function startPersisting() {
-  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.theme, S.lens, S.readEnd], () => {
+  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.theme, S.lens, S.readEnd,
+    S.density, S.map, S.dur, S.durSample], () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
@@ -336,6 +367,7 @@ export function startPersisting() {
           v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end,
           endSample: S.endSample, endPreset: S.endPreset, link: S.link ? S.link.expr : null, zones: S.zones,
           theme: S.theme, lens: S.lens, readEnd: S.readEnd,
+          density: S.density, map: S.map, dur: S.dur, durSample: S.durSample,
         }));
       } catch { /* storage unavailable: everything still works for this visit */ }
     }, 300);

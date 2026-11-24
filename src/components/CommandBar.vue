@@ -56,10 +56,10 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocDown, tru
 watch(() => ui.commandReq, () => {
   if (ui.commandText) text.value = ui.commandText;
   open.value = true;
-  nextTick(() => { input.value?.focus(); if (!ui.commandText) input.value?.select(); });
+  nextTick(() => { input.value?.focus(); if (!ui.commandText || ui.commandSelect) input.value?.select(); });
 });
 
-const KIND_ICON: Record<Suggestion['kind'], string> = { start: '', end: '', span: 'span', zone: 'globe', info: 'info' };
+const KIND_ICON: Record<Suggestion['kind'], string> = { start: '', end: '', span: 'span', zone: 'globe', info: 'info', calc: 'calc' };
 const placeholder = computed(() => (props.compact ? '輸入日期、+30天、東京 15:00…' : '輸入任何東西：日期、時間戳、+30天、東京 15:00、W12、47m × 16'));
 </script>
 
@@ -116,7 +116,7 @@ const placeholder = computed(() => (props.compact ? '輸入日期、+30天、東
 .cmd-item.info .cmd-ic { color: var(--ink-3); }
 .cmd-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.3; }
 .cmd-txt b { font-weight: 600; font-size: .95rem; }
-.cmd-txt small { font-size: max(11px, .84rem); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmd-txt small { font-size: max(var(--floor), .84rem); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmd-item.on .cmd-txt small { color: var(--ink-2); }
 .cmd-enter { flex: none; }
 .cmd-hint { font-size: .86rem; color: var(--ink-3); padding: .45rem .7rem .55rem; line-height: 1.5; }

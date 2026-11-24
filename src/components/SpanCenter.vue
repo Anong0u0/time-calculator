@@ -4,13 +4,15 @@
    Linked end: end = start + this span. Typing or dragging a number here links. */
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
+import Popover from './Popover.vue';
+import DurationCalc from './DurationCalc.vue';
 import {
   S, now, startMs, endMs, hasEnd, calGap, gapSec, linkErr, commit, setLink, checkSpan, swapEnds, historyMark, rollback, toast, undo,
-  periodBounds, PERIOD_NAMES, pulse, bump, wallOf,
+  PERIOD_NAMES, pulse, bump, wallOf, presetProgress,
 } from '../state/store';
 import { type Span, type SpanInput, interpretSpanText, parseSpan, fmtSpan, pad, partsInTz, WD, wdOf, fmtDT, fmtClock, clamp, DAY, SEC } from '../core/time';
 import { spanTokens, nfMax, durWords } from '../core/format';
-import { ui } from '../state/ui';
+import { ui, openDuration } from '../state/ui';
 import { fitText } from '../composables/fit';
 import { useSize, fontsTick } from '../composables/size';
 
@@ -218,13 +220,6 @@ function left(ms: number) {
   const d = Math.floor(t / 86400), r = t % 86400;
   return `${d ? `${d}天 ` : ''}${pad(Math.floor(r / 3600))}:${pad(Math.floor((r % 3600) / 60))}:${pad(r % 60)}`;
 }
-const presetProgress = computed(() => {
-  if (!S.live || !S.endPreset || S.link) return null;
-  const b = periodBounds(S.endPreset);
-  if (!b || b[0] == null) return null;
-  const f = (now.value - b[0]) / (b[1] - b[0]);
-  return f >= 0 && f <= 1 ? f : null;
-});
 const PERIOD_PAST: Record<string, string> = { day: '今天', week: '本週', month: '本月', newyear: '今年', lny: '距上次春節' };
 const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() => {
   const p = parsed.value;
@@ -261,16 +256,28 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
   const f = (n - sMs) / (eMs - sMs);
   return { segs: [{ t: '現在走到 ' }, { t: `${nfMax(f * 100, 1)}%`, b: true }, { t: ' · 還有 ' }, { t: left(eMs - n), b: true }], tone: '' };
 });
-const rail = computed(() => {
-  if (presetProgress.value != null) return { f: presetProgress.value, now: presetProgress.value };
-  const sMs = startMs.value, eMs = endMs.value;
-  if (eMs == null || S.live || eMs <= sMs) return { f: 0, now: null as number | null };
-  const f = clamp((now.value - sMs) / (eMs - sMs), 0, 1);
-  return { f, now: now.value >= sMs && now.value <= eMs ? f : null };
-});
 
 const flashing = ref(false);
 watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(() => { flashing.value = true; }); });
+
+/* ---------- the duration calculator: a popover here, or its own column on four-column screens ---------- */
+const calcBtn = ref<HTMLElement | null>(null);
+const calcBtnC = ref<HTMLElement | null>(null);
+const calcOpen = ref(false);
+const calcRef = ref<InstanceType<typeof DurationCalc> | null>(null);
+const calcHere = computed(() => ui.layout !== 'xwide');
+const calcTip = computed(() => (calcHere.value ? '時長計算機：加減乘除時間長度' : '打開時長計算機'));
+function toggleCalc() {
+  if (calcHere.value) calcOpen.value = !calcOpen.value;
+  else openDuration();
+}
+watch(() => ui.durReq, () => {
+  if (!calcHere.value) return;
+  ui.durSeen = ui.durReq;
+  calcOpen.value = true;
+  nextTick(() => calcRef.value?.select());
+});
+watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 </script>
 
 <template>
@@ -279,6 +286,7 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
       <h2 v-tip="titleTip" tabindex="-1">{{ title }}</h2>
       <span v-if="S.link?.span.biz" class="sc-sub">只算工作日</span>
       <span class="sc-tools">
+        <button ref="calcBtn" type="button" class="icon-btn sm" :class="{ on: calcOpen }" v-tip="calcTip" aria-label="時長計算機" :aria-expanded="calcHere ? calcOpen : undefined" @click="toggleCalc"><Icon name="calc" /></button>
         <button v-if="hasEnd" type="button" class="icon-btn sm" v-tip="'交換開始與結束'" aria-label="交換開始與結束" @click="swap"><Icon :name="compact ? 'swapv' : 'swap'" /></button>
       </span>
     </header>
@@ -302,14 +310,10 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
         <span v-else class="hero-empty"><Icon name="plus" />加上間隔</span>
       </div>
     </div>
+    <button v-if="compact && !editing" ref="calcBtnC" type="button" class="icon-btn sm" :class="{ on: calcOpen }" v-tip="calcTip" aria-label="時長計算機" :aria-expanded="calcHere ? calcOpen : undefined" @click="toggleCalc"><Icon name="calc" /></button>
     <button v-if="compact && hasEnd && !editing" type="button" class="icon-btn sm" v-tip="'交換開始與結束'" aria-label="交換開始與結束" @click="swap"><Icon name="swapv" /></button>
     </div>
 
-    <div class="rail" aria-hidden="true">
-      <i class="node" />
-      <span class="track"><span class="fill" :style="{ width: rail.f * 100 + '%' }" /><span v-if="rail.now != null" class="now" :style="{ left: rail.now * 100 + '%' }" /></span>
-      <i class="node end" :class="{ off: !hasEnd }" />
-    </div>
     <p class="status" :class="status.tone">
       <b v-if="compact" class="st-k" v-tip="titleTip">{{ title }}</b>
       <template v-for="(s, i) in status.segs" :key="i"><b v-if="s.b">{{ s.t }}</b><template v-else>{{ s.t }}</template></template>
@@ -322,15 +326,27 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
       <button v-if="bizShown" type="button" class="chip biz" :aria-pressed="!!S.link?.span.biz" v-tip="'只算週一到週五：僅扣週末，不含國定假日與補班'" @click="toggleBiz"><Icon name="brief" />工作日</button>
     </div>
 
+    <Popover :open="calcOpen" :anchor="compact ? calcBtnC : calcBtn" label="時長計算機" width="25rem" align="end" @close="calcOpen = false">
+      <div class="calc-pop">
+        <p class="calc-pop-t"><Icon name="calc" /><b>時長計算機</b><span>不會動到開始和結束</span></p>
+        <DurationCalc ref="calcRef" compact />
+      </div>
+    </Popover>
+
   </section>
 </template>
 
 <style scoped>
+.calc-pop { padding: .85rem 1rem 1rem; display: flex; flex-direction: column; gap: .6rem; }
+.calc-pop-t { display: flex; align-items: center; gap: .45rem; font-size: .95rem; }
+.calc-pop-t .ic { color: var(--ink-3); }
+.calc-pop-t span { font-size: var(--fs-xs); color: var(--ink-3); margin-left: auto; }
+.icon-btn.on { background: var(--accent-wash); color: var(--accent); }
 .sc { padding: .9rem 1.15rem 1rem; gap: .5rem; background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--surface)), var(--surface) 70%); box-shadow: var(--shadow-hero); border-color: color-mix(in srgb, var(--accent) 16%, var(--hair)); }
 .sc-head { display: flex; align-items: center; gap: .55rem; min-height: 2.1rem; }
 .sc-head h2 { font-size: 1.02rem; font-weight: 650; color: var(--accent); cursor: help; }
 .m-fixed:not(.neg) .sc-head h2 { color: var(--accent); }
-.sc-sub { font-size: max(11px, .82rem); color: var(--ink-3); }
+.sc-sub { font-size: max(var(--floor), .82rem); color: var(--ink-3); }
 .sc-tools { margin-left: auto; display: flex; gap: .1rem; }
 .icon-btn.sm { width: 2rem; height: 2rem; border-radius: .65rem; }
 
@@ -349,7 +365,7 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
 .hn.can::before, .hn.can::after, .hn.hot::before, .hn.hot::after { position: absolute; top: 50%; transform: translateY(-50%); font-size: .42em; color: var(--accent); font-family: var(--f-sans); }
 .hn.can::before, .hn.hot::before { content: '‹'; left: -.5em; }
 .hn.can::after, .hn.hot::after { content: '›'; right: -.5em; }
-.hu { font-family: var(--f-sans); font-size: max(11px, .4em); font-weight: 600; color: var(--ink-3); letter-spacing: 0; margin: 0 .55em 0 .14em; }
+.hu { font-family: var(--f-sans); font-size: max(var(--floor), .4em); font-weight: 600; color: var(--ink-3); letter-spacing: 0; margin: 0 .55em 0 .14em; }
 .hc { color: var(--ink-4); margin: 0 -.02em; }
 .hs { color: var(--ink-3); margin-right: .06em; font-weight: 400; }
 .neg .hn { color: var(--warn); }
@@ -359,12 +375,6 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
 .hero-empty { display: inline-flex; align-items: center; gap: .3em; font-family: var(--f-sans); font-size: .58em; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
 .hero-in { width: 100%; height: 3.6rem; padding: 0 .8rem; border-radius: .9rem; border: 1.5px solid var(--accent); background: var(--surface-2); box-shadow: 0 0 0 4px var(--accent-wash-2); font-size: 1.7rem; color: var(--ink); caret-color: var(--accent); }
 
-.rail { display: flex; align-items: center; gap: .45rem; height: 1rem; }
-.rail .node { font-size: .95rem; }
-.rail .node.off { opacity: .35; }
-.track { position: relative; flex: 1; height: .3rem; border-radius: 99rem; background: var(--well-2); }
-.fill { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--accent); opacity: .55; transition: width .6s var(--ease); }
-.now { position: absolute; top: 50%; width: .2rem; height: .95rem; border-radius: .1rem; background: var(--now); transform: translate(-50%, -50%); box-shadow: 0 0 0 2px var(--surface); }
 
 .status { font-size: .9rem; color: var(--ink-2); min-height: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status b { color: var(--ink); font-weight: 650; font-family: var(--f-mono); font-stretch: 75%; font-size: 1em; }
@@ -372,11 +382,11 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
 .status.err { color: var(--now); }
 .status.pre { color: var(--accent); }
 .status.pre b { color: var(--accent); }
-.tape { font-size: max(11px, .82rem); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -.2rem; }
+.tape { font-size: max(var(--floor), .82rem); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -.2rem; }
 .tape span { color: var(--ink-2); }
 
 .sc-quick { display: flex; flex-wrap: wrap; gap: .35rem; }
-.sc-quick .chip { height: 1.95rem; padding: 0 .65rem; font-size: max(11px, .84rem); font-family: var(--f-sans); }
+.sc-quick .chip { height: 1.95rem; padding: 0 .65rem; font-size: max(var(--floor), .84rem); font-family: var(--f-sans); }
 .chip.biz .ic { width: 1em; height: 1em; }
 
 .sc.compact { padding: .6rem .8rem .7rem; gap: .35rem; border-radius: var(--r-md); }
@@ -385,8 +395,6 @@ watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(()
 .compact .hero-line { font-size: 2.35rem; }
 .compact .hero-in { height: 2.8rem; font-size: 1.35rem; }
 .compact .status { font-size: .86rem; min-height: 1.2rem; }
-.compact .rail { height: .7rem; }
-.compact .rail .node { display: none; }
 .compact .sc-quick { flex-wrap: nowrap; overflow: hidden; }
 .compact .sc-quick .chip { height: 1.85rem; padding: 0 .55rem; font-size: var(--fs-s); }
 </style>

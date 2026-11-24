@@ -5,25 +5,28 @@ import Icon from './Icon.vue';
 import CopyBtn from './CopyBtn.vue';
 import Popover from './Popover.vue';
 import SpanUnits from './SpanUnits.vue';
-import { S, startMs, endMs, hasEnd, calGap } from '../state/store';
-import { type Wall, partsInTz, offsetAt, isoOffset, fmtDate, fmtTime, pad, WD, wdOf, isoWeek, dayOfYear, isLeap, wallKey, utcMs, isoDuration, DAY } from '../core/time';
-import { rocYear, plainNum } from '../core/format';
+import { S, type End, now, startMs, endMs, hasEnd, calGap } from '../state/store';
+import { type Wall, partsInTz, offsetAt, isoOffset, fmtDate, fmtTime, pad, WD, wdOf, isoWeek, usWeek, dayOfYear, isLeap, nextLeap, wallKey, utcMs, isoDuration, DAY } from '../core/time';
+import { rocYear, plainNum, relative } from '../core/format';
 import { useSize, remPx } from '../composables/size';
+import { focusCommand } from '../state/ui';
 
-defineProps<{ withUnits?: boolean }>();
 const EN_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const EN_MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 type Fmt = (ms: number, tz: string, w: Wall) => string;
-interface Def { k: string; label: string; f: Fmt; tip: string; sans?: boolean }
+/** edit: the value can be typed over (it opens the command bar with this value, for this end). */
+interface Def { k: string; label: string; f: Fmt; tip: string; sans?: boolean; edit?: boolean }
 const DEFS: Def[] = [
-  { k: 'iso', label: 'ISO 8601', tip: '含時差的標準格式', f: (ms, tz, w) => `${fmtDate(w)}T${fmtTime(w)}${isoOffset(offsetAt(ms, tz))}` },
-  { k: 'unix', label: 'Unix 秒', tip: '1970-01-01 UTC 起算的秒數', f: (ms) => String(Math.floor(ms / 1000)) },
-  { k: 'unixms', label: 'Unix 毫秒', tip: 'JavaScript Date.now() 的格式', f: (ms) => String(ms) },
-  { k: 'utc', label: 'UTC', tip: '換成世界協調時間', f: (ms) => { const u = partsInTz(ms, 'UTC'); return `${fmtDate(u)}T${fmtTime(u)}Z`; } },
+  { k: 'iso', label: 'ISO 8601', tip: '含時差的標準格式', edit: true, f: (ms, tz, w) => `${fmtDate(w)}T${fmtTime(w)}${isoOffset(offsetAt(ms, tz))}` },
+  { k: 'unix', label: 'Unix 秒', tip: '1970-01-01 UTC 起算的秒數', edit: true, f: (ms) => String(Math.floor(ms / 1000)) },
+  { k: 'unixms', label: 'Unix 毫秒', tip: 'JavaScript Date.now() 的格式', edit: true, f: (ms) => String(ms) },
+  { k: 'utc', label: 'UTC', tip: '換成世界協調時間', edit: true, f: (ms) => { const u = partsInTz(ms, 'UTC'); return `${fmtDate(u)}T${fmtTime(u)}Z`; } },
+  { k: 'rel', label: '相對時間', sans: true, tip: '離現在多久', f: (ms) => relative(ms, now.value) },
   { k: 'zh', label: '中文', sans: true, tip: '中文日期', f: (_ms, _tz, w) => `${w.y}年${w.mo}月${w.d}日 星期${WD[wdOf(w)]} ${fmtTime(w)}` },
   { k: 'roc', label: '民國', sans: true, tip: '民國紀年', f: (_ms, _tz, w) => `${rocYear(w.y)} ${w.mo} 月 ${w.d} 日` },
   { k: 'week', label: 'ISO 週', tip: '年-W週-星期幾（1 = 週一）', f: (_ms, _tz, w) => { const i = isoWeek(w.y, w.mo, w.d); return `${i.weekYear}-W${pad(i.week)}-${i.weekday}`; } },
-  { k: 'doy', label: '第幾天', sans: true, tip: '一年中的第幾天、季度與閏年', f: (_ms, _tz, w) => `第 ${dayOfYear(w.y, w.mo, w.d)} 天 · Q${Math.ceil(w.mo / 3)} · ${isLeap(w.y) ? '閏年' : '平年'}` },
+  { k: 'usweek', label: '美式週次', tip: '週日開始、含 1 月 1 日的那週是第 1 週（美國、Excel WEEKNUM 的算法）', f: (_ms, _tz, w) => `${w.y} 年 W${pad(usWeek(w.y, w.mo, w.d))}` },
+  { k: 'doy', label: '第幾天', sans: true, tip: '一年中的第幾天、季度與閏年', f: (_ms, _tz, w) => `第 ${dayOfYear(w.y, w.mo, w.d)} 天 · Q${Math.ceil(w.mo / 3)} · ${isLeap(w.y) ? '閏年' : `平年（下次閏年 ${nextLeap(w.y)}）`}` },
   { k: 'rfc', label: 'RFC 2822', tip: '電子郵件標頭的格式', f: (ms, tz, w) => `${EN_WD[wdOf(w)]}, ${w.d} ${EN_MO[w.mo - 1]} ${w.y} ${fmtTime(w)} ${isoOffset(offsetAt(ms, tz)).replace(':', '')}` },
   { k: 'sql', label: 'SQL', tip: 'DATETIME 字面值（不含時區）', f: (_ms, _tz, w) => `${fmtDate(w)} ${fmtTime(w)}` },
   { k: 'excel', label: 'Excel', tip: 'Excel／Google 試算表的日期序號（當地時間）', f: (_ms, _tz, w) => plainNum((wallKey(w) - utcMs(1899, 12, 30)) / DAY, 6) },
@@ -47,12 +50,15 @@ const lenH = computed(() => (hasEnd.value ? 2.15 * remPx.value : 0));
 const fit = computed(() => {
   const room = bodyH.value - unitsH.value - lenH.value;
   if (DEFS.length * rowH.value <= room) return DEFS.length;
-  return Math.max(1, Math.floor((room - 2.2 * remPx.value) / rowH.value));
+  // with no room for a row, every format goes behind the "另外 N 種" button rather than spilling out
+  return Math.max(0, Math.floor((room - 2.2 * remPx.value) / rowH.value));
 });
 const shown = computed(() => (bodyH.value ? vals.value.slice(0, fit.value) : vals.value.slice(0, 6)));
 const rest = computed(() => vals.value.slice(shown.value.length));
 const moreBtn = ref<HTMLElement | null>(null);
 const more = ref(false);
+const nowSec = computed(() => String(Math.floor(now.value / 1000)));
+function editVal(which: End, v: string) { more.value = false; S.active = which; focusCommand(v, true); }
 </script>
 
 <template>
@@ -62,17 +68,18 @@ const more = ref(false);
       <h2>讀法</h2>
       <span class="panel-sub">同兩個時刻的各種寫法，點一下複製</span>
       <span v-if="cols && hasEnd" class="rd-legend" aria-hidden="true"><i class="node" />開始 <i class="node end" />結束</span>
+      <CopyBtn class="rd-now mono" :text="nowSec" k="rd-now" label="現在的 Unix 秒" :tip="`現在的 Unix 時間戳（秒），每秒更新。點一下複製`"><i class="dot" aria-hidden="true" />{{ nowSec }}</CopyBtn>
     </header>
     <div ref="body" class="rd-body">
-      <div v-if="hasEnd" ref="unitsBox" class="rd-units"><SpanUnits :cols="cols ? 6 : bodyW >= 21 * remPx ? 3 : 2" /></div>
+      <div v-if="hasEnd" ref="unitsBox" class="rd-units"><SpanUnits :cols="cols ? 6 : bodyW >= 24 * remPx ? 3 : 2" /></div>
       <div v-if="hasEnd" class="rd-row len">
         <span class="rd-k" v-tip="'ISO 8601 的長度寫法'">長度</span>
         <span class="rd-v"><CopyBtn class="mono" :text="isoDur" k="rd-dur" label="ISO 長度" /></span>
       </div>
       <div v-for="r in shown" :key="r.k" class="rd-row">
         <span class="rd-k" v-tip="r.tip">{{ r.label }}</span>
-        <span class="rd-v"><i v-if="hasEnd && !cols" class="node" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /></span>
-        <span v-if="hasEnd" class="rd-v"><i v-if="!cols" class="node end" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /></span>
+        <span class="rd-v"><i v-if="hasEnd && !cols" class="node" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" v-tip="`改寫開始的 ${r.label}`" :aria-label="`改寫開始的 ${r.label}`" @click="editVal('start', r.s)"><Icon name="edit" /></button></span>
+        <span v-if="hasEnd" class="rd-v"><i v-if="!cols" class="node end" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" v-tip="`改寫結束的 ${r.label}`" :aria-label="`改寫結束的 ${r.label}`" @click="editVal('end', r.e)"><Icon name="edit" /></button></span>
       </div>
       <button v-if="rest.length" ref="moreBtn" type="button" class="rd-more" :aria-expanded="more" @click="more = !more">
         <span class="ell">另外 {{ rest.length }} 種：{{ rest.map((r) => r.label).join('、') }}</span><Icon name="chevD" />
@@ -82,8 +89,8 @@ const more = ref(false);
       <div class="rd-pop" :class="{ one: !hasEnd }">
         <div v-for="r in rest" :key="r.k" class="rd-row">
           <span class="rd-k">{{ r.label }}</span>
-          <span class="rd-v"><i v-if="hasEnd" class="node" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /></span>
-          <span v-if="hasEnd" class="rd-v"><i class="node end" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /></span>
+          <span class="rd-v"><i v-if="hasEnd" class="node" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" :aria-label="`改寫開始的 ${r.label}`" @click="editVal('start', r.s)"><Icon name="edit" /></button></span>
+          <span v-if="hasEnd" class="rd-v"><i class="node end" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" :aria-label="`改寫結束的 ${r.label}`" @click="editVal('end', r.e)"><Icon name="edit" /></button></span>
         </div>
       </div>
     </Popover>
@@ -109,9 +116,15 @@ const more = ref(false);
 .one .rd-k, .cols .rd-k, .len .rd-k { grid-row: auto; }
 .rd-v { display: flex; align-items: center; gap: .35rem; min-width: 0; line-height: 1.35; }
 .rd-v .node { font-size: var(--fs-xs); flex: none; }
-.rd-v :deep(.copy) { font-size: max(11px, .82rem); color: var(--ink); }
+.rd-v :deep(.copy) { font-size: max(var(--floor), .82rem); color: var(--ink); }
 .len .rd-v :deep(.copy) { color: var(--accent); }
-.rd-more { flex: none; display: flex; align-items: center; gap: .3rem; height: 2rem; margin: .15rem -.3rem 0; padding: 0 .55rem; border-radius: .6rem; font-size: max(11px, .84rem); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.rd-more { flex: none; display: flex; align-items: center; gap: .3rem; height: 2rem; margin: .15rem -.3rem 0; padding: 0 .55rem; border-radius: .6rem; font-size: max(var(--floor), .84rem); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .rd-more:hover { background: var(--well-2); color: var(--ink); }
 .rd-pop { padding: .5rem 1rem .6rem; }
+.rd-now { flex: none; font-size: var(--fs-xs); color: var(--ink-2); padding: .2rem .45rem !important; margin: 0 !important; border-radius: .55rem; background: var(--now-wash); }
+.rd-now .dot { display: inline-block; width: .45em; height: .45em; margin-right: .4em; border-radius: 50%; background: var(--now); vertical-align: .12em; }
+.rd-edit { flex: none; display: grid; place-items: center; width: 1.4rem; height: 1.3rem; margin: -.25rem 0; border-radius: .45rem; color: var(--ink-4); opacity: .7; transition: background .15s, color .15s, opacity .15s; }
+.rd-edit .ic { width: .95em; height: .95em; }
+.rd-edit:hover { opacity: 1; color: var(--accent); background: var(--accent-wash); }
+@media (hover: hover) { .rd-row:not(:hover) .rd-edit:not(:focus-visible) { opacity: 0; } }
 </style>
