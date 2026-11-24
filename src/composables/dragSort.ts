@@ -1,0 +1,79 @@
+/* Reorder a list by dragging a handle: mouse, touch and pen alike. The rows trade places as the pointer
+   passes their middle, and the dragged row follows the pointer. ↑ ↓ on a focused handle move it by one. */
+import { ref, nextTick } from 'vue';
+
+export interface DragSortOpts {
+  /** The row elements, in the order shown. */
+  rows: () => HTMLElement[];
+  /** Move the item at `from` to `to` (the list re-renders in the new order). */
+  move: (from: number, to: number) => void;
+  /** The drag is over: `from` is where it started, `to` where it ended. */
+  done?: (from: number, to: number) => void;
+}
+export function useDragSort(opts: DragSortOpts) {
+  const dragging = ref<number | null>(null);
+  let st: { id: number; el: HTMLElement; start: number; idx: number; grab: number; y: number } | null = null;
+  function place() {
+    if (!st) return;
+    const s = st;
+    s.el.style.transform = '';
+    const top = s.el.getBoundingClientRect().top;
+    s.el.style.transform = `translateY(${s.y - s.grab - top}px)`;
+  }
+  function down(e: PointerEvent, idx: number) {
+    if (e.button > 0) return;
+    const row = opts.rows()[idx];
+    if (!row) return;
+    e.preventDefault();
+    e.stopPropagation();
+    st = { id: e.pointerId, el: row, start: idx, idx, grab: e.clientY - row.getBoundingClientRect().top, y: e.clientY };
+    dragging.value = idx;
+    row.classList.add('sorting');
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* fine */ }
+  }
+  function moveP(e: PointerEvent) {
+    if (!st || e.pointerId !== st.id) return;
+    st.y = e.clientY;
+    const rows = opts.rows();
+    let target = 0;
+    rows.forEach((r, i) => {
+      if (i === st!.idx) return;
+      const rc = r.getBoundingClientRect();
+      if (e.clientY > rc.top + rc.height / 2) target++;
+    });
+    target = Math.min(target, rows.length - 1);
+    if (target !== st.idx) {
+      opts.move(st.idx, target);
+      st.idx = target;
+      dragging.value = target;
+      nextTick(place);
+    } else place();
+  }
+  function up(e: PointerEvent) {
+    if (!st || e.pointerId !== st.id) return;
+    const s = st;
+    st = null;
+    dragging.value = null;
+    s.el.style.transform = '';
+    s.el.classList.remove('sorting');
+    if (s.idx !== s.start) opts.done?.(s.start, s.idx);
+  }
+  function key(e: KeyboardEvent, idx: number) {
+    const n = opts.rows().length;
+    const to = e.key === 'ArrowUp' ? idx - 1 : e.key === 'ArrowDown' ? idx + 1 : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : null;
+    if (to == null) return;
+    e.preventDefault();
+    if (to < 0 || to >= n || to === idx) return;
+    opts.move(idx, to);
+    opts.done?.(idx, to);
+  }
+  /** Bind on the handle: @pointerdown, @pointermove, @pointerup, @pointercancel, @keydown. */
+  return { dragging, down, move: moveP, up, key };
+}
+/** A copy of `list` with the item at `from` moved to `to`. */
+export function moved<T>(list: T[], from: number, to: number): T[] {
+  const out = list.slice();
+  const [x] = out.splice(from, 1);
+  out.splice(to, 0, x);
+  return out;
+}

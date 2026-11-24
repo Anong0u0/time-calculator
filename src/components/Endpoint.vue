@@ -1,5 +1,6 @@
 <script setup lang="ts">
-/* One end of the equation: a label, the date and time, its zone, and shortcuts. */
+/* One end of the equation: a label, the date and time, its zone, and shortcuts.
+   Both ends work alike: either can follow the clock (即時), and the span can compute either one. */
 import { ref, computed, watch } from 'vue';
 import Icon from './Icon.vue';
 import SegmentedDateTime from './SegmentedDateTime.vue';
@@ -7,8 +8,9 @@ import TzPicker from './TzPicker.vue';
 import Popover from './Popover.vue';
 import CopyBtn from './CopyBtn.vue';
 import {
-  S, type End, now, wallOf, msOf, tzOf, hasEnd, startNote, endNote, commit, setLive, setTz, clearEnd, freezeEnd, linkFromMeasured,
+  S, type End, now, wallOf, msOf, tzOf, hasEnd, startNote, endNote, commit, setLive, setTz, clearEnd, freezeLink, linkFromMeasured,
   START_PRESETS, startPresetWall, startPresetActive, setWall, PERIOD_NAMES, periodBounds, periodLabel, applyEndPreset, pulse, bump, type PeriodKey,
+  isLive, isDerived, linkTarget, linkSentence, followText, other,
 } from '../state/store';
 import { offsetAt, fmtOffset, fmtDT, fmtDate, fmtTime, isoOffset, clamp } from '../core/time';
 import { zoneName } from '../core/zones';
@@ -18,6 +20,12 @@ import { useSize, remPx } from '../composables/size';
 
 const props = defineProps<{ which: End; compact?: boolean }>();
 const isStart = computed(() => props.which === 'start');
+const SUBJ = computed(() => (isStart.value ? '開始' : '結束'));
+const OTHER = computed(() => (isStart.value ? '結束' : '開始'));
+const live = computed(() => isLive(props.which));
+const derived = computed(() => isDerived(props.which));
+/** The link tag sits on the end the span computes, or would compute. */
+const linkTag = computed(() => hasEnd.value && (derived.value || (!S.link && linkTarget() === props.which)));
 const w = computed(() => wallOf(props.which));
 const ms = computed(() => msOf(props.which));
 const tz = computed(() => tzOf(props.which));
@@ -25,7 +33,7 @@ const has = computed(() => isStart.value || hasEnd.value);
 const label = computed(() => (isStart.value ? '開始' : S.endPreset ? PERIOD_NAMES[S.endPreset] : '結束'));
 const note = computed(() => (isStart.value ? startNote.value : endNote.value));
 const offTxt = computed(() => fmtOffset(offsetAt(ms.value ?? now.value, tz.value), { compact: true }));
-const rel = computed(() => (ms.value == null ? '' : S.live && isStart.value ? '就是現在' : relative(ms.value, now.value)));
+const rel = computed(() => (ms.value == null ? '' : live.value ? '就是現在' : relative(ms.value, now.value)));
 const iso = computed(() => (w.value && ms.value != null ? `${fmtDate(w.value)}T${fmtTime(w.value)}${isoOffset(offsetAt(ms.value, tz.value))}` : ''));
 
 const tzBtn = ref<HTMLElement | null>(null);
@@ -34,23 +42,28 @@ const preBtn = ref<HTMLElement | null>(null);
 const preOpen = ref(false);
 function pickTz(id: string) {
   const name = zoneName(id);
-  commit(() => setTz(props.which, id), { label: `${isStart.value ? '開始' : '結束'}時區：${name}`, say: `${isStart.value ? '開始' : '結束'}改用${name}時區，同一個時刻` });
+  commit(() => setTz(props.which, id), { label: `${SUBJ.value}時區：${name}`, say: `${SUBJ.value}改用${name}時區，同一個時刻` });
   bump(props.which);
 }
 function toggleLive() {
-  if (S.live) commit(() => setLive(false), { label: '固定開始', say: '開始固定在這一秒' });
-  else commit(() => setLive(true), { label: '開始回到現在', say: '開始跟著現在走' });
+  const n = SUBJ.value;
+  if (live.value) commit(() => setLive(props.which, false), { label: `固定${n}`, say: `${n}固定在這一秒` });
+  else commit(() => setLive(props.which, true), { label: `${n}設為現在`, say: `${n}跟著現在走${isLive(other(props.which)) ? `；${OTHER.value}也是現在，間隔是 0` : ''}` });
+  bump(props.which);
 }
 function toggleLink() {
-  if (S.link) commit(freezeEnd, { label: '固定結束', say: () => `結束固定在 ${fmtDT(wallOf('end')!)}` });
-  else commit(linkFromMeasured, { label: '結束連動', say: () => `結束 = 開始 ${S.link?.expr}，開始改了會跟著動` });
+  if (S.link) { const to = S.linkTo; commit(freezeLink, { label: `固定${to === 'end' ? '結束' : '開始'}`, say: () => `${to === 'end' ? '結束' : '開始'}固定在 ${fmtDT(wallOf(to)!)}` }); }
+  else commit(linkFromMeasured, { label: '連動', say: () => `${linkSentence()}，${followText()}` });
 }
 function clear() { commit(() => clearEnd(), { label: '清除結束', say: '已清除結束' }); }
 function startPreset(k: (typeof START_PRESETS)[number][0], name: string) {
   commit(() => setWall('start', startPresetWall(k)), { label: `開始：${name}`, say: `開始：${name}` });
   bump('start'); preOpen.value = false;
 }
-function nowPreset() { if (!S.live) commit(() => setLive(true), { label: '開始回到現在', say: '開始跟著現在走' }); bump('start'); preOpen.value = false; }
+function nowPreset() {
+  if (!live.value) commit(() => setLive(props.which, true), { label: `${SUBJ.value}設為現在`, say: `${SUBJ.value}跟著現在走` });
+  bump(props.which); preOpen.value = false;
+}
 const END_KEYS: PeriodKey[] = ['day', 'week', 'month', 'newyear', 'lny'];
 function endPreset(k: PeriodKey) {
   commit(() => applyEndPreset(k), { label: `結束：${PERIOD_NAMES[k]}`, say: () => `結束：${periodLabel(k)} ${fmtDT(wallOf('end')!)}` });
@@ -82,7 +95,11 @@ const sdtSize = computed(() => {
 const flashing = ref(false);
 watch(() => pulse[props.which], () => { flashing.value = false; requestAnimationFrame(() => { flashing.value = true; }); });
 const noteText = computed(() => (note.value === 'gap' ? '夏令時間跳過這段時刻，已往後推' : note.value === 'overlap' ? '這個時刻出現兩次，取較早的一次' : ''));
-const linkTip = computed(() => (S.link ? `連動中：結束 = 開始 ${S.link.expr}。開始改了，結束跟著動。點一下改成固定在目前的時刻` : '結束固定在這個時刻。點一下改成連動：保持目前的間隔，結束跟著開始移動'));
+const linkTip = computed(() => (S.link
+  ? `連動中：${linkSentence()}。${followText()}。點一下改成固定在目前的時刻`
+  : `${SUBJ.value}固定在這個時刻。點一下改成連動：保持目前的間隔，${SUBJ.value}跟著${OTHER.value}移動`));
+const linkLabel = computed(() => (S.link ? linkSentence().replace(/^(開始|結束) /, '') : '固定'));
+const liveTip = computed(() => (live.value ? `${SUBJ.value}跟著現在走。點一下固定在這一秒` : `點一下讓${SUBJ.value}變成現在，並跟著時間走`));
 void clamp;
 </script>
 
@@ -92,17 +109,13 @@ void clamp;
     <header class="ep-head">
       <i class="node" :class="{ end: !isStart }" aria-hidden="true" />
       <h2>{{ label }}</h2>
-      <template v-if="isStart">
-        <button type="button" class="tag live" :aria-pressed="S.live" v-tip="S.live ? '開始跟著現在走。點一下固定在這一秒' : '點一下讓開始回到現在，並跟著時間走'" @click="toggleLive">
-          <i class="dot" aria-hidden="true" />{{ S.live ? '即時' : '回到現在' }}
-        </button>
-      </template>
-      <template v-else>
-        <span v-if="S.endSample" class="tag sample" v-tip="'第一次開啟時放的範例：距離跨年。改掉它或按 × 清除就會消失'">範例</span>
-        <button v-if="hasEnd" type="button" class="tag link" :aria-pressed="!!S.link" :aria-label="S.link ? `連動：結束 = 開始 ${S.link.expr}` : '結束固定，點一下改成連動'" v-tip="linkTip" @click="toggleLink">
-          <Icon :name="S.link ? 'link' : 'pin'" /><span>{{ S.link ? `= 開始 ${S.link.expr}` : '固定' }}</span>
-        </button>
-      </template>
+      <button type="button" class="tag live" :class="{ quiet: !live }" :aria-pressed="live" :aria-label="live ? `${SUBJ}：即時` : `${SUBJ}設為現在`" v-tip="liveTip" @click="toggleLive">
+        <i class="dot" aria-hidden="true" /><span>{{ live ? '即時' : '現在' }}</span>
+      </button>
+      <span v-if="!isStart && S.endSample" class="tag sample" v-tip="'第一次開啟時放的範例：距離跨年。改掉它或按 × 清除就會消失'">範例</span>
+      <button v-if="linkTag" type="button" class="tag link" :aria-pressed="derived" :aria-label="derived ? `連動：${linkSentence()}` : `${SUBJ}固定，點一下改成連動`" v-tip="linkTip" @click="toggleLink">
+        <Icon :name="derived ? 'link' : 'pin'" /><span>{{ linkLabel }}</span>
+      </button>
       <button v-if="compact" ref="tzBtn" type="button" class="tzb tzb-head" :aria-expanded="tzOpen" v-tip="`${zoneName(tz)}（${tz}）。點一下換時區，時刻不變`" @click="tzOpen = !tzOpen">
         <Icon name="globe" /><span class="tzb-n">{{ zoneName(tz) }}</span><span class="tzb-o mono">{{ offTxt }}</span>
       </button>
@@ -121,13 +134,13 @@ void clamp;
         <Icon name="globe" /><span class="tzb-n">{{ zoneName(tz) }}</span><span class="tzb-o mono">{{ offTxt }}</span><Icon name="chevD" class="tzb-c" />
       </button>
       <span v-if="has" class="rel">{{ rel }}</span>
-      <span v-else class="rel hint">未設定：選快捷、打日期，或在間隔輸入 +30天</span>
+      <span v-else class="rel hint">未設定：按「現在」、選快捷、打日期，或在間隔輸入 +30天</span>
       <span v-if="noteText" class="tag warn" v-tip="noteText">夏令時間</span>
     </div>
 
     <div v-if="!compact" class="ep-pre" role="group" :aria-label="isStart ? '開始的快捷' : '結束的快捷'">
+      <button type="button" class="chip" :aria-pressed="live" v-tip="`${SUBJ}設為現在，跟著時間走`" @click="nowPreset">現在</button>
       <template v-if="isStart">
-        <button type="button" class="chip" :aria-pressed="S.live" @click="nowPreset">現在</button>
         <button v-for="[k, name, tip] in START_PRESETS" :key="k" type="button" class="chip" :aria-pressed="startPresetActive(k)" v-tip="`開始設為${tip}`" @click="startPreset(k, name)">{{ name }}</button>
       </template>
       <template v-else>
@@ -138,8 +151,8 @@ void clamp;
     <TzPicker :open="tzOpen" :anchor="tzBtn" :title="isStart ? '開始的時區' : '結束的時區'" :current="tz" @close="tzOpen = false" @pick="pickTz" />
     <Popover v-if="compact" :open="preOpen" :anchor="preBtn" :label="isStart ? '開始的快捷' : '結束的快捷'" width="20rem" align="end" @close="preOpen = false">
       <div class="pre-pop">
+        <button type="button" class="chip" :aria-pressed="live" @click="nowPreset">現在</button>
         <template v-if="isStart">
-          <button type="button" class="chip" :aria-pressed="S.live" @click="nowPreset">現在</button>
           <button v-for="[k, name] in START_PRESETS" :key="k" type="button" class="chip" :aria-pressed="startPresetActive(k)" @click="startPreset(k, name)">{{ name }}</button>
         </template>
         <template v-else>
@@ -174,6 +187,13 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
 .tag.link { max-width: 12.5rem; overflow: hidden; flex: 0 1 auto; }
 .tag.link .ic { flex: none; }
 .tag.live { flex: none; }
+.tag.live.quiet { color: var(--ink-3); }
+.tag.live span { overflow: visible; }
+/* A narrow header keeps 即時／現在 as just its dot; the tooltip and label still say it. */
+@container (max-width: 19rem) {
+  .compact .tag.live { width: 1.6rem; padding: 0; justify-content: center; }
+  .compact .tag.live span { display: none; }
+}
 /* A narrow header keeps the link tag as a clean round icon; the tooltip still says what it does. */
 @container (max-width: 15.5rem) {
   .tag.link { flex: none; width: 1.6rem; padding: 0; justify-content: center; }

@@ -143,13 +143,18 @@ function cityAt(e: PointerEvent | MouseEvent): string | null {
   return nearest(LAND.top - fy * H, -180 + fx * 360);
 }
 const onPinTarget = (e: Event) => !!(e.target as HTMLElement).closest('.pin, .sun, .sun2');
-function onMove(e: PointerEvent) { ghostId.value = e.pointerType === 'mouse' && !onPinTarget(e) ? cityAt(e) : null; }
+/** A finger has no hover: its first tap shows the city and its time, a second tap on it adds it. */
+const touchPreview = ref(false);
+const lastType = ref('mouse');
+function onMove(e: PointerEvent) { if (e.pointerType === 'mouse') { touchPreview.value = false; ghostId.value = !onPinTarget(e) ? cityAt(e) : null; } }
 function onMapClick(e: MouseEvent) {
   const pin = (e.target as HTMLElement).closest<HTMLElement>('.pin');
   if (pin) { emit('pin', pin.dataset.id!, pin); return; }
   if (onPinTarget(e)) return;
   const id = cityAt(e);
-  if (id) { emit('add', id); ghostId.value = null; }
+  if (!id) { ghostId.value = null; return; }
+  if (lastType.value !== 'mouse' && ghostId.value !== id) { ghostId.value = id; touchPreview.value = true; return; }
+  emit('add', id); ghostId.value = null; touchPreview.value = false;
 }
 const full = computed(() => props.zones.length >= ZMAX);
 const ghost = computed(() => {
@@ -193,7 +198,7 @@ onMounted(() => requestAnimationFrame(layoutPins));
 
 <template>
   <div class="wmap" :style="{ height: height + 'px' }">
-    <div class="wm" :class="{ pointing: !!ghost }" :style="{ width: size.w + 'px', height: size.h + 'px' }" @pointermove="onMove" @pointerleave="ghostId = null" @click="onMapClick">
+    <div class="wm" :class="{ pointing: !!ghost }" :style="{ width: size.w + 'px', height: size.h + 'px' }" @pointerdown="lastType = $event.pointerType" @pointermove="onMove" @pointerleave="!touchPreview && (ghostId = null)" @click="onMapClick">
       <canvas ref="canvas" class="wm-cv" :style="{ width: size.w + 'px', height: size.h + 'px' }" role="img"
         :aria-label="`世界地圖：${which === 'end' ? '結束' : '開始'}時刻的白天與黑夜`" />
       <div ref="layer" class="wm-pins">
@@ -204,10 +209,10 @@ onMounted(() => requestAnimationFrame(layoutPins));
           <i /><span>{{ p.name }}<b>{{ p.t }}</b></span>
         </div>
         <div v-if="ghost" class="ghost" :class="{ left: ghost.right }" :style="{ left: ghost.left + '%', top: ghost.top + '%' }" aria-hidden="true">
-          <i /><span><em>{{ full ? '已滿' : '+' }}</em>{{ ghost.name }}<b>{{ ghost.t }}</b></span>
+          <i /><span><em>{{ full ? '已滿' : '+' }}</em>{{ ghost.name }}<b>{{ ghost.t }}</b><template v-if="touchPreview && !full"> · 再點一下加入</template></span>
         </div>
       </div>
-      <span class="wm-hint" aria-hidden="true">點地圖加入城市</span>
+      <span class="wm-hint" aria-hidden="true">{{ lastType === 'mouse' ? '點地圖加入城市' : '點地圖看城市，再點一下加入' }}</span>
     </div>
   </div>
 </template>

@@ -6,7 +6,7 @@
 import Endpoint from './Endpoint.vue';
 import SpanCenter from './SpanCenter.vue';
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { S, now, hasEnd, railProgress, commit, freezeEnd, linkFromMeasured, wallOf } from '../state/store';
+import { S, now, hasEnd, railProgress, commit, freezeLink, linkFromMeasured, wallOf, linkSentence, followText, linkTarget } from '../state/store';
 import { fmtDT } from '../core/time';
 import { editSpan } from '../state/ui';
 import { remPx, fontsTick } from '../composables/size';
@@ -28,15 +28,18 @@ function measure() {
 
 /* ---------- the joints ---------- */
 const plusTip = '開始 + 間隔：點一下輸入間隔，例如 +30天、3個月';
+const N = { start: '開始', end: '結束' } as const;
 const eqTip = computed(() => {
-  if (!hasEnd.value) return '設定結束後，= 決定結束是固定在一個時刻，還是跟著開始移動';
-  return S.link ? `連動中：結束 = 開始 ${S.link.expr}。改了開始，結束跟著動。點一下改成固定` : '結束固定在這個時刻。點一下改成連動：保持目前的間隔，結束跟著開始移動';
+  if (!hasEnd.value) return '設定結束後，= 決定兩端是各自固定，還是用間隔連在一起';
+  if (S.link) return `連動中：${linkSentence()}。${followText()}。點一下改成固定`;
+  const to = linkTarget();
+  return `兩端各自固定。點一下改成連動：保持目前的間隔，${N[to]}跟著${N[to === 'end' ? 'start' : 'end']}移動`;
 });
 function plus() { editSpan(); }
 function equals() {
   if (!hasEnd.value) return;
-  if (S.link) commit(freezeEnd, { label: '固定結束', say: () => `結束固定在 ${fmtDT(wallOf('end')!)}` });
-  else commit(linkFromMeasured, { label: '結束連動', say: () => `結束 = 開始 ${S.link?.expr}，開始改了會跟著動` });
+  if (S.link) { const to = S.linkTo; commit(freezeLink, { label: `固定${N[to]}`, say: () => `${N[to]}固定在 ${fmtDT(wallOf(to)!)}` }); }
+  else commit(linkFromMeasured, { label: '連動', say: () => `${linkSentence()}，${followText()}` });
 }
 
 /* ---------- the rail ---------- */
@@ -97,7 +100,7 @@ watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
 
     <button type="button" class="op op1" v-tip="plusTip" aria-label="開始加上間隔：輸入間隔" @click="plus">+</button>
     <button type="button" class="op op2" :class="{ linked: !!S.link }" :disabled="!hasEnd" :aria-pressed="!!S.link" v-tip="eqTip"
-      :aria-label="S.link ? `結束連動：結束 = 開始 ${S.link.expr}，點一下改成固定` : '結束固定，點一下改成連動'" @click="equals">=</button>
+      :aria-label="S.link ? `連動：${linkSentence()}，點一下改成固定` : '兩端固定，點一下改成連動'" @click="equals">=</button>
   </div>
 </template>
 

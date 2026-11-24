@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /* Month and year scale: the range from ● to ○ on a month grid with ISO weeks, and the whole year as a week strip.
-   Click a day to move the nearer end there; drag across days to pick both; click a week number to pick that week.
+   Click a day to move the nearer end there; drag ● or ○ to move that end; drag from any other day to pick a range;
+   click a week number (or a week on the year strip) to pick that week. S or E on a focused day puts the start or end there.
+   On touch, a swipe turns the month and a long press starts a range.
    The title opens a year and month picker; the wheel turns months over the grid and years over the week strip. */
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
@@ -9,12 +11,14 @@ import { S, type End, now, startWall, endWall, hasEnd, commit, setWall, toast, u
 import { type Wall, dayNum, fromDayNum, isoWeek, isoWeeksInYear, isoWeekStart, mod, WD, partsInTz, dayOfYear, fmtDT, daysInYear } from '../core/time';
 import { useSize, remPx } from '../composables/size';
 import { nf } from '../core/format';
-import { focusCommand } from '../state/ui';
 
 const view = reactive({ y: startWall.value.y, mo: startWall.value.mo });
 function setView(w: { y: number; mo: number } | null) { if (w) { view.y = w.y; view.mo = w.mo; } }
-watch(() => startWall.value.y * 100 + startWall.value.mo, (v, o) => { if (v !== o) setView(startWall.value); });
-watch(() => (endWall.value ? endWall.value.y * 100 + endWall.value.mo : null), (v, o) => { if (v != null && v !== o) setView(endWall.value); });
+/** A change made on this calendar: the month shown stays where the user is looking. */
+let selfEdit = false;
+function here<T>(fn: () => T): T { selfEdit = true; try { return fn(); } finally { nextTick(() => { selfEdit = false; }); } }
+watch(() => startWall.value.y * 100 + startWall.value.mo, (v, o) => { if (v !== o && !selfEdit) setView(startWall.value); });
+watch(() => (endWall.value ? endWall.value.y * 100 + endWall.value.mo : null), (v, o) => { if (v != null && v !== o && !selfEdit) setView(endWall.value); });
 function shift(m: number) {
   const t = view.y * 12 + view.mo - 1 + m;
   const y = Math.floor(t / 12);
@@ -73,10 +77,13 @@ const todayN = computed(() => { const w = partsInTz(now.value, S.startTz); retur
 const sN = computed(() => dayNum(startWall.value.y, startWall.value.mo, startWall.value.d));
 const eN = computed(() => (endWall.value ? dayNum(endWall.value.y, endWall.value.mo, endWall.value.d) : null));
 const drag = ref<{ a: number; b: number } | null>(null);
-const lo = computed(() => (drag.value ? Math.min(drag.value.a, drag.value.b) : eN.value == null ? null : Math.min(sN.value, eN.value)));
-const hi = computed(() => (drag.value ? Math.max(drag.value.a, drag.value.b) : eN.value == null ? null : Math.max(sN.value, eN.value)));
-const dS = computed(() => (drag.value ? drag.value.a : sN.value));
-const dE = computed(() => (drag.value ? drag.value.b : eN.value));
+/** What the grid shows while something is dragged: the range being picked, or an end on its way. */
+const pS = computed(() => (moving.value?.which === 'start' ? moving.value.n : sN.value));
+const pE = computed(() => (moving.value?.which === 'end' ? moving.value.n : eN.value));
+const lo = computed(() => (drag.value ? Math.min(drag.value.a, drag.value.b) : pE.value == null ? null : Math.min(pS.value, pE.value)));
+const hi = computed(() => (drag.value ? Math.max(drag.value.a, drag.value.b) : pE.value == null ? null : Math.max(pS.value, pE.value)));
+const dS = computed(() => (drag.value ? drag.value.a : pS.value));
+const dE = computed(() => (drag.value ? drag.value.b : pE.value));
 
 interface Day { n: number; d: number; out: boolean; today: boolean; s: boolean; e: boolean; inR: boolean; rL: boolean; rR: boolean; wkend: boolean; label: string }
 const weeks = computed(() => {
@@ -107,28 +114,35 @@ function nearer(n: number): End {
   if (eN.value == null) return 'end';
   return Math.abs(n - sN.value) < Math.abs(n - eN.value) ? 'start' : 'end';
 }
-function pickDay(n: number) {
-  if (eN.value == null && n === sN.value) { toast('這天已經是開始。點別的日期設定結束，或拖曳選一段'); return; }
-  const which = nearer(n);
+/** Put one end on day n, keeping its time of day. */
+function putDay(which: End, n: number) {
   const base = which === 'start' ? startWall.value : endWall.value || startWall.value;
   if ((which === 'start' ? sN.value : eN.value) === n) return;
   const w = withDate(base, n);
-  commit(() => setWall(which, w), { label: `${SUBJ[which]}改到 ${w.mo}/${w.d}`, say: `${SUBJ[which]}：${fmtDT(w)}` });
+  S.active = which;
+  here(() => commit(() => setWall(which, w), { label: `${SUBJ[which]}改到 ${w.mo}/${w.d}`, say: `${SUBJ[which]}：${fmtDT(w)}` }));
   bump(which);
+}
+function pickDay(n: number) {
+  if (eN.value == null && n === sN.value) { toast('這天已經是開始。點別的日期設定結束，或拖曳選一段'); return; }
+  putDay(nearer(n), n);
 }
 function pickRange(a: number, b: number) {
   const l = Math.min(a, b), h = Math.max(a, b);
   const s = withDate(startWall.value, l), e = withDate(endWall.value || startWall.value, h);
-  commit(() => setWall('start', s) && setWall('end', e), { label: '選取日期範圍', say: `${s.mo}/${s.d} → ${e.mo}/${e.d}，共 ${h - l + 1} 天` });
+  here(() => commit(() => setWall('start', s) && setWall('end', e), { label: '選取日期範圍', say: `${s.mo}/${s.d} → ${e.mo}/${e.d}，共 ${h - l + 1} 天` }));
   bump('start'); bump('end');
 }
 function pickWeek(n0: number) {
   const a = fromDayNum(n0), b = fromDayNum(n0 + 6), wk = isoWeek(a.y, a.mo, a.d);
   const s = withDate(startWall.value, n0), e = withDate(endWall.value || startWall.value, n0 + 6);
-  commit(() => setWall('start', s) && setWall('end', e), { label: `選取 W${wk.week}`, say: `W${wk.week}：${a.mo}/${a.d}（一）→ ${b.mo}/${b.d}（日）` });
+  here(() => commit(() => setWall('start', s) && setWall('end', e), { label: `選取 W${wk.week}`, say: `W${wk.week}：${a.mo}/${a.d}（一）→ ${b.mo}/${b.d}（日）` }));
   bump('start'); bump('end');
 }
-let downN: number | null = null, pid = -1;
+/* A press on ● or ○ drags that end. Elsewhere: a mouse drag picks a range; a finger swipes months, or picks a range after a long press. */
+type GDrag = { pid: number; n: number; x: number; y: number; touch: boolean; mode: 'pending' | 'range' | 'move' | 'swipe'; which: End | null; timer?: ReturnType<typeof setTimeout> };
+let g: GDrag | null = null;
+const moving = ref<{ which: End; n: number } | null>(null);
 function nAt(e: PointerEvent): number | null {
   const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-n]');
   return el ? +el.dataset.n! : null;
@@ -138,21 +152,53 @@ function gDown(e: PointerEvent) {
   const n = nAt(e);
   if (n == null) return;
   e.preventDefault();
-  downN = n; pid = e.pointerId;
+  const onS = n === sN.value, onE = eN.value != null && n === eN.value;
+  const touch = e.pointerType !== 'mouse';
+  g = { pid: e.pointerId, n, x: e.clientX, y: e.clientY, touch, mode: 'pending', which: onS && !onE ? 'start' : onE && !onS ? 'end' : null };
+  if (onS && onE) g.which = null; // both on one day: the drag's direction decides
+  if (touch && !onS && !onE) {
+    const cur = g;
+    cur.timer = setTimeout(() => { if (g === cur && cur.mode === 'pending') { cur.mode = 'range'; drag.value = { a: cur.n, b: cur.n }; navigator.vibrate?.(12); } }, 420);
+  }
   try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ok */ }
 }
 function gMove(e: PointerEvent) {
-  if (downN == null || e.pointerId !== pid) return;
+  if (!g || e.pointerId !== g.pid) return;
+  const dx = e.clientX - g.x, dy = e.clientY - g.y;
+  if (g.mode === 'pending') {
+    if (Math.hypot(dx, dy) < 8) return;
+    clearTimeout(g.timer);
+    const onEnd = g.n === sN.value || (eN.value != null && g.n === eN.value);
+    if (onEnd) g.mode = 'move';
+    else g.mode = g.touch ? 'swipe' : 'range';
+  }
+  if (g.mode === 'swipe') return;
   const n = nAt(e);
   if (n == null) return;
-  if (n !== downN || drag.value) drag.value = { a: downN, b: n };
+  if (g.mode === 'move') {
+    if (!g.which) { if (n === g.n) return; g.which = n > g.n ? 'end' : 'start'; }
+    moving.value = { which: g.which, n };
+    return;
+  }
+  drag.value = { a: g.n, b: n };
 }
 function gUp(e: PointerEvent) {
-  if (downN == null || e.pointerId !== pid) return;
-  const a = downN, d = drag.value;
-  downN = null; drag.value = null;
+  if (!g || e.pointerId !== g.pid) return;
+  const d = g;
+  g = null;
+  clearTimeout(d.timer);
+  const r = drag.value, mv = moving.value;
+  drag.value = null; moving.value = null;
   if (e.type === 'pointercancel') return;
-  if (d && d.a !== d.b) pickRange(d.a, d.b); else pickDay(a);
+  if (d.mode === 'swipe') {
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) shift(dx < 0 ? 1 : -1);
+    else if (Math.abs(dy) > 40) shift(dy < 0 ? 1 : -1);
+    return;
+  }
+  if (d.mode === 'move') { if (mv && mv.n !== d.n) putDay(mv.which, mv.n); return; }
+  if (d.mode === 'range') { if (r && r.a !== r.b) pickRange(r.a, r.b); return; }
+  pickDay(d.n);
 }
 const focusN = ref<number | null>(null);
 function dayKey(e: KeyboardEvent, n: number) {
@@ -175,6 +221,8 @@ function dayKey(e: KeyboardEvent, n: number) {
     focusN.value = t;
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`.cal [data-n="${t}"]`)?.focus());
   } else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDay(n); }
+  else if (e.key === 's' || e.key === 'S') { e.preventDefault(); putDay('start', n); }
+  else if (e.key === 'e' || e.key === 'E') { e.preventDefault(); putDay('end', n); }
 }
 const tabN = computed(() => {
   const cand = [focusN.value, sN.value, eN.value, dayNum(view.y, view.mo, 1)];
@@ -194,7 +242,7 @@ const yearWeeks = computed(() => {
       inR: lo.value != null && hi.value != null && n0 <= hi.value && n0 + 6 >= lo.value,
       s: sN.value >= n0 && sN.value <= n0 + 6, e: eN.value != null && eN.value >= n0 && eN.value <= n0 + 6,
       today: todayN.value >= n0 && todayN.value <= n0 + 6, cur: th.mo === view.mo && th.y === view.y,
-      tip: `W${k}：${st.mo}/${st.d}–${en.mo}/${en.d}，點一下看 ${th.mo} 月`,
+      tip: `W${k}：${st.mo}/${st.d}–${en.mo}/${en.d}，點一下選取這一週`,
     };
   });
 });
@@ -209,7 +257,8 @@ const monthTicks = computed(() => {
   }
   return out;
 });
-function goWeek(w: { n0: number }) { const th = fromDayNum(w.n0 + 3); view.y = th.y; view.mo = th.mo; }
+/** A week on the year strip is the same thing as a week number in the grid: clicking picks it (and shows its month). */
+function goWeek(w: { n0: number }) { const th = fromDayNum(w.n0 + 3); view.y = th.y; view.mo = th.mo; pickWeek(w.n0); }
 
 /* ---------- the line under it ---------- */
 const mondayOf = (n: number) => n - mod(n + 3, 7);
@@ -234,16 +283,41 @@ const foot = computed<FootSeg[]>(() => {
     { t: ` · 相隔 ${weeksApart} 週 · 含頭尾 ` }, { t: `${nf(days)} 天`, b: true },
   ];
 });
+/* A week label is typed over where it is: W12, 12, 2027-W02. The end keeps its weekday and time. */
+const weekEdit = ref<End | null>(null);
+const weekText = ref('');
+const weekEl = ref<HTMLInputElement | null>(null);
+const setWeekEl = (el: unknown) => { if (el) weekEl.value = el as HTMLInputElement; };
 function typeWeek(which: End) {
   const w = which === 'start' ? startWall.value : endWall.value;
   if (!w) return;
   const iw = isoWeek(w.y, w.mo, w.d);
   S.active = which;
-  focusCommand(`W${iw.week}`, true);
+  weekEdit.value = which;
+  weekText.value = `W${iw.week}`;
+  nextTick(() => { weekEl.value?.focus(); weekEl.value?.select(); });
+}
+function applyWeek() {
+  const which = weekEdit.value;
+  weekEdit.value = null;
+  if (!which) return;
+  const w = which === 'start' ? startWall.value : endWall.value;
+  if (!w) return;
+  const m = /^(?:(\d{4})\s*[-/年]?\s*)?(?:W|第)?\s*(\d{1,2})\s*週?$/i.exec(weekText.value.trim());
+  if (!m) { toast('看不懂這個週次，試試 W12 或 2027-W02'); return; }
+  const iw = isoWeek(w.y, w.mo, w.d);
+  const y = m[1] ? +m[1] : iw.weekYear, k = +m[2];
+  if (k < 1 || k > isoWeeksInYear(y)) { toast(`${y} 年只有第 1–${isoWeeksInYear(y)} 週`); return; }
+  const st = isoWeekStart(y, k);
+  putDay(which, dayNum(st.y, st.mo, st.d) + iw.weekday - 1);
+}
+function weekKey(e: KeyboardEvent) {
+  if (e.key === 'Enter') { e.preventDefault(); applyWeek(); }
+  else if (e.key === 'Escape') { e.preventDefault(); weekEdit.value = null; }
 }
 const atStart = computed(() => view.y === startWall.value.y && view.mo === startWall.value.mo);
 const atEnd = computed(() => !endWall.value || (view.y === endWall.value.y && view.mo === endWall.value.mo));
-const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一端到這天 · 拖曳：選一段日期' : '點一下：設為結束日期 · 拖曳：選一段日期'));
+const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一端 · 拖曳 ● ○：移動那一端 · 從別的日子拖曳：選一段 · 按 S／E：設為開始／結束' : '點一下：設為結束日期 · 拖曳：選一段日期'));
 </script>
 
 <template>
@@ -284,7 +358,7 @@ const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一
         </div>
         <div class="yt"><button v-for="t in monthTicks" :key="t.mo" type="button" :class="{ cur: t.mo === view.mo }" :style="{ left: t.x * 100 + '%' }" :aria-label="`看 ${view.y} 年 ${t.mo} 月`" @click="view.mo = t.mo">{{ t.mo }}月</button></div>
       </div>
-      <p class="cal-foot"><template v-for="(f, i) in foot" :key="i"><button v-if="f.act" type="button" class="wk-ed editable" v-tip="`輸入別的週次，把${f.act === 'start' ? '開始' : '結束'}移到那一週的同一天`" @click="typeWeek(f.act)">{{ f.t }}</button><b v-else-if="f.b">{{ f.t }}</b><template v-else>{{ f.t }}</template></template></p>
+      <p class="cal-foot"><template v-for="(f, i) in foot" :key="i"><input v-if="f.act && weekEdit === f.act" :ref="setWeekEl" v-model="weekText" class="wk-in mono" :aria-label="`${f.act === 'start' ? '開始' : '結束'}的週次`" spellcheck="false" autocomplete="off" @keydown="weekKey" @blur="applyWeek" /><button v-else-if="f.act" type="button" class="wk-ed editable" v-tip="`點一下改週次，把${f.act === 'start' ? '開始' : '結束'}移到那一週的同一天`" @click="typeWeek(f.act)">{{ f.t }}</button><b v-else-if="f.b">{{ f.t }}</b><template v-else>{{ f.t }}</template></template></p>
     </div>
     <Popover :open="jump" :anchor="titleBtn" label="跳到年月" width="18.5rem" @close="jump = false">
       <div class="jp">
@@ -388,4 +462,7 @@ button.wkc:hover { background: var(--accent-wash); color: var(--accent); }
 .cal-foot { flex: none; font-size: .86rem; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cal-foot b, .cal-foot .wk-ed { font-family: var(--f-mono); font-stretch: 75%; font-weight: 600; font-size: 1em; color: var(--ink); }
 .cal-foot .wk-ed { padding: 0 .1rem; border-radius: .3rem; }
+.cal-foot .wk-in { width: 5.5rem; height: 1.45rem; padding: 0 .3rem; border-radius: .4rem; border: 1.5px solid var(--accent); background: var(--surface-2); font-size: .88rem; color: var(--ink); }
+/* a finger needs more than the drawn size: the year strip's weeks are taller to touch */
+@media (pointer: coarse) { .yw .w { min-height: 1.6rem; } .cal-nav .icon-btn { width: 2.3rem; height: 2.3rem; } }
 </style>

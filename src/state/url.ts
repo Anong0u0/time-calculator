@@ -3,25 +3,26 @@
 
      ?s=2026-11-24T16:13&tz=Asia/Taipei&e=2027-01-01&etz=Europe/London&z=Asia/Tokyo,Europe/London
 
-   s     start (date, date and time, or Unix seconds). Absent: the start is now and follows the clock.
+   s     start (date, date and time, or Unix seconds). Absent (or now): the start is now and follows the clock.
    tz    the start's time zone. Written whenever any time is written, so a link means the same moment everywhere.
-   e     a fixed end.  etz: the end's zone, only when it differs from the start's.
+   e     a fixed end, or now: the end follows the clock.  etz: the end's zone, only when it differs from the start's.
    d     the end follows the start by a span (1mo7d, -3h, 28bd for working days).
+   ds    the start follows the end back by a span: ?e=now&ds=30d is always the last 30 days.
    p     the end is the end of a period (day, week, month, newyear, lny). With a live start and no e,
          it is worked out when the link is opened: a bookmark of "until New Year" always counts to the next one.
    z     the zone list, only when it differs from the default.
    calc  the duration calculator's expression, only when it is not the sample.
 
-   When the link carries any of s, e, d, p, tz, the time comes from the link alone: no end in it means no end.
+   When the link carries any of s, e, d, ds, p, tz, the time comes from the link alone: no end in it means no end.
    z and calc replace yours only when they are there.
    The address is written only after something is changed here; opening the page leaves it as it is.
    ============================================================ */
 import { watch } from 'vue';
 import { type Wall, type Span, validWall, partsInTz, pad, interpretSpanText, fmtSpan, isValidTz } from '../core/time';
 import { LOCAL_TZ, sameZone } from '../core/zones';
-import { S, ZMAX, PERIOD_NAMES, type PeriodKey, type Link, commit, applyEndPreset, defaultZones } from './store';
+import { S, ZMAX, PERIOD_NAMES, type PeriodKey, type Link, commit, applyEndPreset, defaultZones, isDerived } from './store';
 
-const TIME_KEYS = ['s', 'e', 'd', 'p', 'tz', 'etz'] as const;
+const TIME_KEYS = ['s', 'e', 'd', 'ds', 'p', 'tz', 'etz'] as const;
 
 /* ---------- values ---------- */
 /** 2026-11-24, 2026-11-24T16:13 or 2026-11-24T16:13:05: the shortest form that keeps the time. */
@@ -65,7 +66,7 @@ function linkParam(v: string): Link | null {
 export interface UrlState {
   time: boolean;
   tz?: string; etz?: string;
-  s?: Wall; e?: Wall; d?: Link; p?: PeriodKey;
+  s?: Wall; e?: Wall; eLive?: boolean; d?: Link; ds?: Link; p?: PeriodKey;
   z?: string[]; calc?: string;
 }
 export function parseQuery(search: string): UrlState | null {
@@ -78,10 +79,12 @@ export function parseQuery(search: string): UrlState | null {
     out.tz = tz && isValidTz(tz) ? tz : undefined;
     out.etz = etz && isValidTz(etz) ? etz : undefined;
     const sTz = out.tz || LOCAL_TZ, eTz = out.etz || sTz;
-    const s = get('s'), e = get('e'), d = get('d'), p = get('p');
+    const s = get('s'), e = get('e'), d = get('d'), ds = get('ds'), p = get('p');
     if (s && s !== 'now') out.s = parseWallParam(s, sTz) || undefined;
     if (d) out.d = linkParam(d) || undefined;
-    if (e) out.e = parseWallParam(e, eTz) || undefined;
+    else if (ds) out.ds = linkParam(ds) || undefined;
+    if (e === 'now') out.eLive = true;
+    else if (e) out.e = parseWallParam(e, eTz) || undefined;
     if (p && p in PERIOD_NAMES) out.p = p as PeriodKey;
   }
   const z = get('z');
@@ -100,10 +103,14 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
       S.startTz = u.tz || LOCAL_TZ;
       S.endTz = u.etz || S.startTz;
       if (u.s) { S.start = u.s; S.live = false; } else S.live = true;
-      S.end = null; S.link = null; S.endSample = false; S.endPreset = null;
+      S.end = null; S.endLive = false; S.link = null; S.linkTo = 'end'; S.endSample = false; S.endPreset = null;
       if (u.d) S.link = u.d;
-      else if (u.e) { S.end = u.e; S.endPreset = u.p || null; }
-      else if (u.p) applyEndPreset(u.p);
+      else {
+        if (u.eLive) S.endLive = true;
+        else if (u.e) { S.end = u.e; S.endPreset = u.p || null; }
+        else if (u.p) applyEndPreset(u.p);
+        if (u.ds && (S.endLive || S.end)) { S.link = u.ds; S.linkTo = 'start'; S.live = false; }
+      }
     }
     if (u.z) S.zones = u.z;
     if (u.calc != null) { S.dur = u.calc; S.durSample = false; }
@@ -115,16 +122,20 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
 /** The query for the state now; empty for a first visit's untouched sample. */
 export function buildQuery(): string {
   const out: [string, string][] = [];
-  const untouched = S.live && S.endSample && !S.link && S.startTz === LOCAL_TZ && sameZone(S.endTz, S.startTz);
+  const untouched = S.live && S.endSample && !S.link && !S.endLive && S.startTz === LOCAL_TZ && sameZone(S.endTz, S.startTz);
   if (!untouched) {
-    if (!S.live) out.push(['s', wallParam(S.start)]);
+    if (!S.live && !isDerived('start')) out.push(['s', wallParam(S.start)]);
     out.push(['tz', S.startTz]);
     if (!sameZone(S.endTz, S.startTz)) out.push(['etz', S.endTz]);
-    if (S.link) out.push(['d', spanParam(S.link.span)]);
-    else if (S.end) {
-      // a live start counting to a period end: keep the period, so the link stays right after it passes
-      if (!(S.live && S.endPreset)) out.push(['e', wallParam(S.end)]);
-      if (S.endPreset) out.push(['p', S.endPreset]);
+    if (isDerived('end')) out.push(['d', spanParam(S.link!.span)]);
+    else {
+      if (S.link) out.push(['ds', spanParam(S.link.span)]);
+      if (S.endLive) out.push(['e', 'now']);
+      else if (S.end) {
+        // a live start counting to a period end: keep the period, so the link stays right after it passes
+        if (!(S.live && S.endPreset)) out.push(['e', wallParam(S.end)]);
+        if (S.endPreset) out.push(['p', S.endPreset]);
+      }
     }
   }
   const dz = defaultZones();
@@ -144,7 +155,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 /** Keep the address bar in step with the state once a value changes (replacing the entry: undo is the way back,
     not the back button). Opening the page writes nothing: a plain address stays plain, a link stays as it was typed. */
 export function startUrlSync() {
-  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.dur, S.durSample], () => {
+  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.endPreset, S.link?.expr, S.linkTo, S.zones, S.dur, S.durSample], () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const q = buildQuery();

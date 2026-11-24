@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
   isoWeek, isoWeeksInYear, isoWeekStart, usWeek, diffCalendar, toInstant, wallToInstant, partsInTz, addDuration,
-  parseSpan, fmtSpan, evalDuration, interpretSpanText, parseDateTimeText, parseTimestamp, addBusinessDays,
+  parseSpan, fmtSpan, evalDuration, interpretSpanText, parseTimestamp, addBusinessDays,
   countWeekdays, dayNum, spanBetween, fmtClock, isoDuration, fmtOffset, offsetAt, nextLeap,
 } from '../src/core/time';
 import { searchZones, zoneInText, DIR } from '../src/core/zones';
+import { parseDateTimeText } from '../src/core/parse';
 import { LAND, COORDS, isLand, subsolar } from '../src/core/geo';
 
 describe('ISO weeks', () => {
@@ -210,5 +211,129 @@ describe('address bar', () => {
       S.dur = dur; S.durSample = durSample;
       g.location = was.location; g.history = was.history;
     }
+  });
+});
+
+import { parseReading, splitRange, splitDatePlusSpan } from '../src/core/parse';
+
+describe('reading any way of writing a date', () => {
+  const today = { y: 2026, mo: 11, d: 24 }; // a Tuesday
+  const read = (t: string) => {
+    const r = parseDateTimeText(t, { year: 2026, today });
+    if (!r || r.kind !== 'wall') return r?.kind === 'time' ? `time ${r.h}:${r.mi}` : null;
+    const w = r.wall;
+    return `${w.y}-${w.mo}-${w.d} ${w.h}:${w.mi}`;
+  };
+  test('separators, order and words do not matter', () => {
+    for (const t of ['2000/1/1/20:34', '2000.1.1 20.34', '2000-01-01T20:34', '20000101 2034', '2000 1 1 20 34', '1/1/2000 8:34pm', 'Jan 1 2000 8:34 PM',
+      '2000年1月1日晚上8點34分', '二〇〇〇年一月一日晚上八點三十四分', '2000/1/1(六)20:34', 'Sat, 1 Jan 2000 20:34:00']) expect(read(t)).toBe('2000-1-1 20:34');
+  });
+  test('words that count from today', () => {
+    expect(read('明天下午3點')).toBe('2026-11-25 15:0');
+    expect(read('後天')).toBe('2026-11-26 0:0');
+    expect(read('昨天 18:00')).toBe('2026-11-23 18:0');
+    expect(read('下週五')).toBe('2026-12-4 0:0');
+    expect(read('週五')).toBe('2026-11-27 0:0');
+    expect(read('next friday 3pm')).toBe('2026-11-27 15:0');
+    expect(read('今晚8點')).toBe('2026-11-24 20:0');
+    expect(read('下個月5號')).toBe('2026-12-5 0:0');
+    expect(read('晚上12點')).toBe('2026-11-25 0:0');
+  });
+  test('民國, ISO weeks, ordinal days, half hours', () => {
+    expect(read('民國115年11月24日')).toBe('2026-11-24 0:0');
+    expect(read('115/11/24')).toBe('2026-11-24 0:0');
+    expect(read('2026-W48-2')).toBe('2026-11-24 0:0');
+    expect(read('2026年第328天')).toBe('2026-11-24 0:0');
+    expect(read('3點半')).toBe('time 3:30');
+    expect(read('下午3點一刻')).toBe('time 15:15');
+  });
+  test('when day and month could swap, both readings come back', () => {
+    const r = parseDateTimeText('1/2/2026', { today });
+    expect(r).toMatchObject({ kind: 'wall', wall: { mo: 1, d: 2 }, alt: { wall: { mo: 2, d: 1 } } });
+    expect(parseDateTimeText('25/12/2026', { today })).toMatchObject({ wall: { mo: 12, d: 25 } });
+  });
+  test('offsets are kept', () => {
+    expect(parseDateTimeText('Tue, 24 Nov 2026 16:13:05 +0800')).toMatchObject({ kind: 'wall', offset: 8 * 3600000 });
+    expect(parseDateTimeText('2026-11-24T08:13:05.123Z')).toMatchObject({ kind: 'wall', offset: 0, wall: { s: 5 } });
+  });
+  test('lengths and other text are left alone', () => {
+    for (const t of ['30天', '3月', '15日', '5年', '2h 45m', '47m × 16', '東京', 'W12']) expect(parseDateTimeText(t, { year: 2026, today })).toBeNull();
+    expect(read('2000年')).toBe('2000-1-1 0:0');
+  });
+  test('ranges and a moment plus a length are split', () => {
+    expect(splitRange('2000/1/1 到 現在')).toEqual(['2000/1/1', '現在']);
+    expect(splitRange('2026-01-01 - 2026-02-01')).toEqual(['2026-01-01', '2026-02-01']);
+    expect(splitRange('2026-01-01')).toBeNull();
+    expect(splitDatePlusSpan('2026/1/1 + 30天')).toEqual({ date: '2026/1/1', sign: 1, span: '30天' });
+  });
+  test('every reading can be typed back', () => {
+    const cur = { y: 2026, mo: 11, d: 24, h: 16, mi: 13, s: 5 };
+    const ctx = { now: Date.UTC(2026, 10, 24, 8, 13, 5), tz: 'Asia/Taipei', cur, parseSpanText: () => null };
+    expect(parseReading('roc', '民國 114 年 11 月 24 日', ctx)).toEqual({ wall: { ...cur, y: 2025 } });
+    expect(parseReading('week', '2026-W01-1', ctx)).toEqual({ wall: { ...cur, y: 2025, mo: 12, d: 29 } });
+    expect(parseReading('week', '2026-W02', ctx)).toEqual({ wall: { ...cur, y: 2026, mo: 1, d: 6 } }); // keeps Tuesday
+    expect(parseReading('usweek', '2026 年 W01', ctx)).toEqual({ wall: { ...cur, y: 2025, mo: 12, d: 30 } });
+    expect(parseReading('doy', '第 1 天 · Q1 · 平年（下次閏年 2028）', ctx)).toEqual({ wall: { ...cur, mo: 1, d: 1 } });
+    expect(parseReading('unix', '0', ctx)).toEqual({ ms: 0 });
+    expect(parseReading('unixms', '1500', ctx)).toEqual({ ms: 1500 });
+    expect(parseReading('excel', '46350.5', ctx)).toEqual({ wall: { y: 2026, mo: 11, d: 24, h: 12, mi: 0, s: 0 } });
+    expect(parseReading('rel', '就是現在', ctx)).toEqual({ live: true });
+    expect(parseReading('iso', '2026-11-24T16:13:05+08:00', ctx)).toEqual({ ms: Date.UTC(2026, 10, 24, 8, 13, 5) });
+  });
+  test('lengths: fractions, words, ISO and sums', () => {
+    const f = (t: string) => { const r = interpretSpanText(t); return r.kind === 'span' ? fmtSpan(r.span) : r.kind; };
+    expect(f('1.5天')).toBe('+1天 12小時');
+    expect(f('2h30')).toBe('+2:30');
+    expect(f('三天前')).toBe('−3天');
+    expect(f('1年 + 3天')).toBe('+1年3天');
+    expect(f('in 3 days')).toBe('+3天');
+    expect(f('P1M7DT12H')).toBe('+1個月7天 12小時');
+    expect(f('半小時')).toBe('+30分');
+  });
+});
+
+describe('the two ends are alike', () => {
+  test('the end can follow the clock, and the span can count the start back from it', async () => {
+    const st = await import('../src/state/store');
+    const { S, setWall, setLive, setLink, startMs, endMs, swapEnds, now, isDerived, linkTarget } = st;
+    S.startTz = 'UTC'; S.endTz = 'UTC';
+    setWall('start', { y: 2000, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
+    setLive('end', true);
+    expect(endMs.value).toBe(Math.floor(now.value / 1000) * 1000);
+    expect(linkTarget()).toBe('start');
+    setLink({ sign: 1, y: 0, mo: 0, w: 0, d: 30, h: 0, mi: 0, s: 0, biz: false });
+    expect(isDerived('start')).toBe(true);
+    expect(endMs.value! - startMs.value).toBe(30 * 86400000);
+    // setting the anchor moves the computed end; setting the computed end cuts the link
+    setWall('end', { y: 2020, mo: 3, d: 31, h: 0, mi: 0, s: 0 });
+    expect(startMs.value).toBe(Date.UTC(2020, 2, 1));
+    expect(S.link).not.toBeNull();
+    // swap carries "follows the clock" and "computed" across
+    setLive('end', true);
+    swapEnds();
+    expect(S.live).toBe(true);
+    expect(S.endLive).toBe(false);
+    expect(isDerived('end')).toBe(true);
+    expect(startMs.value - endMs.value!).toBe(30 * 86400000);
+    setWall('start', { y: 2001, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
+    expect(endMs.value).toBe(Date.UTC(2000, 11, 2));
+  });
+  test('a live end and a backward span survive the address bar', async () => {
+    const { S, setWall, setLive, setLink, isDerived } = await import('../src/state/store');
+    const { buildQuery, applyUrl } = await import('../src/state/url');
+    S.startTz = 'UTC'; S.endTz = 'UTC';
+    setWall('start', { y: 2000, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
+    S.link = null;
+    setLive('end', true);
+    setLink({ sign: 1, y: 0, mo: 0, w: 0, d: 30, h: 0, mi: 0, s: 0, biz: false });
+    const q = buildQuery();
+    expect(q).toContain('e=now');
+    expect(q).toContain('ds=30d');
+    expect(q).not.toContain('s=2000');
+    setWall('end', { y: 2020, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
+    S.link = null;
+    applyUrl('?' + q, false);
+    expect(S.endLive).toBe(true);
+    expect(isDerived('start')).toBe(true);
   });
 });

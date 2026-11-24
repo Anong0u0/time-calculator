@@ -1,31 +1,32 @@
 <script setup lang="ts">
 /* The same two moments written every common way. Each row gives ● start and ○ end.
-   Every value shows what it does: the copy mark copies it (click anywhere on the value), the pen types over it.
-   A row's label turns into 已複製 for a moment, so the copy is seen where it happened.
-   Formats behind 另外 N 種 can be pinned to the top; 複製表格 copies every row as tab-separated text. */
-import { ref, computed } from 'vue';
+   Every value shows what it does: click it to copy, the pen types over it right where it is (any reading can be
+   written back: ISO, Unix, 民國, 週次, Excel …). A row's label turns into 已複製 for a moment.
+   Drag a row by its grip (or ↑↓ on the grip) to put the formats you use on top; 全部寫法 lists them all, with a line
+   where the panel's room ends, so a format is brought into view by dragging it above that line. */
+import { ref, computed, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import CopyBtn from './CopyBtn.vue';
 import Popover from './Popover.vue';
 import SpanUnits from './SpanUnits.vue';
-import { S, type End, now, startMs, endMs, hasEnd, calGap, toast } from '../state/store';
+import { S, type End, now, startMs, endMs, hasEnd, calGap, toast, undo, commit, setInstant, setWall, setLive, wallOf, tzOf, bump } from '../state/store';
 import { copiedKey, copyText } from '../composables/copy';
-import { type Wall, partsInTz, offsetAt, isoOffset, fmtDate, fmtTime, pad, WD, wdOf, isoWeek, usWeek, dayOfYear, isLeap, nextLeap, wallKey, utcMs, isoDuration, DAY } from '../core/time';
+import { type Wall, partsInTz, offsetAt, isoOffset, fmtDate, fmtTime, fmtDT, pad, WD, wdOf, isoWeek, usWeek, dayOfYear, isLeap, nextLeap, wallKey, utcMs, isoDuration, interpretSpanText, addDuration, DAY } from '../core/time';
+import { parseReading } from '../core/parse';
 import { rocYear, plainNum, relative } from '../core/format';
 import { useSize, remPx } from '../composables/size';
-import { focusCommand } from '../state/ui';
+import { useDragSort, moved } from '../composables/dragSort';
 
 const EN_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const EN_MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 type Fmt = (ms: number, tz: string, w: Wall) => string;
-/** edit: the value can be typed over (it opens the command bar with this value, for this end). */
-interface Def { k: string; label: string; f: Fmt; tip: string; sans?: boolean; edit?: boolean }
+interface Def { k: string; label: string; f: Fmt; tip: string; sans?: boolean }
 const DEFS: Def[] = [
-  { k: 'iso', label: 'ISO 8601', tip: '含時差的標準格式', edit: true, f: (ms, tz, w) => `${fmtDate(w)}T${fmtTime(w)}${isoOffset(offsetAt(ms, tz))}` },
-  { k: 'unix', label: 'Unix 秒', tip: '1970-01-01 UTC 起算的秒數', edit: true, f: (ms) => String(Math.floor(ms / 1000)) },
-  { k: 'unixms', label: 'Unix 毫秒', tip: 'JavaScript Date.now() 的格式', edit: true, f: (ms) => String(ms) },
-  { k: 'utc', label: 'UTC', tip: '換成世界協調時間', edit: true, f: (ms) => { const u = partsInTz(ms, 'UTC'); return `${fmtDate(u)}T${fmtTime(u)}Z`; } },
-  { k: 'rel', label: '相對時間', sans: true, tip: '離現在多久', f: (ms) => relative(ms, now.value) },
+  { k: 'iso', label: 'ISO 8601', tip: '含時差的標準格式', f: (ms, tz, w) => `${fmtDate(w)}T${fmtTime(w)}${isoOffset(offsetAt(ms, tz))}` },
+  { k: 'unix', label: 'Unix 秒', tip: '1970-01-01 UTC 起算的秒數', f: (ms) => String(Math.floor(ms / 1000)) },
+  { k: 'unixms', label: 'Unix 毫秒', tip: 'JavaScript Date.now() 的格式', f: (ms) => String(ms) },
+  { k: 'utc', label: 'UTC', tip: '換成世界協調時間', f: (ms) => { const u = partsInTz(ms, 'UTC'); return `${fmtDate(u)}T${fmtTime(u)}Z`; } },
+  { k: 'rel', label: '相對時間', sans: true, tip: '離現在多久（可以改寫成「3 天後」「2 小時前」「現在」）', f: (ms) => relative(ms, now.value) },
   { k: 'zh', label: '中文', sans: true, tip: '中文日期', f: (_ms, _tz, w) => `${w.y}年${w.mo}月${w.d}日 星期${WD[wdOf(w)]} ${fmtTime(w)}` },
   { k: 'roc', label: '民國', sans: true, tip: '民國紀年', f: (_ms, _tz, w) => `${rocYear(w.y)} ${w.mo} 月 ${w.d} 日` },
   { k: 'week', label: 'ISO 週', tip: '年-W週-星期幾（1 = 週一）', f: (_ms, _tz, w) => { const i = isoWeek(w.y, w.mo, w.d); return `${i.weekYear}-W${pad(i.week)}-${i.weekday}`; } },
@@ -36,22 +37,36 @@ const DEFS: Def[] = [
   { k: 'excel', label: 'Excel', tip: 'Excel／Google 試算表的日期序號（當地時間）', f: (_ms, _tz, w) => plainNum((wallKey(w) - utcMs(1899, 12, 30)) / DAY, 6) },
   { k: 'http', label: 'HTTP', tip: 'HTTP 標頭的 GMT 格式', f: (ms) => { const u = partsInTz(ms, 'UTC'); return `${EN_WD[wdOf(u)]}, ${pad(u.d)} ${EN_MO[u.mo - 1]} ${u.y} ${fmtTime(u)} GMT`; } },
 ];
-/** Pinned formats first, in the order they were pinned; the rest keep their place. */
+/** Every format, in the order set here; formats not in the saved order keep their usual place after it. */
 const ordered = computed(() => {
-  const pins = S.readPins.map((k) => DEFS.find((d) => d.k === k)).filter((d): d is Def => !!d);
-  return [...pins, ...DEFS.filter((d) => !pins.includes(d))];
+  const first = S.readOrder.map((k) => DEFS.find((d) => d.k === k)).filter((d): d is Def => !!d);
+  return [...first, ...DEFS.filter((d) => !first.includes(d))];
 });
 const vals = computed(() => {
   const sMs = startMs.value, eMs = endMs.value;
   const sW = partsInTz(sMs, S.startTz), eW = eMs != null ? partsInTz(eMs, S.endTz) : null;
   return ordered.value.map((d) => ({ ...d, s: d.f(sMs, S.startTz, sW), e: eW && eMs != null ? d.f(eMs, S.endTz, eW) : '' }));
 });
-function pin(k: string, label: string) {
-  S.readPins = [k, ...S.readPins.filter((x) => x !== k)];
-  more.value = false;
-  toast(`「${label}」移到最上面`);
+const isDefault = computed(() => ordered.value.every((d, i) => d === DEFS[i]));
+
+/* ---------- order: drag by the grip ---------- */
+let sortSession = 0;
+function reorder(from: number, to: number) {
+  const keys = moved(ordered.value.map((d) => d.k), from, to);
+  commit(() => { S.readOrder = keys; }, { key: `rd-order-${sortSession}`, hold: true, label: '調整讀法順序' });
 }
-function resetPins() { S.readPins = []; toast('讀法恢復預設順序'); }
+function sorted(from: number, to: number) {
+  const d = ordered.value[to];
+  const where = to < shown.value.length ? `第 ${to + 1} 個` : '面板放不下的地方，在「全部寫法」裡';
+  toast(`「${d.label}」移到${where}`, undo);
+  sortSession++;
+}
+const body = ref<HTMLElement | null>(null);
+const popList = ref<HTMLElement | null>(null);
+const panelSort = useDragSort({ rows: () => [...(body.value?.querySelectorAll<HTMLElement>(':scope > .rd-row[data-k]') || [])], move: reorder, done: sorted });
+const popSort = useDragSort({ rows: () => [...(popList.value?.querySelectorAll<HTMLElement>(':scope > .rd-row[data-k]') || [])], move: reorder, done: sorted });
+function resetOrder() { commit(() => { S.readOrder = []; }, { label: '讀法恢復預設順序', say: '讀法恢復預設順序' }); }
+
 /** The row whose value was just copied: its label says so. */
 const hot = (k: string) => !!copiedKey.value && copiedKey.value.startsWith(`rd-${k}-`);
 function copyTable() {
@@ -62,7 +77,6 @@ function copyTable() {
 }
 const isoDur = computed(() => { const c = calGap.value; return c ? isoDuration(c, c.sign) : ''; });
 
-const body = ref<HTMLElement | null>(null);
 const { w: bodyW, h: bodyH } = useSize(body);
 const cols = computed(() => bodyW.value > 0 && bodyW.value >= 38 * remPx.value);
 const rowH = computed(() => (cols.value || !hasEnd.value ? 2.15 : 2.95) * remPx.value);
@@ -71,7 +85,7 @@ const { h: unitsInner } = useSize(unitsBox);
 const unitsH = computed(() => (hasEnd.value ? unitsInner.value + 0.7 * remPx.value : 0));
 const lenH = computed(() => (hasEnd.value ? 2.15 * remPx.value : 0));
 const fit = computed(() => {
-  // the foot (另外 N 種 · 複製表格) is always there
+  // the foot (全部寫法 · 複製表格) is always there
   const room = bodyH.value - unitsH.value - lenH.value - 2.3 * remPx.value;
   if (DEFS.length * rowH.value <= room) return DEFS.length;
   return Math.max(0, Math.floor(room / rowH.value));
@@ -81,7 +95,48 @@ const rest = computed(() => vals.value.slice(shown.value.length));
 const moreBtn = ref<HTMLElement | null>(null);
 const more = ref(false);
 const nowSec = computed(() => String(Math.floor(now.value / 1000)));
-function editVal(which: End, v: string) { more.value = false; S.active = which; focusCommand(v, true); }
+
+/* ---------- typing a reading back, right where it is ---------- */
+const SUBJ = { start: '開始', end: '結束' } as const;
+const edit = ref<{ k: string; which: End; where: 'panel' | 'pop' } | null>(null);
+const editText = ref('');
+const editEl = ref<HTMLInputElement | null>(null);
+const setEditEl = (el: unknown) => { if (el) editEl.value = el as HTMLInputElement; };
+const isEditing = (k: string, which: End, where: 'panel' | 'pop') => !!edit.value && edit.value.k === k && edit.value.which === which && edit.value.where === where;
+function startEdit(k: string, which: End, where: 'panel' | 'pop', v: string) {
+  S.active = which;
+  edit.value = { k, which, where };
+  editText.value = v;
+  nextTick(() => { editEl.value?.focus(); editEl.value?.select(); });
+}
+let skipBlur = false;
+function applyEdit() {
+  const ed = edit.value;
+  if (!ed) return;
+  edit.value = null;
+  if (skipBlur) { skipBlur = false; return; }
+  const cur = wallOf(ed.which);
+  const def = DEFS.find((d) => d.k === ed.k)!;
+  const r = vals.value.find((x) => x.k === ed.k);
+  if (!cur || !r || editText.value.trim() === (ed.which === 'start' ? r.s : r.e)) return;
+  const back = parseReading(ed.k, editText.value, {
+    now: Date.now(), tz: tzOf(ed.which), cur,
+    parseSpanText: (t) => {
+      const x = interpretSpanText(t);
+      if (x.kind !== 'span') return null;
+      return { sign: x.span.sign, ms: (from) => addDuration(from, tzOf(ed.which), x.span, x.span.sign, x.span.biz).ms };
+    },
+  });
+  if (!back) { toast(`看不懂這個${def.label}的寫法`); return; }
+  const n = SUBJ[ed.which];
+  const ok = commit(() => ('live' in back ? (setLive(ed.which, true), true) : 'ms' in back ? setInstant(ed.which, back.ms) : setWall(ed.which, back.wall)),
+    { label: `改寫${n}的 ${def.label}`, say: () => ('live' in back ? `${n}跟著現在走` : `${n}：${fmtDT(wallOf(ed.which)!)}`) });
+  if (ok) bump(ed.which);
+}
+function editKey(e: KeyboardEvent) {
+  if (e.key === 'Enter') { e.preventDefault(); applyEdit(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); skipBlur = true; editEl.value?.blur(); edit.value = null; skipBlur = false; }
+}
 </script>
 
 <template>
@@ -99,29 +154,52 @@ function editVal(which: End, v: string) { more.value = false; S.active = which; 
         <span class="rd-k" v-tip="'ISO 8601 的長度寫法'">{{ copiedKey === 'rd-dur' ? '已複製' : '長度' }}</span>
         <span class="rd-v"><CopyBtn class="mono" :text="isoDur" k="rd-dur" label="ISO 長度" /></span>
       </div>
-      <div v-for="r in shown" :key="r.k" class="rd-row" :class="{ hot: hot(r.k) }">
-        <span class="rd-k" v-tip="r.tip">{{ hot(r.k) ? '已複製' : r.label }}</span>
-        <span class="rd-v"><i v-if="hasEnd && !cols" class="node" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" v-tip="`改寫開始的 ${r.label}`" :aria-label="`改寫開始的 ${r.label}`" @click="editVal('start', r.s)"><Icon name="edit" /></button></span>
-        <span v-if="hasEnd" class="rd-v"><i v-if="!cols" class="node end" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" v-tip="`改寫結束的 ${r.label}`" :aria-label="`改寫結束的 ${r.label}`" @click="editVal('end', r.e)"><Icon name="edit" /></button></span>
+      <div v-for="(r, i) in shown" :key="r.k" class="rd-row" :data-k="r.k" :class="{ hot: hot(r.k), lifted: panelSort.dragging.value === i }">
+        <span class="rd-k">
+          <button type="button" class="rd-grip" :aria-label="`拖曳或按 ↑↓ 調整「${r.label}」的位置`" v-tip="'拖曳調整順序；也可以按 ↑↓'"
+            @pointerdown="panelSort.down($event, i)" @pointermove="panelSort.move" @pointerup="panelSort.up" @pointercancel="panelSort.up" @keydown="panelSort.key($event, i)"><Icon name="grip" /></button>
+          <span class="rd-kl" v-tip="r.tip">{{ hot(r.k) ? '已複製' : r.label }}</span>
+        </span>
+        <span class="rd-v"><i v-if="hasEnd && !cols" class="node" aria-hidden="true" />
+          <input v-if="isEditing(r.k, 'start', 'panel')" :ref="setEditEl" v-model="editText" class="rd-in" :class="r.sans ? 'tnum' : 'mono'" :aria-label="`開始的 ${r.label}`" spellcheck="false" autocomplete="off" @keydown="editKey" @blur="applyEdit" />
+          <template v-else><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /><button type="button" class="rd-edit" v-tip="`改寫開始的 ${r.label}`" :aria-label="`改寫開始的 ${r.label}`" @click="startEdit(r.k, 'start', 'panel', r.s)"><Icon name="edit" /></button></template>
+        </span>
+        <span v-if="hasEnd" class="rd-v"><i v-if="!cols" class="node end" aria-hidden="true" />
+          <input v-if="isEditing(r.k, 'end', 'panel')" :ref="setEditEl" v-model="editText" class="rd-in" :class="r.sans ? 'tnum' : 'mono'" :aria-label="`結束的 ${r.label}`" spellcheck="false" autocomplete="off" @keydown="editKey" @blur="applyEdit" />
+          <template v-else><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /><button type="button" class="rd-edit" v-tip="`改寫結束的 ${r.label}`" :aria-label="`改寫結束的 ${r.label}`" @click="startEdit(r.k, 'end', 'panel', r.e)"><Icon name="edit" /></button></template>
+        </span>
       </div>
       <div class="rd-foot">
-        <button v-if="rest.length" ref="moreBtn" type="button" class="rd-more" :aria-expanded="more" v-tip="'看其他寫法，也可以把常用的釘到上面'" @click="more = !more">
-          <span class="ell">另外 {{ rest.length }} 種：{{ rest.map((r) => r.label).join('、') }}</span><Icon name="chevD" />
+        <button ref="moreBtn" type="button" class="rd-more" :aria-expanded="more" v-tip="'全部的寫法：拖曳排序，拖到線上面就會顯示在這裡'" @click="more = !more">
+          <span v-if="rest.length" class="ell">另外 {{ rest.length }} 種：{{ rest.map((r) => r.label).join('、') }}</span><span v-else class="ell">全部寫法・排序</span><Icon name="chevD" />
         </button>
-        <span v-else class="rd-fill" />
         <button type="button" class="rd-table" :class="{ ok: copiedKey === 'rd-table' }" v-tip="'把所有寫法複製成表格（Tab 分隔，可以直接貼進試算表）'" @click="copyTable"><Icon :name="copiedKey === 'rd-table' ? 'check' : 'copy'" />{{ copiedKey === 'rd-table' ? '已複製' : '複製表格' }}</button>
       </div>
     </div>
-    <Popover :open="more" :anchor="moreBtn" label="其他寫法" width="28rem" @close="more = false">
+    <Popover :open="more" :anchor="moreBtn" label="全部寫法" width="30rem" @close="more = false">
       <div class="rd-pop" :class="{ one: !hasEnd }">
-        <p class="rd-pop-how"><Icon name="copy" />點值複製　<Icon name="edit" />改寫　<Icon name="pin" />釘到上面，常用的就不必打開這裡</p>
-        <div v-for="r in rest" :key="r.k" class="rd-row" :class="{ hot: hot(r.k) }">
-          <span class="rd-k">{{ hot(r.k) ? '已複製' : r.label }}</span>
-          <span class="rd-v"><i v-if="hasEnd" class="node" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" :aria-label="`改寫開始的 ${r.label}`" @click="editVal('start', r.s)"><Icon name="edit" /></button></span>
-          <span v-if="hasEnd" class="rd-v"><i class="node end" aria-hidden="true" /><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /><button v-if="r.edit" type="button" class="rd-edit" :aria-label="`改寫結束的 ${r.label}`" @click="editVal('end', r.e)"><Icon name="edit" /></button></span>
-          <button type="button" class="rd-pin" :aria-label="`把 ${r.label} 釘到上面`" v-tip="'釘到上面'" @click="pin(r.k, r.label)"><Icon name="pin" /></button>
+        <p class="rd-pop-how"><Icon name="grip" />拖曳排序，線上面的會顯示在面板　<Icon name="copy" />點值複製　<Icon name="edit" />改寫</p>
+        <div ref="popList" class="rd-pop-list">
+          <template v-for="(r, i) in vals" :key="r.k">
+            <div v-if="i === shown.length && rest.length" class="rd-cut" aria-hidden="true"><span>以上顯示在面板</span></div>
+            <div class="rd-row" :data-k="r.k" :class="{ hot: hot(r.k), lifted: popSort.dragging.value === i, off: i >= shown.length }">
+              <span class="rd-k">
+                <button type="button" class="rd-grip" :aria-label="`拖曳或按 ↑↓ 調整「${r.label}」的位置`"
+                  @pointerdown="popSort.down($event, i)" @pointermove="popSort.move" @pointerup="popSort.up" @pointercancel="popSort.up" @keydown="popSort.key($event, i)"><Icon name="grip" /></button>
+                <span class="rd-kl">{{ hot(r.k) ? '已複製' : r.label }}</span>
+              </span>
+              <span class="rd-v"><i v-if="hasEnd" class="node" aria-hidden="true" />
+                <input v-if="isEditing(r.k, 'start', 'pop')" :ref="setEditEl" v-model="editText" class="rd-in" :class="r.sans ? 'tnum' : 'mono'" :aria-label="`開始的 ${r.label}`" spellcheck="false" autocomplete="off" @keydown="editKey" @blur="applyEdit" />
+                <template v-else><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.s" :k="`rd-${r.k}-s`" :label="`開始 ${r.label}`" /><button type="button" class="rd-edit" :aria-label="`改寫開始的 ${r.label}`" @click="startEdit(r.k, 'start', 'pop', r.s)"><Icon name="edit" /></button></template>
+              </span>
+              <span v-if="hasEnd" class="rd-v"><i class="node end" aria-hidden="true" />
+                <input v-if="isEditing(r.k, 'end', 'pop')" :ref="setEditEl" v-model="editText" class="rd-in" :class="r.sans ? 'tnum' : 'mono'" :aria-label="`結束的 ${r.label}`" spellcheck="false" autocomplete="off" @keydown="editKey" @blur="applyEdit" />
+                <template v-else><CopyBtn :class="r.sans ? 'tnum' : 'mono'" :text="r.e" :k="`rd-${r.k}-e`" :label="`結束 ${r.label}`" /><button type="button" class="rd-edit" :aria-label="`改寫結束的 ${r.label}`" @click="startEdit(r.k, 'end', 'pop', r.e)"><Icon name="edit" /></button></template>
+              </span>
+            </div>
+          </template>
         </div>
-        <button v-if="S.readPins.length" type="button" class="rd-reset" @click="resetPins">恢復預設順序</button>
+        <button v-if="!isDefault" type="button" class="rd-reset" @click="resetOrder">恢復預設順序</button>
       </div>
     </Popover>
   </section>
@@ -133,23 +211,31 @@ function editVal(which: End, v: string) { more.value = false; S.active = which; 
 .rd-legend .node { font-size: .7rem; margin-left: .35rem; }
 .rd-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: .35rem 1rem .7rem; overflow: hidden; }
 .rd-units { margin: .2rem 0 .5rem; flex: none; }
-.rd-row { display: grid; grid-template-columns: 4.9rem minmax(0, 1fr); grid-auto-rows: auto; column-gap: .7rem; align-items: center; padding: .3rem 0; border-top: 1px solid var(--hair); min-height: 2.15rem; flex: none; }
+.rd-row { display: grid; grid-template-columns: 5.9rem minmax(0, 1fr); grid-auto-rows: auto; column-gap: .6rem; align-items: center; padding: .3rem 0; border-top: 1px solid var(--hair); min-height: 2.15rem; flex: none; }
 .rd-row:first-child, .rd-units + .rd-row { border-top: 0; }
-.rd-row.len { grid-template-columns: 4.9rem minmax(0, 1fr) !important; }
 .rd-row .rd-v + .rd-v { grid-column: 2; }
-.cols .rd-row { grid-template-columns: 5.2rem minmax(0, 1fr) minmax(0, 1fr); }
+.cols .rd-row { grid-template-columns: 6.2rem minmax(0, 1fr) minmax(0, 1fr); }
 .cols .rd-row .rd-v + .rd-v { grid-column: 3; }
 .rd-row.len .rd-v + .rd-v { grid-column: auto; }
-.rd-row.len { grid-template-columns: 4.9rem minmax(0, 1fr) auto; }
-.cols .rd-row.len { grid-template-columns: 5.2rem minmax(0, 1fr) minmax(0, 1fr); }
-.rd-k { grid-row: span 2; font-size: var(--fs-s); font-weight: 600; color: var(--ink-3); white-space: nowrap; cursor: help; align-self: center; }
+.rd-row.len { grid-template-columns: 5.9rem minmax(0, 1fr) auto; }
+.cols .rd-row.len { grid-template-columns: 6.2rem minmax(0, 1fr) minmax(0, 1fr); }
+.rd-k { grid-row: span 2; display: flex; align-items: center; gap: .1rem; min-width: 0; font-size: var(--fs-s); font-weight: 600; color: var(--ink-3); white-space: nowrap; align-self: center; }
+.len .rd-k { padding-left: 1.45rem; cursor: help; }
+.rd-kl { min-width: 0; overflow: hidden; text-overflow: ellipsis; cursor: help; }
 .one .rd-k, .cols .rd-k, .len .rd-k { grid-row: auto; }
 .rd-v { display: flex; align-items: center; gap: .35rem; min-width: 0; line-height: 1.35; }
 .rd-v .node { font-size: var(--fs-xs); flex: none; }
 .rd-v :deep(.copy) { font-size: max(var(--floor), .82rem); color: var(--ink); }
 .len .rd-v :deep(.copy) { color: var(--accent); }
+/* the grip: always there, quiet until the row is under the pointer */
+.rd-grip { flex: none; display: grid; place-items: center; width: 1.35rem; height: 1.7rem; margin-left: -.3rem; border-radius: .4rem; color: var(--ink-4); cursor: grab; touch-action: none; }
+.rd-grip .ic { width: 1.05em; height: 1.05em; stroke-width: 3.2; }
+.rd-grip:hover, .rd-grip:focus-visible { color: var(--accent); background: var(--accent-wash); }
+.rd-row.lifted { position: relative; z-index: 3; background: var(--surface-2); box-shadow: 0 6px 18px -8px rgba(11, 18, 34, .35); border-radius: .6rem; }
+.rd-row.lifted .rd-grip { cursor: grabbing; color: var(--accent); }
+.rd-row.sorting { transition: none; }
+.rd-in { flex: 1; min-width: 0; height: 1.75rem; padding: 0 .4rem; margin: -.2rem 0; border-radius: .45rem; border: 1.5px solid var(--accent); background: var(--surface-2); color: var(--ink); font-size: max(var(--floor), .82rem); box-shadow: 0 0 0 3px var(--accent-wash-2); }
 .rd-foot { flex: none; display: flex; align-items: center; gap: .4rem; height: 2.2rem; margin-top: auto; padding-top: .15rem; }
-.rd-fill { flex: 1; }
 .rd-more { flex: 1; min-width: 0; display: flex; align-items: center; gap: .3rem; height: 2rem; margin-left: -.55rem; padding: 0 .55rem; border-radius: .6rem; font-size: max(var(--floor), .84rem); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-align: left; }
 .rd-more .ell { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rd-more:hover { background: var(--accent-wash); color: var(--accent); }
@@ -163,17 +249,18 @@ function editVal(which: End, v: string) { more.value = false; S.active = which; 
 .rd-how .ic { width: 1.05em; height: 1.05em; color: var(--accent); opacity: .8; }
 .rd-now em { font-style: normal; font-family: var(--f-sans); margin-right: .35em; color: var(--ink-3); }
 /* a row that was just copied */
-.rd-row.hot .rd-k { color: var(--good) !important; }
+.rd-row.hot .rd-kl { color: var(--good) !important; }
 .rd-row :deep(.copy.copied) { color: var(--good) !important; background: var(--good-wash); }
 .rd-pop-how { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem; margin-bottom: .35rem; font-size: var(--fs-xs); color: var(--ink-3); }
 .rd-pop-how .ic { width: 1.05em; height: 1.05em; color: var(--accent); }
-.rd-pop .rd-row { grid-template-columns: 4.9rem minmax(0, 1fr) auto; }
+.rd-pop-list { display: flex; flex-direction: column; }
+.rd-pop .rd-row { grid-template-columns: 5.9rem minmax(0, 1fr); }
 .rd-pop .rd-row .rd-v + .rd-v { grid-column: 2; }
-.rd-pop .rd-pin { grid-column: 3; grid-row: 1 / span 2; }
-.rd-pop.one .rd-pin { grid-row: 1; }
-.rd-pin { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: .55rem; color: var(--ink-3); }
-.rd-pin .ic { width: 1.05em; height: 1.05em; }
-.rd-pin:hover { background: var(--accent-wash); color: var(--accent); }
+.rd-pop .rd-row.off .rd-kl { color: var(--ink-4); }
+/* the line where the panel's room ends */
+.rd-cut { display: flex; align-items: center; gap: .5rem; margin: .25rem 0; font-size: var(--fs-xs); font-weight: 600; color: var(--accent); }
+.rd-cut::before, .rd-cut::after { content: ''; flex: 1; height: 0; border-top: 1.5px dashed var(--accent-line); }
+.rd-cut + .rd-row { border-top: 0; }
 .rd-reset { margin-top: .5rem; font-size: var(--fs-xs); color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
 .rd-reset:hover { color: var(--accent); }
 .rd-pop { padding: .5rem 1rem .6rem; }
@@ -185,7 +272,13 @@ function editVal(which: End, v: string) { more.value = false; S.active = which; 
 /* the row under the pointer lights up as a whole, so it is clear which pair of values belongs to which label */
 @media (hover: hover) {
   .rd-body > .rd-row:hover, .rd-pop .rd-row:hover { background: color-mix(in srgb, var(--accent) 4.5%, transparent); }
-  .rd-row:hover .rd-k { color: var(--ink-2) !important; }
+  .rd-row:hover .rd-kl { color: var(--ink-2) !important; }
+  .rd-row:hover .rd-grip { color: var(--ink-3); }
 }
-.rd-body > .rd-row { margin: 0 -.5rem; padding-left: .5rem; padding-right: .5rem; border-radius: .55rem; }
+.rd-body > .rd-row, .rd-pop .rd-row { margin: 0 -.5rem; padding-left: .5rem; padding-right: .5rem; border-radius: .55rem; }
+/* fingers need more than the drawn size */
+@media (pointer: coarse) {
+  .rd-grip { width: 1.9rem; height: 2.1rem; }
+  .rd-edit { width: 2rem; height: 2rem; margin: -.4rem 0; }
+}
 </style>

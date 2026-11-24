@@ -70,6 +70,8 @@ function onPaste(e: ClipboardEvent) {
   e.preventDefault();
   const list = interpret(t);
   const first = list.find((s) => s.apply);
+  // a range says where both ends go, so it needs no choosing
+  if (first && first.kind === 'range') { first.apply!(); bump('start'); bump('end'); return; }
   if (first && (first.kind === S.active) && list.filter((s) => s.apply).length <= 2) {
     first.apply!();
     bump(S.active);

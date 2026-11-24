@@ -17,8 +17,10 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 const EXAMPLES: [string, string][] = [
   ['2026-12-25 18:00', '日期與時刻'],
   ['1795380034', 'Unix 時間戳（秒、毫秒都可以）'],
+  ['2000/1/1/20:34', '日期的寫法隨意：明天下午3點、下週五、民國115年…'],
   ['+30天', '結束 = 開始 + 30 天'],
-  ['3個月後', '也可以寫「前／後」'],
+  ['3天前', '從現在往前或往後算'],
+  ['2000/1/1 到 現在', '一次設定開始和結束'],
   ['東京 15:00', '某個城市的時間'],
   ['W12', '移到第 12 週的同一天'],
   ['47m × 16', '時長加減乘除'],
@@ -33,6 +35,7 @@ function apply(s: Suggestion | undefined) {
   s.apply();
   if (s.kind === 'start' || s.kind === 'end') { S.active = s.kind; bump(s.kind); }
   else if (s.kind === 'span') bump('end');
+  else if (s.kind === 'range') { bump('start'); bump('end'); }
   else if (s.kind === 'zone') bump('zones');
   text.value = '';
   open.value = false;
@@ -59,7 +62,7 @@ watch(() => ui.commandReq, () => {
   nextTick(() => { input.value?.focus(); if (!ui.commandText || ui.commandSelect) input.value?.select(); });
 });
 
-const KIND_ICON: Record<Suggestion['kind'], string> = { start: '', end: '', span: 'span', zone: 'globe', info: 'info', calc: 'calc' };
+const KIND_ICON: Record<Suggestion['kind'], string> = { start: '', end: '', span: 'span', zone: 'globe', info: 'info', calc: 'calc', range: 'span' };
 const placeholder = computed(() => (props.compact ? '輸入日期、+30天、東京 15:00…' : '輸入任何東西：日期、時間戳、+30天、東京 15:00、W12、47m × 16'));
 </script>
 

@@ -1,16 +1,19 @@
 <script setup lang="ts">
 /* The answer: the gap between start and end, in the middle of the equation.
-   Fixed end: the measured gap (a countdown while the start is live).
-   Linked end: end = start + this span. Typing or dragging a number here links. */
+   Fixed ends: the measured gap (a countdown or a count-up while one end is now).
+   Linked: end = start + this span, or start = end − this span when the end is held at now.
+   Typing or dragging a number here links; a date typed here moves the end there. */
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
 import DurationCalc from './DurationCalc.vue';
 import {
   S, now, startMs, endMs, hasEnd, calGap, gapSec, linkErr, commit, setLink, checkSpan, swapEnds, historyMark, rollback, toast, undo,
-  PERIOD_NAMES, pulse, bump, wallOf, presetProgress,
+  PERIOD_NAMES, pulse, bump, wallOf, presetProgress, linkTarget, linkSentence, followText, negExpr, setWall, setInstant, tzOf,
 } from '../state/store';
-import { type Span, type SpanInput, interpretSpanText, parseSpan, fmtSpan, pad, partsInTz, WD, wdOf, fmtDT, fmtClock, clamp, DAY, SEC } from '../core/time';
+import { parseDateTimeText } from '../core/parse';
+import { parseOptsFor } from '../state/command';
+import { type Span, type SpanInput, interpretSpanText, parseSpan, fmtSpan, pad, partsInTz, WD, wdOf, fmtDT, fmtClock, clamp, wallKey, DAY, SEC } from '../core/time';
 import { spanTokens, nfMax, durWords } from '../core/format';
 import { ui, openDuration } from '../state/ui';
 import { fitText } from '../composables/fit';
@@ -18,17 +21,25 @@ import { useSize, fontsTick } from '../composables/size';
 
 const props = defineProps<{ compact?: boolean; tight?: boolean }>();
 const mode = computed(() => (S.link ? 'link' : hasEnd.value ? 'fixed' : 'empty'));
+const N = { start: '開始', end: '結束' } as const;
+/** The one end that is now, when exactly one is. */
+const liveEnd = computed(() => (S.live && !S.endLive ? 'start' : S.endLive && !S.live ? 'end' : null));
 const title = computed(() => {
   if (mode.value === 'link') return '連動';
-  if (mode.value === 'fixed' && S.live) return (gapSec.value ?? 0) >= 0 ? '倒數' : '已過';
+  if (mode.value === 'fixed' && liveEnd.value) {
+    const g = gapSec.value ?? 0;
+    // start = now: what is left until the end; end = now: what has passed since the start
+    return (liveEnd.value === 'start' ? g >= 0 : g < 0) ? '倒數' : '已過';
+  }
   return '間隔';
 });
-const titleTip = computed(() => ({
-  連動: '結束 = 開始 + 這段間隔。改開始，結束跟著移動',
-  倒數: '開始是現在，所以這是到結束還剩多少時間',
-  已過: '開始是現在，結束已經過去了這麼久',
-  間隔: hasEnd.value ? '開始到結束相隔多久。改這裡會讓結束跟著開始移動' : '輸入一段間隔，結束就會算出來',
-}[title.value]));
+const titleTip = computed(() => {
+  if (title.value === '連動') return `${linkSentence()}。${followText()}`;
+  if (title.value === '倒數') return liveEnd.value === 'start' ? '開始是現在，所以這是到結束還剩多少時間' : '結束是現在，所以這是到開始還有多久';
+  if (title.value === '已過') return liveEnd.value === 'start' ? '開始是現在，結束已經過去了這麼久' : '結束是現在，所以這是從開始到現在過了多久';
+  if (!hasEnd.value) return '輸入一段間隔，結束就會算出來；也可以直接輸入結束的日期';
+  return `開始到結束相隔多久。改這裡會讓${N[linkTarget()]}跟著移動`;
+});
 
 const heroSpan = computed<Span | null>(() => {
   if (S.link) return { ...S.link.span };
@@ -76,6 +87,17 @@ function startEdit(initial?: string) {
   });
 }
 const parsed = computed<SpanInput | null>(() => (editing.value ? interpretSpanText(text.value) : null));
+/** A moment typed where a length goes ("2026/12/25", "到 12/25"): the end that the span would move goes there. */
+const typedDate = computed(() => {
+  if (!editing.value) return null;
+  const t = text.value.trim().replace(/^(到|至|~|→|until|to)\s*/i, '');
+  if (!t || /^[+\-−＋]/.test(t) || parsed.value?.kind === 'span' || parsed.value?.kind === 'ratio') return null;
+  const to = linkTarget();
+  const p = parseDateTimeText(t, parseOptsFor(to));
+  if (!p || p.kind === 'time') return null;
+  const ms = p.kind === 'instant' ? p.ms : p.offset != null ? wallKey(p.wall) - p.offset : null;
+  return { to, ms, wall: p.kind === 'wall' && p.offset == null ? p.wall : partsInTz(ms!, tzOf(to)) };
+});
 function onInput() {
   const r = interpretSpanText(text.value);
   if (r.kind !== 'span') return;
@@ -87,12 +109,18 @@ function onInput() {
 }
 function finish() {
   if (!editing.value) return;
+  const d = typedDate.value;
   editing.value = false;
   if (cancelled) return;
+  if (d && !changed) {
+    const ok = commit(() => (d.ms != null ? setInstant(d.to, d.ms) : setWall(d.to, d.wall)), { label: `設定${N[d.to]}`, say: `${N[d.to]}：${fmtDT(d.wall)}` });
+    if (ok) bump(d.to);
+    return;
+  }
   const r = interpretSpanText(text.value);
   if (r.kind === 'span' && r.expr && S.link) exprNote.value = { src: text.value.trim(), expr: S.link.expr, text: tape(r) };
   else if (changed) exprNote.value = null;
-  if (changed && S.link) { toast(`結束 = 開始 ${S.link.expr}，開始改了會跟著動`, undo); bump('end'); }
+  if (changed && S.link) { toast(`${linkSentence()}，${followText()}`, undo); bump(S.linkTo); }
 }
 function cancel() { cancelled = true; rollback(mark); editing.value = false; }
 function nudge(dir: number) {
@@ -115,6 +143,11 @@ function onKey(e: KeyboardEvent) {
   else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); nudge((e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1)); }
 }
 watch(() => ui.spanEditReq, () => startEdit(ui.spanEditText || undefined));
+/** ↑ ↓ on the span (not yet typing): open it and step the number under the caret, the last one. */
+function arrowStep(dir: number, e: KeyboardEvent) {
+  startEdit();
+  nextTick(() => { const el = input.value; if (el) { el.setSelectionRange(el.value.length, el.value.length); nudge(dir * (e.shiftKey ? 10 : 1)); } });
+}
 function tape(r: SpanInput): string {
   if (r.kind === 'span' && r.expr && r.result && !r.result.empty) return `= ${fmtClock(r.result.value)}（${durWords(r.result.value)}）`;
   if (r.kind === 'ratio') return `= ${nfMax(r.value, 4)} 倍`;
@@ -135,11 +168,19 @@ function numAt(x: number): HTMLElement | null {
   });
   return bd <= 14 ? best : null;
 }
+/** Drag a number: it counts toward zero and, when it is the only part left, on through to the other side. */
 function bumpSpan(base: Span, k: string, n: number): Span {
   const sp = { ...base };
-  if (k === 'y' || k === 'mo' || k === 'w' || k === 'd') sp[k] = Math.max(0, sp[k] + n);
-  else {
-    const t = Math.max(0, sp.h * 3600 + sp.mi * 60 + sp.s + n * ({ h: 3600, mi: 60, s: 1 } as Record<string, number>)[k]);
+  const dir = n * sp.sign;
+  if (k === 'y' || k === 'mo' || k === 'w' || k === 'd') {
+    const v = sp[k] + dir;
+    const alone = (['y', 'mo', 'w', 'd', 'h', 'mi', 's'] as const).every((x) => x === k || !sp[x]);
+    if (v < 0 && alone) { sp[k] = -v; sp.sign = -sp.sign as 1 | -1; } else sp[k] = Math.max(0, v);
+  } else {
+    const per = ({ h: 3600, mi: 60, s: 1 } as Record<string, number>)[k];
+    let t = sp.h * 3600 + sp.mi * 60 + sp.s + dir * per;
+    if (t < 0 && !sp.y && !sp.mo && !sp.w && !sp.d) { t = -t; sp.sign = -sp.sign as 1 | -1; }
+    t = Math.max(0, t);
     sp.h = Math.floor(t / 3600); sp.mi = Math.floor((t % 3600) / 60); sp.s = t % 60;
   }
   return sp;
@@ -174,7 +215,7 @@ function onUp(e: PointerEvent) {
   const s = scrub;
   scrub = null; hotK.value = null;
   if (!s.moved) { if (e.type === 'pointerup') startEdit(); return; }
-  if (s.steps && S.link) { exprNote.value = null; toast(`結束 = 開始 ${S.link.expr}，開始改了會跟著動`, undo); }
+  if (s.steps && S.link) { exprNote.value = null; toast(`${linkSentence()}，${followText()}`, undo); }
 }
 
 /* ---------- quick spans ---------- */
@@ -186,8 +227,9 @@ function quick(t: string) {
   const c = checkSpan(sp);
   if (!c.ok) { toast(c.err); return; }
   preview.value = null; exprNote.value = null;
-  commit(() => setLink(sp), { label: `間隔 ${fmtSpan(sp)}`, say: () => `結束 = 開始 ${fmtSpan(sp)}：${fmtDT(wallOf('end')!)}` });
-  bump('end');
+  const to = linkTarget();
+  commit(() => setLink(sp, to), { label: `間隔 ${fmtSpan(sp)}`, say: () => `${linkSentence(to, fmtSpan(sp))}：${fmtDT(wallOf(to)!)}` });
+  bump(to);
 }
 function hoverQuick(t: string | null, e?: PointerEvent) {
   if (!t) { preview.value = null; return; }
@@ -202,7 +244,7 @@ function toggleBiz() {
   const c = checkSpan(sp);
   if (!c.ok) { toast(c.err); return; }
   if (editing.value) { text.value = fmtSpan(sp); onInput(); return; }
-  commit(() => setLink(sp), { label: sp.biz ? '只算工作日' : '改回日曆天', say: () => (sp.biz ? `只算週一到週五：${fmtDT(wallOf('end')!)}` : `改回日曆天：${fmtDT(wallOf('end')!)}`) });
+  commit(() => setLink(sp), { label: sp.biz ? '只算工作日' : '改回日曆天', say: () => (sp.biz ? `只算週一到週五：${fmtDT(wallOf(S.linkTo)!)}` : `改回日曆天：${fmtDT(wallOf(S.linkTo)!)}`) });
 }
 function swap() { commit(swapEnds, { label: '交換開始與結束', say: '已交換開始與結束' }); bump('start'); bump('end'); }
 
@@ -224,12 +266,15 @@ const PERIOD_PAST: Record<string, string> = { day: '今天', week: '本週', mon
 const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() => {
   const p = parsed.value;
   if (editing.value && p) {
+    const d = typedDate.value;
+    if (d) return { segs: [{ t: `${N[d.to]} → ` }, { t: whenFull(d.wall), b: true }, { t: ' · Enter 確定，Esc 取消' }], tone: 'pre' };
     if (p.kind === 'error') return { segs: [{ t: p.message }], tone: p.soft ? 'soft' : 'err' };
-    if (p.kind === 'empty') return { segs: [{ t: '輸入 +30天、1年6個月、20工作日、1h + 45m 或 47m × 16' }], tone: 'soft' };
+    if (p.kind === 'empty') return { segs: [{ t: '輸入 +30天、1年6個月、20工作日、47m × 16，或結束的日期' }], tone: 'soft' };
     if (p.kind === 'ratio') return { segs: [{ t: tape(p), b: true }, { t: ' · 結果是倍數，只顯示，不會改變結束' }], tone: 'pre' };
-    const c = checkSpan(p.span);
+    const to = linkTarget();
+    const c = checkSpan(p.span, to);
     if (!c.ok) return { segs: [{ t: c.err }], tone: 'err' };
-    return { segs: [...(p.expr ? [{ t: tape(p) + ' ', b: false }] : []), { t: '結束 → ' }, { t: whenFull(c.w), b: true }, { t: ' · Enter 確定，Esc 取消' }], tone: 'pre' };
+    return { segs: [...(p.expr ? [{ t: tape(p) + ' ', b: false }] : []), { t: `${N[to]} → ` }, { t: whenFull(c.w), b: true }, { t: ' · Enter 確定，Esc 取消' }], tone: 'pre' };
   }
   if (preview.value) return { segs: [{ t: preview.value }], tone: 'pre' };
   if (linkErr.value) return { segs: [{ t: linkErr.value }], tone: 'err' };
@@ -239,13 +284,23 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
     return { segs: [{ t: '點上面輸入 +30天、3個月，或直接填結束的日期' }], tone: 'soft' };
   }
   if (S.link) {
-    const ex = S.link.expr;
-    if (S.live) return { segs: [{ t: `結束 = 現在 ${ex}，跟著時間走 · ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
+    const ex = S.link.expr, toEnd = S.linkTo === 'end';
+    const anchorLive = toEnd ? S.live : S.endLive;
+    if (anchorLive) {
+      return toEnd
+        ? { segs: [{ t: `結束 = 現在 ${ex}，跟著時間走 · ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' }
+        : { segs: [{ t: `開始 = 現在 ${negExpr(ex)}，跟著時間走 · ` }, { t: whenShort(sMs, S.startTz), b: true }], tone: '' };
+    }
     const cal = S.link.span.y || S.link.span.mo || S.link.span.w || S.link.span.biz;
-    if (cal) return { segs: [{ t: `結束 = 開始 ${ex} · 實際 ` }, { t: left(Math.abs(eMs - sMs)), b: true }], tone: '' };
-    return { segs: [{ t: `結束 = 開始 ${ex}，開始改了結束跟著動` }], tone: '' };
+    if (cal) return { segs: [{ t: `${linkSentence()} · 實際 ` }, { t: left(Math.abs(eMs - sMs)), b: true }], tone: '' };
+    return { segs: [{ t: `${linkSentence()}，${followText()}` }], tone: '' };
   }
   const endName = S.endPreset ? PERIOD_NAMES[S.endPreset] : '結束';
+  if (S.live && S.endLive) return { segs: [{ t: '開始和結束都是現在 · 把其中一端改成別的時刻' }], tone: 'soft' };
+  if (S.endLive) {
+    if (sMs > n) return { segs: [{ t: '結束是現在 · 開始還有 ' }, { t: left(sMs - n), b: true }], tone: '' };
+    return { segs: [{ t: '從 ' }, { t: whenShort(sMs, S.startTz), b: true }, { t: ' 到現在' }], tone: '' };
+  }
   if (S.live) {
     if (presetProgress.value != null) return { segs: [{ t: `${PERIOD_PAST[S.endPreset!]}已過 ` }, { t: `${nfMax(presetProgress.value * 100, 1)}%`, b: true }, { t: ` · ${endName} ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
     return { segs: [{ t: `${eMs < n ? '已過' : '距'}${endName} · ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
@@ -298,7 +353,7 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
       <div v-else ref="line" class="hero-line" role="button" tabindex="0" :aria-label="mode === 'empty' ? '輸入間隔' : `間隔 ${toks.map((t) => ('v' in t ? t.v : ':')).join('')}，點一下修改`"
         :style="{ cursor: canHover ? 'ew-resize' : 'text' }" v-tip="mode === 'empty' ? '點一下輸入間隔，例如 +30天' : '點一下輸入；按住數字左右拖曳可以調整'"
         @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @pointerleave="canHover = null"
-        @keydown.enter.prevent="startEdit()" @keydown.space.prevent="startEdit()">
+        @keydown.enter.prevent="startEdit()" @keydown.space.prevent="startEdit()" @keydown.up.prevent="arrowStep(1, $event)" @keydown.down.prevent="arrowStep(-1, $event)">
         <template v-if="toks.length">
           <template v-for="(t, i) in toks" :key="i">
             <span v-if="t.t === 'num'" class="hn" :class="{ hot: hotK === t.k, can: canHover === t.k }" :data-k="t.k"><span v-if="t.k === 's'" :key="t.v" class="roll">{{ t.v }}</span><template v-else>{{ t.v }}</template></span>

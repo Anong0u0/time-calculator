@@ -95,8 +95,10 @@ const hands = computed(() => {
           <li>月曆標題可以直接<b>打年份</b>跳過去；在月曆上捲動滾輪換月，在週條上換年；點週次選整週。</li>
           <li>網址會跟著開始、結束、時區更新，可以直接<b>加入書籤或分享</b>（右上 <span class="hk"><Icon name="link" /></span> 複製連結）。</li>
           <li>中間的間隔可以<b>左右拖曳</b>數字，或點一下輸入 <code>+30天</code>、<code>47m × 16</code>。</li>
-          <li>時區條和月曆上的 <i class="node" /> <i class="node end" /> 可以拖曳；點一下會移動比較近的那一端。</li>
-          <li>任何文字（日期、時間戳、東京 15:00）都可以打在最上面的框，或在空白處直接貼上。</li>
+          <li>時區條和月曆上的 <i class="node" /> <i class="node end" /> 可以拖曳，只移動那一端；點一下會移動比較近的那一端。手機上月曆滑動換月。</li>
+          <li>任何文字都可以打在最上面的框，或在空白處直接貼上：日期怎麼寫都行（<code>2000/1/1/20:34</code>、<code>明天下午3點</code>、<code>民國115年</code>），也可以是範圍（<code>2000/1/1 到 現在</code>）或 <code>3天前</code>。</li>
+          <li>開始和結束都可以設成<b>現在</b>；結束是現在時輸入 <code>+30天</code>，開始會跟著變成「現在 − 30 天」。</li>
+          <li>讀法、時區列可以<b>拖曳把手</b>排順序；讀法的每個值都可以點筆在原地改寫。</li>
           <li><span class="kbd">{{ mod }}K</span> 或 <span class="kbd">/</span> 輸入，<span class="kbd">{{ mod }}Z</span> 復原，<span class="kbd">{{ isMac ? '⇧⌘Z' : 'Ctrl Y' }}</span> 重做。</li>
         </ul>
       </div>

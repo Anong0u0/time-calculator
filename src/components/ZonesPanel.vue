@@ -1,14 +1,18 @@
 <script setup lang="ts">
 /* Day scale: the same moment in every zone. Each row shows both ends; the strips share one 24-hour axis
-   where ● and ○ can be dragged. A click moves whichever end is nearer. */
+   where ● and ○ can be dragged. A click moves whichever end is nearer (with no end yet, it makes one, as the calendar does).
+   ‹ › walk the axis a day at a time; the axis holds still while something is dragged on it.
+   On touch, sliding the finger away from the strip while dragging gives minutes instead of quarter hours.
+   Rows are put in order by dragging their grip. */
 import { ref, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
 import TzPicker from './TzPicker.vue';
 import WorldMap from './WorldMap.vue';
 import {
-  S, type End, now, startMs, endMs, hasEnd, wallOf, tzOf, zoneRows, commit, setInstant, setStartTz, setEndTz, addZoneRow, removeZoneRow, toast, undo, pulse, bump, ZMAX,
+  S, type End, now, startMs, endMs, hasEnd, wallOf, tzOf, zoneRows, commit, setInstant, setStartTz, setEndTz, addZoneRow, removeZoneRow, toast, undo, pulse, bump, ZMAX, orderZones,
 } from '../state/store';
+import { useDragSort, moved } from '../composables/dragSort';
 import { type Wall, partsInTz, offsetAt, toInstant, addDaysWall, pad, WD, wdOf, dayNum, clamp, fmtDT, fmtOffset, HOUR, MIN, DAY } from '../core/time';
 import { zoneName, sameZone, tzLongName } from '../core/zones';
 import { clockOf } from '../state/command';
@@ -19,17 +23,27 @@ const SUBJ = { start: '開始', end: '結束' } as const;
 const winPick = ref<End>('start');
 const winEnd = computed<End>(() => (winPick.value === 'end' && hasEnd.value ? 'end' : 'start'));
 const dayKey = (w: Wall) => `${w.y}-${w.mo}-${w.d}`;
-const win = computed(() => {
+/** Days the axis was walked away from the end it shows (‹ ›). */
+const dayOff = ref(0);
+interface Win { a: number; b: number; tz: string; key: string; d0: Wall }
+/** While something is dragged, the axis stays where it was: the dragged end can't pull the day out from under the pointer. */
+const frozen = ref<Win | null>(null);
+const liveWin = computed<Win>(() => {
   const which = winEnd.value, tz = tzOf(which), w = wallOf(which)!;
-  const d0 = { ...w, h: 0, mi: 0, s: 0 };
+  const d0 = addDaysWall({ ...w, h: 0, mi: 0, s: 0 }, dayOff.value);
   return { a: toInstant(d0, tz), b: toInstant(addDaysWall(d0, 1), tz), tz, key: `${tz}|${dayKey(d0)}`, d0 };
 });
+const win = computed<Win>(() => frozen.value || liveWin.value);
+// the end's own day changed elsewhere: show its day again
+watch(() => { const w = wallOf(winEnd.value); return w ? `${winEnd.value}|${dayKey(w)}` : ''; }, () => { if (!frozen.value) dayOff.value = 0; });
+function walk(k: number) { dayOff.value += k; }
 const sameDay = computed(() => {
   if (endMs.value == null) return true;
   const e = partsInTz(endMs.value, S.endTz), s = partsInTz(startMs.value, S.startTz);
   return dayKey(e) === dayKey(s);
 });
 watch(hasEnd, (h) => { if (!h) winPick.value = 'start'; });
+function showEnd(which: End) { winPick.value = which; dayOff.value = 0; }
 
 /* ---------- geometry ---------- */
 const body = ref<HTMLElement | null>(null);
@@ -174,8 +188,16 @@ let drag: Drag | null = null, session = 0;
 const dragging = ref<End | null>(null);
 const ghost = ref<number | null>(null);
 function frac(e: PointerEvent, el: HTMLElement) { const r = el.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1); }
+/** Minutes with Alt or Shift, or (on touch) with the finger slid away from the strip; quarter hours otherwise. */
+function fineAt(e: PointerEvent, el: HTMLElement) {
+  if (e.altKey || e.shiftKey) return true;
+  const r = el.getBoundingClientRect();
+  return e.pointerType !== 'mouse' && (e.clientY < r.top - 36 || e.clientY > r.bottom + 36);
+}
 function snapAt(f: number, fine: boolean) { const t = win.value.a + f * (win.value.b - win.value.a); const q = fine ? MIN : 15 * MIN; return Math.round(t / q) * q; }
 function nearest(f: number): End {
+  // no end yet: a click makes one, the same as on the calendar
+  if (!hasEnd.value) return 'end';
   const cand: [End, number][] = [];
   if (inWin(xs.value)) cand.push(['start', Math.abs(f - xs.value)]);
   if (inWin(xe.value)) cand.push(['end', Math.abs(f - xe.value!)]);
@@ -185,6 +207,7 @@ function nearest(f: number): End {
 }
 function moveTo(which: End, t: number) {
   const cur = which === 'start' ? startMs.value : endMs.value;
+  S.active = which;
   if (cur === t) return;
   commit(() => setInstant(which, t), { key: `zdrag-${drag?.session ?? ++session}`, hold: true, label: `拖曳${SUBJ[which]}` });
 }
@@ -193,18 +216,19 @@ function down(e: PointerEvent, el: HTMLElement, knob?: End) {
   e.preventDefault();
   const f = frac(e, el);
   const which = knob || nearest(f);
+  frozen.value = { ...win.value };
   drag = { id: e.pointerId, which, session: ++session, moved: !knob, last: 0 };
   dragging.value = which;
   try { el.setPointerCapture(e.pointerId); } catch { /* ok */ }
-  if (!knob) moveTo(which, snapAt(f, e.altKey || e.shiftKey));
+  if (!knob) moveTo(which, snapAt(f, fineAt(e, el)));
   showTip(e, el, f);
 }
 function move(e: PointerEvent, el: HTMLElement, rowId?: string) {
   const f = frac(e, el);
   if (drag && e.pointerId === drag.id) {
     drag.moved = true;
-    moveTo(drag.which, snapAt(f, e.altKey || e.shiftKey));
-    showTip(e, el, f, rowId);
+    moveTo(drag.which, snapAt(f, fineAt(e, el)));
+    showTip(e, el, f, rowId, fineAt(e, el));
     return;
   }
   if (e.pointerType !== 'mouse') return;
@@ -215,6 +239,12 @@ function up(e: PointerEvent) {
   if (!drag || e.pointerId !== drag.id) return;
   const d = drag;
   drag = null; dragging.value = null;
+  // the axis may now follow the end again; stay on the day that was shown
+  if (frozen.value) {
+    const shown = frozen.value.d0, w = wallOf(winEnd.value);
+    if (w) dayOff.value = dayNum(shown.y, shown.mo, shown.d) - dayNum(w.y, w.mo, w.d);
+    frozen.value = null;
+  }
   hideTip();
   if (d.moved) {
     const w = wallOf(d.which);
@@ -223,13 +253,14 @@ function up(e: PointerEvent) {
   }
 }
 function leave() { ghost.value = null; if (!drag) hideTip(); }
-function showTip(e: PointerEvent, el: HTMLElement, f: number, rowId?: string) {
-  const t = snapAt(f, e.altKey || e.shiftKey);
+function showTip(e: PointerEvent, el: HTMLElement, f: number, rowId?: string, fine = e.altKey || e.shiftKey) {
+  const t = snapAt(f, fine);
   const id = rowId || S.startTz;
   const lw = partsInTz(t, id), sw = partsInTz(t, S.startTz);
   const here = `${zoneName(id)} ${hm(lw)}（週${WD[wdOf(lw)]}）`;
   const base = sameZone(id, S.startTz) ? '' : ` ＝ ${zoneName(S.startTz)} ${hm(sw)}`;
-  const act = drag ? `${drag.which === 'start' ? '●' : '○'} ${SUBJ[drag.which]}` : `點一下移動 ${nearest(f) === 'start' ? '● 開始' : '○ 結束'}`;
+  const act = drag ? `${drag.which === 'start' ? '●' : '○'} ${SUBJ[drag.which]}${!fine && e.pointerType !== 'mouse' ? '（手指往外拉可以調到分鐘）' : ''}`
+    : hasEnd.value ? `點一下移動 ${nearest(f) === 'start' ? '● 開始' : '○ 結束'}` : '點一下設為 ○ 結束';
   const r = el.getBoundingClientRect();
   const x = r.left + f * r.width;
   tipAt(`${here}${base} · ${act}`, { left: x, right: x, top: r.top, bottom: r.bottom });
@@ -243,6 +274,7 @@ function knobKey(e: KeyboardEvent, which: End) {
   else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') t = cur + step;
   if (t == null) return;
   e.preventDefault();
+  S.active = which;
   commit(() => setInstant(which, Math.round(t! / MIN) * MIN), { key: `zkey-${which}`, label: `調整${SUBJ[which]}` });
 }
 const knobText = (which: End) => { const w = wallOf(which); return w ? `${SUBJ[which]} ${fmtDT(w)}（${zoneName(tzOf(which))}）` : ''; };
@@ -269,6 +301,7 @@ function applyEdit() {
   if (!w) { toast('看不懂這個時間，試試 15:00 或 下午3點'); return; }
   const t = toInstant(w, ed.id);
   if (t === ms) return;
+  S.active = ed.which;
   commit(() => setInstant(ed.which, t), { label: `設定${SUBJ[ed.which]}`, say: () => `${zoneName(ed.id)} ${hm(w)} ＝ ${SUBJ[ed.which]} ${fmtDT(wallOf(ed.which)!)}` });
   bump(ed.which);
 }
@@ -286,13 +319,22 @@ function pinMenu(id: string, el: HTMLElement) { menuAnchor.value = el; menuFor.v
 function asStart(id: string) { commit(() => setStartTz(id), { label: `開始時區：${zoneName(id)}`, say: `開始改用${zoneName(id)}時區，同一個時刻` }); menuFor.value = null; bump('start'); }
 function asEnd(id: string) { commit(() => setEndTz(id), { label: `結束時區：${zoneName(id)}`, say: `結束改用${zoneName(id)}時區，同一個時刻` }); menuFor.value = null; bump('end'); }
 function remove(id: string) { commit(() => removeZoneRow(id), { label: `移除${zoneName(id)}`, say: `已移除${zoneName(id)}` }); menuFor.value = null; moreOpen.value = false; }
-function toTop(id: string) { commit(() => { S.zones = [id, ...S.zones.filter((z) => !sameZone(z, id))]; }, { label: `${zoneName(id)}移到上面` }); moreOpen.value = false; }
+function toTop(id: string) { commit(() => orderZones([id, ...zoneRows.value.filter((z) => !sameZone(z, id))]), { label: `${zoneName(id)}移到上面` }); moreOpen.value = false; }
 const addBtn = ref<HTMLElement | null>(null);
 const addOpen = ref(false);
 function add(id: string) { commit(() => addZoneRow(id), { label: `加入${zoneName(id)}`, say: `已加入${zoneName(id)}` }); }
 const moreBtn = ref<HTMLElement | null>(null);
 const moreOpen = ref(false);
 const menuRow = computed(() => allRows.value.find((r) => r.id === menuFor.value) || null);
+
+/* ---------- putting rows in order ---------- */
+const listEl = ref<HTMLElement | null>(null);
+let orderSession = 0;
+const rowSort = useDragSort({
+  rows: () => [...(listEl.value?.querySelectorAll<HTMLElement>(':scope > .zrow[data-id]') || [])],
+  move: (from, to) => commit(() => orderZones(moved(zoneRows.value, from, to)), { key: `zorder-${orderSession}`, hold: true, label: '調整時區順序' }),
+  done: (_from, to) => { toast(`${zoneName(zoneRows.value[to])}移到第 ${to + 1} 列`, undo); orderSession++; },
+});
 
 const flashing = ref(false);
 watch(() => pulse.zones, () => { flashing.value = false; requestAnimationFrame(() => { flashing.value = true; }); });
@@ -313,10 +355,15 @@ const awayText = (which: End) => {
     <header class="panel-head">
       <Icon name="globe" class="ph-ic" />
       <h2>時區</h2>
-      <span class="panel-sub">{{ stacked ? winShort : `${winLabel} 的 24 小時` }}</span>
+      <span class="zday">
+        <button type="button" class="icon-btn xs" aria-label="前一天" v-tip="'時區條看前一天'" @click="walk(-1)"><Icon name="chevL" /></button>
+        <span class="panel-sub">{{ stacked ? winShort : `${winLabel} 的 24 小時` }}</span>
+        <button type="button" class="icon-btn xs" aria-label="後一天" v-tip="'時區條看後一天'" @click="walk(1)"><Icon name="chevR" /></button>
+        <button v-if="dayOff" type="button" class="chip xs" v-tip="'回到端點那一天'" @click="dayOff = 0">回到 {{ winEnd === 'end' ? '○' : '●' }}</button>
+      </span>
       <div v-if="hasEnd && !sameDay" class="seg-ctl" role="group" aria-label="時區條顯示哪一天">
-        <button type="button" :aria-pressed="winEnd === 'start'" v-tip="'時區條顯示開始那一天'" @click="winPick = 'start'"><i class="node" />開始日</button>
-        <button type="button" :aria-pressed="winEnd === 'end'" v-tip="'時區條顯示結束那一天'" @click="winPick = 'end'"><i class="node end" />結束日</button>
+        <button type="button" :aria-pressed="winEnd === 'start'" aria-label="開始日" v-tip="'時區條顯示開始那一天'" @click="showEnd('start')"><i class="node" /><span class="sl">開始日</span></button>
+        <button type="button" :aria-pressed="winEnd === 'end'" aria-label="結束日" v-tip="'時區條顯示結束那一天'" @click="showEnd('end')"><i class="node end" /><span class="sl">結束日</span></button>
       </div>
       <button type="button" class="icon-btn sm" :class="{ on: S.map && !mapNoRoom }" :aria-pressed="S.map" aria-label="世界地圖"
         v-tip="!S.map ? '顯示世界地圖' : mapNoRoom ? '地圖：這裡的空間不夠，放大視窗或在顯示設定調緊湊' : '隱藏世界地圖'" @click="S.map = !S.map"><Icon name="map" /></button>
@@ -325,7 +372,7 @@ const awayText = (which: End) => {
 
     <div ref="body" class="zbody" :class="{ sec: withSec, side: !!side }" :style="{ '--rowh': rowH + 'px' }">
       <WorldMap v-if="side" class="zmap-side" :which="winEnd" :zones="zoneRows" :height="side.h" :width="side.w" @pin="pinMenu" @add="add" />
-      <div class="zlist">
+      <div ref="listEl" class="zlist">
       <WorldMap v-if="mapH" :which="winEnd" :zones="zoneRows" :height="mapH" :width="bodyW" @pin="pinMenu" @add="add" />
       <!-- the shared axis: ● and ○ live here -->
       <div class="zrow zaxis">
@@ -341,16 +388,20 @@ const awayText = (which: End) => {
           <span v-if="inWin(xe)" class="knob e" :class="{ on: dragging === 'end' }" :style="{ left: xe! * 100 + '%' }" role="slider" tabindex="0"
             aria-label="結束" aria-valuemin="0" aria-valuemax="1440" :aria-valuenow="knobNow('end')" :aria-valuetext="knobText('end')"
             @pointerdown.stop="down($event, axis!, 'end')" @keydown="knobKey($event, 'end')"><i class="node end" /></span>
-          <span v-if="outRight" class="edge r" v-tip="`${outRight === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outRight)}，用上方的切換看那一天`" />
-          <span v-if="outLeft" class="edge l" v-tip="`${outLeft === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outLeft)}，用上方的切換看那一天`" />
+          <button v-if="outRight" type="button" class="edge r" :aria-label="`看${outRight === 'end' ? '結束' : '開始'}那一天`" v-tip="`${outRight === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outRight)}，點一下看那一天`" @pointerdown.stop @click="showEnd(outRight)" />
+          <button v-if="outLeft" type="button" class="edge l" :aria-label="`看${outLeft === 'end' ? '結束' : '開始'}那一天`" v-tip="`${outLeft === 'end' ? '○ 結束' : '● 開始'}在 ${awayText(outLeft)}，點一下看那一天`" @pointerdown.stop @click="showEnd(outLeft)" />
         </div>
       </div>
 
-      <div v-for="r in visible" :key="r.id" class="zrow" :class="{ isS: r.isS, isE: r.isE }">
+      <div v-for="(r, ri) in visible" :key="r.id" class="zrow" :data-id="r.id" :class="{ isS: r.isS, isE: r.isE, lifted: rowSort.dragging.value === ri }">
+        <span class="zc-head">
+        <button type="button" class="zgrip" :aria-label="`拖曳或按 ↑↓ 調整${r.name}的位置`" v-tip="'拖曳調整順序；也可以按 ↑↓'"
+          @pointerdown="rowSort.down($event, ri)" @pointermove="rowSort.move" @pointerup="rowSort.up" @pointercancel="rowSort.up" @keydown="rowSort.key($event, ri)"><Icon name="grip" /></button>
         <button type="button" class="zc-name" :aria-expanded="menuFor === r.id" v-tip="`${r.id}${tzLongName(r.id, startMs) ? ' · ' + tzLongName(r.id, startMs) : ''}`" @click="openMenu(r.id, $event)">
           <span class="zn-top"><b>{{ r.name }}</b><em v-if="withState" class="zs" :class="`zs-${zoneState(r.id).k}`" v-tip="zoneState(r.id).tip">{{ zoneState(r.id).t }}</em></span>
           <small class="mono">{{ r.offTxt }}<template v-if="r.diff"> · {{ r.diff }}</template><template v-else-if="r.isS"> · 開始</template></small>
         </button>
+        </span>
         <div class="zc-times">
           <span class="zt">
             <i class="node" aria-hidden="true" />
@@ -386,7 +437,7 @@ const awayText = (which: End) => {
       <div v-if="menuRow" class="zmenu">
         <p class="zmenu-t"><b>{{ menuRow.name }}</b><small>{{ menuRow.id }}</small></p>
         <button type="button" class="zmenu-i" :disabled="menuRow.isS" @click="asStart(menuRow.id)"><i class="node" />{{ menuRow.isS ? '已是開始的時區' : '設為開始的時區' }}</button>
-        <button v-if="hasEnd" type="button" class="zmenu-i" :disabled="menuRow.isE" @click="asEnd(menuRow.id)"><i class="node end" />{{ menuRow.isE ? '已是結束的時區' : '設為結束的時區' }}</button>
+        <button type="button" class="zmenu-i" :disabled="sameZone(menuRow.id, S.endTz)" @click="asEnd(menuRow.id)"><i class="node end" />{{ sameZone(menuRow.id, S.endTz) ? '已是結束的時區' : '設為結束的時區' }}</button>
         <button v-if="menuRow.removable" type="button" class="zmenu-i danger" @click="remove(menuRow.id)"><Icon name="x" />從列表移除</button>
       </div>
     </Popover>
@@ -410,6 +461,9 @@ const awayText = (which: End) => {
 .icon-btn.sm { width: 2rem; height: 2rem; border-radius: .65rem; }
 .seg-ctl button { height: 1.7rem; font-size: var(--fs-s); padding: 0 .5rem; gap: .3rem; }
 .seg-ctl .node { font-size: var(--fs-s); }
+/* narrow: the switch keeps its ● ○ so the day it shows has room */
+.stacked .seg-ctl .sl { display: none; }
+.stacked .seg-ctl button { padding: 0 .45rem; }
 .zbody { flex: 1; min-height: 0; display: flex; gap: 1.2rem; padding: .55rem 1rem .8rem; }
 .zlist { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: .3rem; }
 .zmap-side { align-self: center; }
@@ -422,6 +476,18 @@ const awayText = (which: End) => {
 .zc-name.zc-axis-l { flex-direction: row; align-items: baseline; padding: 0; margin: 0; }
 .scale-cap { font-style: normal; font-weight: 600; letter-spacing: .08em; color: var(--ink-4); margin-right: .5em; }
 
+.zc-head { display: flex; align-items: center; min-width: 0; }
+.zgrip { flex: none; display: grid; place-items: center; width: 1.2rem; height: 1.9rem; margin-left: -.45rem; border-radius: .4rem; color: var(--ink-4); cursor: grab; touch-action: none; opacity: .7; }
+.zgrip .ic { width: 1em; height: 1em; stroke-width: 3.2; }
+.zgrip:hover, .zgrip:focus-visible { color: var(--accent); background: var(--accent-wash); opacity: 1; }
+.zrow.lifted { position: relative; z-index: 4; background: var(--surface-2); box-shadow: 0 6px 18px -8px rgba(11, 18, 34, .35); border-radius: .6rem; }
+.zrow.lifted .zgrip { cursor: grabbing; color: var(--accent); opacity: 1; }
+.zday { display: inline-flex; align-items: center; gap: .1rem; min-width: 0; }
+.zday .panel-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-btn.xs { width: 1.6rem; height: 1.6rem; border-radius: .5rem; flex: none; }
+.icon-btn.xs .ic { width: .95em; height: .95em; }
+.chip.xs { height: 1.5rem; padding: 0 .45rem; font-size: var(--fs-xs); margin-left: .2rem; flex: none; }
+@media (pointer: coarse) { .zgrip { width: 1.7rem; height: 2.2rem; } .icon-btn.xs { width: 2.1rem; height: 2.1rem; } }
 .zc-name { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; text-align: left; padding: .15rem .4rem; margin-left: -.4rem; border-radius: .55rem; line-height: 1.2; transition: background .15s; }
 .zc-name:hover, .zc-name[aria-expanded="true"] { background: var(--well-2); }
 .zc-name b { font-weight: 600; font-size: .93rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -474,7 +540,9 @@ const awayText = (which: End) => {
 .knob .node { font-size: .95rem; }
 .knob:hover, .knob.on { transform: scale(1.12); }
 .knob.on { cursor: grabbing; box-shadow: 0 0 0 3px var(--accent-wash-2), 0 2px 8px rgba(11, 18, 34, .25); }
-.edge { position: absolute; top: 50%; width: .7rem; height: .7rem; margin-top: -.35rem; border-top: 2.5px solid var(--accent); border-right: 2.5px solid var(--accent); opacity: .75; }
+.edge { position: absolute; top: 50%; width: .7rem; height: .7rem; margin-top: -.35rem; padding: 0; border: 0; border-top: 2.5px solid var(--accent); border-right: 2.5px solid var(--accent); border-radius: 0; background: none; opacity: .75; cursor: pointer; z-index: 3; }
+.edge::after { content: ''; position: absolute; inset: -.6rem; }
+.edge:hover { opacity: 1; }
 .edge.r { right: -.1rem; transform: rotate(45deg); }
 .edge.l { left: -.1rem; transform: rotate(-135deg); }
 .zmore { flex: none; display: flex; align-items: center; gap: .3rem; height: 2rem; padding: 0 .55rem; margin: 0 -.3rem; border-radius: .6rem; font-size: max(var(--floor), .84rem); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

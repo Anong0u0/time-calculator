@@ -1,6 +1,8 @@
 /* ============================================================
    App state: two instants (start, end) and the span between.
-   Every lens reads both ends; nothing switches silently.
+   The two ends are alike: either can be a fixed moment or follow the clock (now), and the span can tie
+   either one to the other (end = start + span, or start = end − span). Every lens reads both ends;
+   nothing switches silently.
    ============================================================ */
 import { reactive, computed, ref, watch } from 'vue';
 import {
@@ -28,19 +30,25 @@ export const now = ref(Date.now());
 export const S = reactive({
   startTz: LOCAL_TZ,
   start: partsInTz(Date.now(), LOCAL_TZ) as Wall,
+  /** The start follows the clock. */
   live: true,
   end: null as Wall | null,
   endTz: LOCAL_TZ,
+  /** The end follows the clock. */
+  endLive: false,
   endSample: false,
   endPreset: null as null | PeriodKey,
+  /** The span that ties the ends together, if any. */
   link: null as Link | null,
+  /** Which end the span computes: 'end' = start + span, 'start' = end − span. */
+  linkTo: 'end' as End,
   zones: [] as string[],
   active: 'start' as End,
   theme: 'system' as Theme,
   lens: 'zones' as Lens,
   readEnd: 'start' as End,
-  /** Readings pinned to the top, in order (keys of the formats). */
-  readPins: [] as string[],
+  /** The order of the readings (keys of the formats); formats not listed follow in their usual order. */
+  readOrder: [] as string[],
   density: 100,
   map: true,
   dur: DUR_SAMPLE,
@@ -48,32 +56,56 @@ export const S = reactive({
 });
 
 /* ---------- derived ---------- */
-export const startWall = computed<Wall>(() => (S.live ? partsInTz(now.value, S.startTz) : S.start));
-const startI = computed(() => wallToInstant(startWall.value, S.startTz));
-export const startMs = computed(() => startI.value.ms);
-export const startNote = computed<WallNote>(() => (S.live ? null : startI.value.note));
+export const other = (which: End): End => (which === 'start' ? 'end' : 'start');
+/** This end follows the clock. */
+export const isLive = (which: End) => (which === 'start' ? S.live : S.endLive);
+/** This end is computed from the other one and the span. */
+export const isDerived = (which: End) => !!S.link && S.linkTo === which;
+/** The end a span would compute: the one not held at now (the start when only the end follows the clock). */
+export const linkTarget = (): End => (S.link ? S.linkTo : S.endLive && !S.live ? 'start' : 'end');
 
-const endCalc = computed<{ wall: Wall | null; ms: number | null; note: WallNote; err: string | null }>(() => {
+interface Point { wall: Wall; ms: number; note: WallNote }
+const NONE = { wall: null, ms: null, note: null as WallNote };
+const own = (which: End): Point | null => {
+  const tz = which === 'start' ? S.startTz : S.endTz;
+  // whole seconds, like every other moment here, so a span from now never gains or loses a fraction of a second
+  if (isLive(which)) { const ms = Math.floor(now.value / 1000) * 1000; return { wall: partsInTz(ms, tz), ms, note: null }; }
+  const w = which === 'start' ? S.start : S.end;
+  if (!w) return null;
+  const r = wallToInstant(w, tz);
+  return { wall: w, ms: r.ms, note: r.note };
+};
+const RANGE_ERR = '超出可計算範圍（西元 1–9999 年）';
+const ends = computed<{ s: Point; e: Point | typeof NONE; err: string | null }>(() => {
+  const ownS = own('start')!;
   if (S.link) {
     const sp = S.link.span;
-    const r = addDuration(startMs.value, S.startTz, sp, sp.sign, sp.biz);
-    const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.endTz) : null;
-    if (w && validWall(w)) return { wall: w, ms: r.ms, note: null, err: null };
-    return { wall: null, ms: null, note: null, err: '超出可計算範圍（西元 1–9999 年）' };
+    if (S.linkTo === 'end') {
+      const r = addDuration(ownS.ms, S.startTz, sp, sp.sign, sp.biz);
+      const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.endTz) : null;
+      return w && validWall(w) ? { s: ownS, e: { wall: w, ms: r.ms, note: null }, err: null } : { s: ownS, e: NONE, err: RANGE_ERR };
+    }
+    const ownE = own('end');
+    if (ownE) {
+      const r = addDuration(ownE.ms, S.endTz, sp, -sp.sign as 1 | -1, sp.biz);
+      const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.startTz) : null;
+      return w && validWall(w) ? { s: { wall: w, ms: r.ms, note: null }, e: ownE, err: null } : { s: ownS, e: ownE, err: RANGE_ERR };
+    }
   }
-  if (S.end) { const e = wallToInstant(S.end, S.endTz); return { wall: S.end, ms: e.ms, note: e.note, err: null }; }
-  return { wall: null, ms: null, note: null, err: null };
+  return { s: ownS, e: own('end') || NONE, err: null };
 });
-export const endWall = computed(() => endCalc.value.wall);
-export const endMs = computed(() => endCalc.value.ms);
-export const endNote = computed(() => endCalc.value.note);
-export const linkErr = computed(() => endCalc.value.err);
+export const startWall = computed<Wall>(() => ends.value.s.wall);
+export const startMs = computed(() => ends.value.s.ms);
+export const startNote = computed<WallNote>(() => ends.value.s.note);
+export const endWall = computed(() => ends.value.e.wall);
+export const endMs = computed(() => ends.value.e.ms);
+export const endNote = computed(() => ends.value.e.note);
+export const linkErr = computed(() => ends.value.err);
 export const hasEnd = computed(() => endMs.value != null);
 
 export const wallOf = (which: End) => (which === 'start' ? startWall.value : endWall.value);
 export const msOf = (which: End) => (which === 'start' ? startMs.value : endMs.value);
 export const tzOf = (which: End) => (which === 'start' ? S.startTz : S.endTz);
-export const other = (which: End): End => (which === 'start' ? 'end' : 'start');
 
 /** Whole-second gap end − start. */
 export const gapSec = computed(() => (endMs.value == null ? null : Math.round((endMs.value - startMs.value) / 1000)));
@@ -95,16 +127,23 @@ export function toast(text: string, undo?: () => void) {
 export function toastClose() { clearTimeout(toastTimer); toastState.cur = null; }
 
 /* ---------- history: many levels of undo and redo ---------- */
-interface Snap { start: Wall; live: boolean; startTz: string; end: Wall | null; endTz: string; link: string | null; endPreset: PeriodKey | null; endSample: boolean; zones: string[] }
+interface Snap {
+  start: Wall; live: boolean; startTz: string; end: Wall | null; endLive: boolean; endTz: string; link: string | null; linkTo: End;
+  endPreset: PeriodKey | null; endSample: boolean; zones: string[]; readOrder: string[];
+}
 const snap = (): Snap => ({
-  start: { ...startWall.value }, live: S.live, startTz: S.startTz, end: S.end ? { ...S.end } : null, endTz: S.endTz,
-  link: S.link ? S.link.expr : null, endPreset: S.endPreset, endSample: S.endSample, zones: [...S.zones],
+  start: { ...startWall.value }, live: S.live, startTz: S.startTz, end: S.end ? { ...S.end } : null, endLive: S.endLive, endTz: S.endTz,
+  link: S.link ? S.link.expr : null, linkTo: S.linkTo, endPreset: S.endPreset, endSample: S.endSample, zones: [...S.zones], readOrder: [...S.readOrder],
 });
-const sameSnap = (a: Snap, b: Snap) => JSON.stringify({ ...a, start: a.live ? null : a.start }) === JSON.stringify({ ...b, start: b.live ? null : b.start });
+/** What a snapshot means: a moment that follows the clock or is computed is not part of it. */
+const meaning = (a: Snap) => JSON.stringify({
+  ...a, start: a.live || (a.link && a.linkTo === 'start') ? null : a.start, end: a.endLive || (a.link && a.linkTo === 'end') ? null : a.end, linkTo: a.link ? a.linkTo : null,
+});
+const sameSnap = (a: Snap, b: Snap) => meaning(a) === meaning(b);
 function restoreSnap(o: Snap) {
   S.startTz = o.startTz; S.live = o.live; S.start = o.start;
-  S.endTz = o.endTz; S.end = o.end; S.link = o.link ? mkLink(o.link) : null;
-  S.endPreset = o.endPreset; S.endSample = o.endSample; S.zones = [...o.zones];
+  S.endTz = o.endTz; S.end = o.end; S.endLive = o.endLive; S.link = o.link ? mkLink(o.link) : null; S.linkTo = o.linkTo;
+  S.endPreset = o.endPreset; S.endSample = o.endSample; S.zones = [...o.zones]; S.readOrder = [...o.readOrder];
 }
 export const history = reactive({ undo: [] as { s: Snap; label: string }[], redo: [] as { s: Snap; label: string }[] });
 let coalesceKey = '', coalesceAt = 0;
@@ -163,30 +202,39 @@ export const pulse = reactive({ start: 0, end: 0, span: 0, zones: 0 });
 export function bump(k: keyof typeof pulse) { pulse[k]++; }
 
 /* ---------- mutations ---------- */
-const RANGE_ERR = '超出可計算範圍（西元 1–9999 年）';
+/** Puts this end at a moment. If the span was computing this end, it stops; if it computes the other end, that one follows. */
 export function setWall(which: End, w: Wall, opts: { preset?: PeriodKey | null } = {}): boolean {
   if (!validWall(w)) { toast(RANGE_ERR); return false; }
+  if (isDerived(which)) S.link = null;
   if (which === 'start') { S.start = { ...w }; S.live = false; }
-  else { S.end = { ...w }; S.link = null; S.endSample = false; S.endPreset = opts.preset || null; }
+  else { S.end = { ...w }; S.endLive = false; S.endSample = false; S.endPreset = opts.preset || null; }
   return true;
 }
 export function setInstant(which: End, ms: number, opts?: { preset?: PeriodKey | null }): boolean {
   if (!Number.isFinite(ms)) { toast(RANGE_ERR); return false; }
   return setWall(which, partsInTz(ms, tzOf(which)), opts);
 }
-export function setLive(on: boolean) {
-  if (on) { S.live = true; }
-  else { S.start = { ...startWall.value }; S.live = false; }
+/** This end follows the clock (on), or stays at the second it shows now (off). */
+export function setLive(which: End, on: boolean) {
+  if (on) {
+    if (isDerived(which)) S.link = null;
+    if (which === 'start') S.live = true;
+    else { S.endLive = true; S.endSample = false; S.endPreset = null; }
+    return;
+  }
+  if (!isLive(which)) return;
+  if (which === 'start') { S.start = { ...startWall.value }; S.live = false; }
+  else { S.end = { ...endWall.value! }; S.endLive = false; }
 }
 /** Keeps the instant; the end follows when it shared the start's zone. */
 export function setStartTz(id: string, keepInstant = true) {
   const prev = S.startTz;
   const follow = sameZone(S.endTz, prev) || !hasEnd.value;
   const sMs = startMs.value, eMs = endMs.value;
-  if (!S.live && keepInstant) S.start = partsInTz(sMs, id);
+  if (keepInstant && !S.live && !isDerived('start')) S.start = partsInTz(sMs, id);
   S.startTz = id;
   if (follow) {
-    if (keepInstant && S.end && !S.link && eMs != null) S.end = partsInTz(eMs, id);
+    if (keepInstant && S.end && !S.endLive && !isDerived('end') && eMs != null) S.end = partsInTz(eMs, id);
     if (!sameZone(S.endTz, id)) { S.endPreset = null; S.endSample = false; }
     S.endTz = id;
   }
@@ -195,7 +243,7 @@ export function setStartTz(id: string, keepInstant = true) {
 }
 export function setEndTz(id: string) {
   const prev = S.endTz;
-  if (!S.link && S.end && endMs.value != null) S.end = partsInTz(endMs.value, id);
+  if (S.end && !S.endLive && !isDerived('end') && endMs.value != null) S.end = partsInTz(endMs.value, id);
   if (!sameZone(prev, id)) { S.endPreset = null; S.endSample = false; }
   S.endTz = id;
   if (!S.zones.some((z) => sameZone(z, prev))) S.zones.unshift(prev);
@@ -207,37 +255,65 @@ export function mkLink(text: string): Link | null {
   const r = interpretSpanText(text);
   return r.kind === 'span' ? { expr: fmtSpan(r.span), span: r.span } : null;
 }
-export function checkSpan(sp: Span): { ok: true; ms: number; w: Wall } | { ok: false; err: string } {
-  const r = addDuration(startMs.value, S.startTz, sp, sp.sign, sp.biz);
-  const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.endTz) : null;
+const SUBJ_NAME = { start: '開始', end: '結束' } as const;
+/** The span as the computed end sees it: +30天 from the start is −30天 from the end. */
+export const negExpr = (expr: string) => (expr.startsWith('−') ? '+' + expr.slice(1) : expr.startsWith('+') ? '−' + expr.slice(1) : '−' + expr);
+/** "結束 = 開始 +30天" or "開始 = 結束 −30天". */
+export function linkSentence(to: End = S.linkTo, expr = S.link?.expr || ''): string {
+  return to === 'end' ? `結束 = 開始 ${expr}` : `開始 = 結束 ${negExpr(expr)}`;
+}
+/** What happens when the other end moves. */
+export const followText = (to: End = S.linkTo) => `${SUBJ_NAME[other(to)]}改了，${SUBJ_NAME[to]}跟著動`;
+/** Where `to` would land with this span (end = start + span, or start = end − span). */
+export function checkSpan(sp: Span, to: End = linkTarget()): { ok: true; ms: number; w: Wall } | { ok: false; err: string } {
+  const from = to === 'end' ? startMs.value : endMs.value;
+  if (from == null) return { ok: false, err: '先設定結束，開始才能從結束往回算' };
+  const r = addDuration(from, to === 'end' ? S.startTz : S.endTz, sp, (to === 'end' ? sp.sign : -sp.sign) as 1 | -1, sp.biz);
+  const w = Number.isFinite(r.ms) ? partsInTz(r.ms, tzOf(to)) : null;
   if (!w || !validWall(w)) return { ok: false, err: RANGE_ERR };
   return { ok: true, ms: r.ms, w };
 }
-export function setLink(sp: Span): boolean {
-  const c = checkSpan(sp);
+export function setLink(sp: Span, to: End = linkTarget()): boolean {
+  const c = checkSpan(sp, to);
   if (!c.ok) { toast(c.err); return false; }
   S.link = { expr: fmtSpan(sp), span: { ...sp } };
-  S.endSample = false; S.endPreset = null;
+  S.linkTo = to;
+  if (to === 'end') { S.endLive = false; S.endSample = false; S.endPreset = null; }
+  else S.live = false;
   return true;
 }
-/** Keep the end where it is right now. */
-export function freezeEnd(): boolean {
-  if (!S.link || !endWall.value) return false;
-  S.end = { ...endWall.value };
-  S.link = null; S.endPreset = null;
+/** The end the span was computing stays where it is right now; the span no longer ties them. */
+export function freezeLink(): boolean {
+  if (!S.link) return false;
+  const which = S.linkTo, w = wallOf(which);
+  if (!w) return false;
+  if (which === 'end') { S.end = { ...w }; S.endLive = false; S.endPreset = null; }
+  else { S.start = { ...w }; S.live = false; }
+  S.link = null;
   return true;
 }
-/** Keep the current gap and let the end follow the start. */
+/** Keep the current gap: the end not held at now follows the other. */
 export function linkFromMeasured(): boolean {
   if (endMs.value == null) return false;
-  return setLink(spanBetween(startMs.value, endMs.value, S.startTz));
+  const to = linkTarget();
+  return setLink(spanBetween(startMs.value, endMs.value, to === 'end' ? S.startTz : S.endTz), to);
 }
-export function clearEnd() { S.end = null; S.link = null; S.endSample = false; S.endPreset = null; S.active = 'start'; }
+export function clearEnd() {
+  if (isDerived('start')) freezeLink();
+  S.end = null; S.endLive = false; S.link = null; S.endSample = false; S.endPreset = null; S.active = 'start';
+}
+/** Start and end trade places: moments, zones, which one follows the clock, and which one the span computes. */
 export function swapEnds(): boolean {
   if (!endWall.value) return false;
-  const s = { ...startWall.value }, sTz = S.startTz, e = { ...endWall.value }, eTz = S.endTz;
-  S.start = e; S.startTz = eTz; S.end = s; S.endTz = sTz;
-  S.live = false; S.link = null; S.endSample = false; S.endPreset = null;
+  const s = { ...startWall.value }, sTz = S.startTz, sLive = S.live, e = { ...endWall.value }, eTz = S.endTz, eLive = S.endLive;
+  S.start = e; S.startTz = eTz; S.live = eLive;
+  S.end = s; S.endTz = sTz; S.endLive = sLive;
+  if (S.link) {
+    const sp = { ...S.link.span, sign: -S.link.span.sign as 1 | -1 };
+    S.link = { expr: fmtSpan(sp), span: sp };
+    S.linkTo = other(S.linkTo);
+  }
+  S.endSample = false; S.endPreset = null;
   return true;
 }
 
@@ -302,18 +378,28 @@ export const presetProgress = computed(() => {
 export const railProgress = computed<{ f: number; now: number | null }>(() => {
   if (presetProgress.value != null) return { f: presetProgress.value, now: presetProgress.value };
   const sMs = startMs.value, eMs = endMs.value;
-  if (eMs == null || S.live || eMs <= sMs) return { f: 0, now: null };
+  if (eMs == null || S.live || S.endLive || eMs <= sMs) return { f: 0, now: null };
   const f = Math.min(1, Math.max(0, (now.value - sMs) / (eMs - sMs)));
   return { f, now: now.value >= sMs && now.value <= eMs ? f : null };
 });
 
 /* ---------- zones ---------- */
+/** The rows in the order they were put in (dragged into); the start's and the end's zones are always among them. */
 export const zoneRows = computed(() => {
-  const list = [S.startTz];
-  if (!sameZone(S.endTz, S.startTz)) list.push(S.endTz);
+  const list: string[] = [];
   for (const z of S.zones) if (!list.some((x) => sameZone(x, z))) list.push(z);
-  return list.slice(0, ZMAX);
+  if (!list.some((x) => sameZone(x, S.startTz))) list.unshift(S.startTz);
+  if (!list.some((x) => sameZone(x, S.endTz))) list.splice(list.findIndex((x) => sameZone(x, S.startTz)) + 1, 0, S.endTz);
+  // too many: drop from the bottom, but never the start's or the end's zone
+  while (list.length > ZMAX) {
+    let i = list.length - 1;
+    while (i >= 0 && (sameZone(list[i], S.startTz) || sameZone(list[i], S.endTz))) i--;
+    list.splice(i, 1);
+  }
+  return list;
 });
+/** Put the rows in this order. */
+export function orderZones(ids: string[]) { S.zones = [...ids]; }
 function trimZones() { if (S.zones.length > ZMAX) S.zones.length = ZMAX; }
 export function addZoneRow(id: string): boolean {
   if (zoneRows.value.some((z) => sameZone(z, id))) { toast(`${zoneName(id)}已經在列表中`); return false; }
@@ -348,12 +434,16 @@ export function loadState(): boolean {
     S.end = en; S.endSample = !!o.endSample;
     S.endPreset = typeof o.endPreset === 'string' && o.endPreset in PERIOD_NAMES ? (o.endPreset as PeriodKey) : null;
   }
+  if (o.endLive === true) { S.endLive = true; S.endSample = false; S.endPreset = null; }
   if (typeof o.link === 'string') S.link = mkLink(o.link);
+  S.linkTo = o.linkTo === 'start' && S.link && (S.endLive || S.end) ? 'start' : 'end';
+  if (S.link && S.linkTo === 'end') S.endLive = false;
   if (Array.isArray(o.zones)) S.zones = (o.zones as unknown[]).filter((z): z is string => isValidTzSafe(z)).slice(0, ZMAX);
   if (o.theme === 'light' || o.theme === 'dark' || o.theme === 'system') S.theme = o.theme;
   if (o.lens === 'zones' || o.lens === 'cal' || o.lens === 'read') S.lens = o.lens;
   if (o.readEnd === 'end') S.readEnd = 'end';
-  if (Array.isArray(o.readPins)) S.readPins = (o.readPins as unknown[]).filter((k): k is string => typeof k === 'string').slice(0, 20);
+  const order = Array.isArray(o.readOrder) ? o.readOrder : o.readPins; // readPins: the pinned formats of the first version
+  if (Array.isArray(order)) S.readOrder = (order as unknown[]).filter((k): k is string => typeof k === 'string').slice(0, 40);
   if (typeof o.density === 'number' && DENSITY.some((d) => d.v === o.density)) S.density = o.density;
   if (typeof o.map === 'boolean') S.map = o.map;
   if (typeof o.dur === 'string' && o.dur.length <= 400) { S.dur = o.dur; S.durSample = !!o.durSample; }
@@ -361,15 +451,15 @@ export function loadState(): boolean {
 }
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 export function startPersisting() {
-  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.theme, S.lens, S.readEnd, S.readPins,
+  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.endPreset, S.link?.expr, S.linkTo, S.zones, S.theme, S.lens, S.readEnd, S.readOrder,
     S.density, S.map, S.dur, S.durSample], () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({
-          v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end,
-          endSample: S.endSample, endPreset: S.endPreset, link: S.link ? S.link.expr : null, zones: S.zones,
-          theme: S.theme, lens: S.lens, readEnd: S.readEnd, readPins: S.readPins,
+          v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end, endLive: S.endLive,
+          endSample: S.endSample, endPreset: S.endPreset, link: S.link ? S.link.expr : null, linkTo: S.linkTo, zones: S.zones,
+          theme: S.theme, lens: S.lens, readEnd: S.readEnd, readOrder: S.readOrder,
           density: S.density, map: S.map, dur: S.dur, durSample: S.durSample,
         }));
       } catch { /* storage unavailable: everything still works for this visit */ }
@@ -378,7 +468,7 @@ export function startPersisting() {
 }
 /** First visit: a sample end (New Year) so every lens has something to show. Marked as a sample. */
 export function seedSample() {
-  if (S.link || S.end) return;
+  if (S.link || S.end || S.endLive) return;
   const b = periodBounds('newyear');
   if (b) { S.end = partsInTz(b[1], S.endTz); S.endPreset = 'newyear'; S.endSample = true; }
 }
@@ -398,5 +488,5 @@ export const describe = (which: End) => {
   const w = wallOf(which);
   return w ? `${fmtDT(w)}（${zoneName(tzOf(which))}）` : '—';
 };
-export const startPresetActive = (key: StartPreset) => !S.live && wEq(S.start, startPresetWall(key));
+export const startPresetActive = (key: StartPreset) => !S.live && !isDerived('start') && wEq(S.start, startPresetWall(key));
 export { DAY };

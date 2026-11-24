@@ -277,75 +277,6 @@ export function validWall(w: Wall | null | undefined): w is Wall {
     w.d >= 1 && w.d <= daysInMonth(w.y, w.mo) &&
     w.h >= 0 && w.h <= 23 && w.mi >= 0 && w.mi <= 59 && w.s >= 0 && w.s <= 59;
 }
-function applyMeridiem(h: number, mer?: string): number {
-  if (!mer) return h;
-  const pm = /^(PM|P\.M\.|下午|晚上|傍晚|中午)$/i.test(mer);
-  const am = /^(AM|A\.M\.|上午|早上|凌晨|清晨)$/i.test(mer);
-  if (pm && h < 12) return h + 12;
-  if (am && h === 12) return 0;
-  return h;
-}
-
-export type ParsedText =
-  | { kind: 'wall'; wall: Wall; offset: number | null; hasTime: boolean }
-  | { kind: 'time'; h: number; mi: number; s: number }
-  | { kind: 'instant'; ms: number; unit: TsUnit | 'text' };
-
-export function parseDateTimeText(input: string, refYear?: number): ParsedText | null {
-  let s = normalizeWide(input).trim();
-  if (!s) return null;
-  s = s.replace(/\s+/g, ' ');
-
-  let m = /^(\d{4})(\d{2})(\d{2})(?:T?(\d{2})(\d{2})(\d{2})?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i.exec(s);
-  if (m) {
-    const w = { y: +m[1], mo: +m[2], d: +m[3], h: +(m[4] || 0), mi: +(m[5] || 0), s: +(m[6] || 0) };
-    if (validWall(w)) return { kind: 'wall', wall: w, offset: parseOffset(m[7]), hasTime: !!m[4] };
-  }
-  if (/^[+-]?\d[\d,_]*(\.\d+)?$/.test(s)) {
-    const ts = parseTimestamp(s);
-    if (ts) return { kind: 'instant', ms: ts.ms, unit: ts.unit };
-  }
-
-  const MER = '(上午|下午|早上|晚上|中午|凌晨|清晨|傍晚|AM|PM|A\\.M\\.|P\\.M\\.)';
-  const TIME = `(?:${MER}\\s*)?(\\d{1,2})(?:[:時点點](\\d{1,2})?)(?:[:分](\\d{1,2})(?:\\.(\\d+))?秒?)?分?\\s*(?:${MER})?`;
-  const OFF = '(Z|UTC|GMT|(?:UTC|GMT)?\\s*[+\\-−]\\d{1,2}(?::?\\d{2})?)';
-  const DATE = '(\\d{4})\\s*[-/.年]\\s*(\\d{1,2})\\s*[-/.月]\\s*(\\d{1,2})\\s*日?';
-  const DOW = '(?:\\s*[(（]?(?:星期|週|周|禮拜)?[一二三四五六日天][)）]?)?';
-
-  m = new RegExp(`^${DATE}${DOW}(?:(?:\\s*T\\s*|\\s+|(?=[上下早晚中凌清傍]))${TIME})?\\s*${OFF}?$`, 'i').exec(s);
-  if (m) {
-    const w = { y: +m[1], mo: +m[2], d: +m[3], h: 0, mi: 0, s: 0 };
-    if (m[5] !== undefined) {
-      w.h = applyMeridiem(+m[5], m[4] || m[9]);
-      w.mi = +(m[6] || 0); w.s = +(m[7] || 0);
-    }
-    if (validWall(w)) return { kind: 'wall', wall: w, offset: parseOffset(m[10]), hasTime: m[5] !== undefined };
-  }
-  m = new RegExp(`^(\\d{1,2})\\s*[/月]\\s*(\\d{1,2})\\s*日?${DOW}(?:\\s+|(?=[上下早晚中凌清傍]))?(?:${TIME})?$`, 'i').exec(s);
-  if (m && refYear) {
-    const w = { y: refYear, mo: +m[1], d: +m[2], h: 0, mi: 0, s: 0 };
-    if (m[4] !== undefined) { w.h = applyMeridiem(+m[4], m[3] || m[8]); w.mi = +(m[5] || 0); w.s = +(m[6] || 0); }
-    if (validWall(w)) return { kind: 'wall', wall: w, offset: null, hasTime: m[4] !== undefined };
-  }
-  m = new RegExp(`^${TIME}$`, 'i').exec(s);
-  if (m && (m[3] !== undefined || /[:時点點]/.test(s))) {
-    const h = applyMeridiem(+m[2], m[1] || m[6]);
-    const t = { h, mi: +(m[3] || 0), s: +(m[4] || 0) };
-    if (h <= 23 && t.mi <= 59 && t.s <= 59) return { kind: 'time', ...t };
-  }
-  if (/[a-z]/i.test(s)) {
-    const parsed = Date.parse(s);
-    if (!Number.isNaN(parsed)) {
-      const explicit = /(\bZ\b|GMT|UTC|[+-]\d{2}:?\d{2}\b|\b[ECMP][SD]T\b)/i.test(s);
-      if (explicit) return { kind: 'instant', ms: parsed, unit: 'text' };
-      const d = new Date(parsed);
-      const w = { y: d.getFullYear(), mo: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), mi: d.getMinutes(), s: d.getSeconds() };
-      if (validWall(w)) return { kind: 'wall', wall: w, offset: null, hasTime: /\d:\d/.test(s) };
-    }
-  }
-  return null;
-}
-
 /* ---------- duration expressions ---------- */
 const UNIT_TABLE: [string, number][] = [
   ['milliseconds', 0.001], ['millisecond', 0.001], ['msecs', 0.001], ['msec', 0.001], ['ms', 0.001], ['毫秒', 0.001],
@@ -529,12 +460,36 @@ const softErr = (msg: string, pos: number, len?: number) => { const e = new DurE
 export const emptySpan = (): Span => ({ sign: 1, y: 0, mo: 0, w: 0, d: 0, h: 0, mi: 0, s: 0, biz: false });
 export const isEmptySpan = (sp: Span) => SPAN_KEYS.every((k) => !sp[k]) && !sp.biz;
 
-/** Parses "+30天", "1年6個月", "20工作日", "3天前". Returns null for empty input; throws DurError. */
+const CN_D: Record<string, number> = { 〇: 0, 零: 0, 一: 1, 二: 2, 兩: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+/** 三 → 3, 十五 → 15, 二十 → 20, 一百 → 100 (for lengths written in words). */
+export function cnDigits(s: string): string {
+  return s.replace(/[〇零一二兩两三四五六七八九十百千]+/g, (x) => {
+    if (!/[十百千]/.test(x)) return [...x].map((c) => CN_D[c]).join('');
+    let total = 0, cur = 0;
+    for (const c of x) { if (c in CN_D) cur = CN_D[c]; else { total += (cur || 1) * (c === '十' ? 10 : c === '百' ? 100 : 1000); cur = 0; } }
+    return String(total + cur);
+  }).replace(/(\d)\s*半\s*(小時|小时|鐘頭|天|日)/g, '$1.5$2').replace(/(^|[^\d.])半\s*(小時|小时|鐘頭|天)/g, (_m, a: string, u: string) => `${a}0.5${u}`);
+}
+/** ISO 8601 durations: P1Y2M3W4DT5H6M7S, the way the 長度 reading writes them. */
+function isoSpan(s: string): Span | null {
+  const m = /^([+-])?P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)(?:[.,]\d+)?S)?)?$/i.exec(s);
+  if (!m || s.length < 3 || /T$/i.test(s)) return null;
+  const n = (i: number) => +(m[i] || 0);
+  return { sign: m[1] === '-' ? -1 : 1, y: n(2), mo: n(3), w: n(4), d: n(5), h: n(6), mi: n(7), s: n(8), biz: false };
+}
+/** Parses "+30天", "1年6個月", "1.5天", "20工作日", "3天前", "三週", "1年 + 3天", "2h30", "in 3 days", "P1M7D".
+    Returns null for empty input; throws DurError. */
 export function parseSpan(src: string): Span | null {
-  const s = normalizeWide(src).replace(/\s+/g, ' ').trim();
+  let s = cnDigits(normalizeWide(src)).replace(/\s+/g, ' ').trim();
   if (!s) return null;
+  const iso = isoSpan(s);
+  if (iso) return iso;
+  // in 3 days, 3 days later
+  let later = false;
+  const inM = /^in\s+(.+)$/i.exec(s);
+  if (inM) { s = inM[1]; later = true; }
   const out = emptySpan();
-  let i = 0, signed = false, any = false, days = false, biz = false;
+  let i = 0, signed = false, any = false, days = false, biz = false, lastUnit = '', frac = 0;
   const skip = () => { while (i < s.length && /[\s,，、]/.test(s[i])) i++; };
   if ('+＋'.includes(s[0])) { i = 1; signed = true; }
   else if ('-−–—'.includes(s[0])) { out.sign = -1; i = 1; signed = true; }
@@ -559,7 +514,6 @@ export function parseSpan(src: string): Span | null {
     }
     m = /^\d+(?:\.\d+)?/.exec(rest);
     if (m) {
-      if (m[0].includes('.')) throw new DurError('請用整數，例如 1天12小時', i, m[0].length);
       let j = i + m[0].length;
       while (j < s.length && (s[j] === ' ' || s[j] === '個' || s[j] === '个')) j++;
       const after = s.slice(j), low = after.toLowerCase();
@@ -570,20 +524,48 @@ export function parseSpan(src: string): Span | null {
         unit = { name, key }; break;
       }
       if (!unit) {
+        // 2h30 is 2 hours 30 minutes; 5m30 is 5 minutes 30 seconds
+        if (j >= s.length && !m[0].includes('.') && (lastUnit === 'h' || lastUnit === 'mi')) {
+          const k = lastUnit === 'h' ? 'mi' : 's';
+          if (+m[0] > 59) throw new DurError(`「${m[0]}」超過 59`, i, m[0].length);
+          out[k] += +m[0]; any = true; i = j; continue;
+        }
         if (j >= s.length) throw softErr('加上單位，例如 30天、2週、3個月、1年', i, m[0].length);
         if (/^(ms|毫秒)/i.test(low)) throw new DurError('間隔最小只到秒', j, 2);
         throw new DurError(`無法辨識「${(after.match(/^[a-zA-Z]+/) || [after[0]])[0]}」`, j);
       }
       const n = +m[0];
-      if (unit.key === 'bd') { biz = true; out.d += n; }
+      if (!Number.isInteger(n)) {
+        // 1.5天 = 1天12小時: a fraction is carried down into the exact units
+        if (unit.key === 'y' || unit.key === 'mo' || unit.key === 'bd') throw new DurError('年、月和工作日要用整數，例如 1年6個月', i, m[0].length);
+        const per: Record<string, number> = { w: 604800, d: 86400, h: 3600, mi: 60, s: 1 };
+        const whole = Math.floor(n);
+        out[unit.key as SpanKey] += whole;
+        frac += (n - whole) * per[unit.key];
+        if (unit.key === 'd' || unit.key === 'w') days = true;
+      } else if (unit.key === 'bd') { biz = true; out.d += n; }
       else { if (unit.key === 'd') days = true; out[unit.key as SpanKey] += n; }
+      lastUnit = unit.key;
       any = true; i = j + unit.name.length; continue;
     }
+    // 1年 + 3天: adding parts of one length
+    if ('+＋'.includes(s[i]) && any) { i++; continue; }
     if ('+＋-−–—'.includes(s[i])) throw new DurError('正負號只能放在最前面', i);
     throw new DurError(`無法辨識「${s[i]}」`, i);
   }
   if (!any) throw softErr('輸入長度，例如 +30天、1年6個月、20工作日', 0, s.length);
   if (biz && days) throw new DurError('「天」和「工作日」不能混用', 0, s.length);
+  if (frac) {
+    let t = Math.round(frac);
+    const dd = Math.floor(t / 86400); t -= dd * 86400;
+    const hh = Math.floor(t / 3600); t -= hh * 3600;
+    const mm = Math.floor(t / 60); t -= mm * 60;
+    out.d += dd; out.h += hh; out.mi += mm; out.s += t;
+    // carry seconds → minutes → hours, so 1.5h + 45m stays readable
+    if (out.s >= 60) { out.mi += Math.floor(out.s / 60); out.s %= 60; }
+    if (out.mi >= 60) { out.h += Math.floor(out.mi / 60); out.mi %= 60; }
+  }
+  if (later && out.sign < 0) throw new DurError('in 只能往後', 0, 2);
   if (SPAN_KEYS.some((k) => out[k] > 999999)) throw new DurError('數字太大了', 0, s.length);
   out.biz = biz;
   return out;
@@ -648,7 +630,7 @@ const OPS_RE = /[*×xX·⋅乘/÷除()（）]|.[+＋\-−–—加減减]/;
  * Arithmetic that ends in a plain number ("2h ÷ 15m") is a ratio: shown, never applied.
  */
 export function interpretSpanText(src: string): SpanInput {
-  const raw = normalizeWide(src).trim();
+  const raw = cnDigits(normalizeWide(src)).trim();
   if (!raw) return { kind: 'empty' };
   let first: DurError | null = null;
   try {
@@ -684,5 +666,6 @@ export const wdOf = (w: YMD) => weekdayOf(w.y, w.mo, w.d);
 export const wEq = (a: Wall | null, b: Wall | null) => !!a && !!b && a.y === b.y && a.mo === b.mo && a.d === b.d && a.h === b.h && a.mi === b.mi && a.s === b.s;
 
 /** Lunar New Year (春節), checked against the official calendar. */
-export const LNY: YMD[] = ['2020-01-25', '2021-02-12', '2022-02-01', '2023-01-22', '2024-02-10', '2025-01-29', '2026-02-17', '2027-02-06', '2028-01-26', '2029-02-13', '2030-02-03', '2031-01-23', '2032-02-11', '2033-01-31', '2034-02-19', '2035-02-08', '2036-01-28', '2037-02-15', '2038-02-04', '2039-01-24', '2040-02-12']
+export const LNY: YMD[] = ['2000-02-05', '2001-01-24', '2002-02-12', '2003-02-01', '2004-01-22', '2005-02-09', '2006-01-29', '2007-02-18', '2008-02-07', '2009-01-26',
+  '2010-02-14', '2011-02-03', '2012-01-23', '2013-02-10', '2014-01-31', '2015-02-19', '2016-02-08', '2017-01-28', '2018-02-16', '2019-02-05', '2020-01-25', '2021-02-12', '2022-02-01', '2023-01-22', '2024-02-10', '2025-01-29', '2026-02-17', '2027-02-06', '2028-01-26', '2029-02-13', '2030-02-03', '2031-01-23', '2032-02-11', '2033-01-31', '2034-02-19', '2035-02-08', '2036-01-28', '2037-02-15', '2038-02-04', '2039-01-24', '2040-02-12']
   .map((s) => { const [y, mo, d] = s.split('-').map(Number); return { y, mo, d }; });
