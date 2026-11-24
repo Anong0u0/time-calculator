@@ -4,6 +4,8 @@ import Icon from './Icon.vue';
 import CommandBar from './CommandBar.vue';
 import Popover from './Popover.vue';
 import { S, history, undo, redo, now, startWall, DENSITY, type Theme } from '../state/store';
+import { shareUrl } from '../state/url';
+import { copiedKey, copyText } from '../composables/copy';
 
 defineProps<{ compact?: boolean }>();
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -12,6 +14,9 @@ const THEME_NAME: Record<Theme, string> = { system: '跟隨系統', light: '淺�
 const THEME_ICON: Record<Theme, string> = { system: 'auto', light: 'sun', dark: 'moon' };
 const undoTip = computed(() => (history.undo.length ? `復原：${history.undo[history.undo.length - 1].label || '上一步'}（${mod}Z）` : '沒有可以復原的步驟'));
 const redoTip = computed(() => (history.redo.length ? `重做：${history.redo[history.redo.length - 1].label || '下一步'}（${isMac ? '⇧⌘Z' : 'Ctrl Y'}）` : '沒有可以重做的步驟'));
+/* the address always carries the time; this copies it */
+const linkCopied = computed(() => copiedKey.value === 'share');
+function copyLink() { copyText(shareUrl(), 'share', '連結'); }
 const helpBtn = ref<HTMLElement | null>(null);
 const help = ref(false);
 
@@ -50,6 +55,7 @@ const hands = computed(() => {
     </div>
     <CommandBar :compact="compact" />
     <div class="top-tools">
+      <button type="button" class="icon-btn" :class="{ ok: linkCopied }" v-tip="'複製連結：開始、結束、時區都在網址裡，可以加入書籤或分享'" aria-label="複製這個畫面的連結" @click="copyLink"><Icon :name="linkCopied ? 'check' : 'link'" /></button>
       <button type="button" class="icon-btn" :disabled="!history.undo.length" v-tip="undoTip" aria-label="復原" @click="undo"><Icon name="undo" /></button>
       <button type="button" class="icon-btn" :disabled="!history.redo.length" v-tip="redoTip" aria-label="重做" @click="redo"><Icon name="redo" /></button>
       <button ref="helpBtn" type="button" class="icon-btn" v-tip="'怎麼用'" aria-label="怎麼用" :aria-expanded="help" @click="help = !help"><span class="q">?</span></button>
@@ -85,7 +91,9 @@ const hands = computed(() => {
         <p class="help-lead"><b>開始 + 間隔 = 結束。</b>改任何一個，另外兩個跟著算好。</p>
         <ul>
           <li><span class="hk hk-dash">虛線底</span>的字可以直接改。數字欄可以打字、按 <span class="kbd">↑</span><span class="kbd">↓</span> 或滾輪。</li>
-          <li><span class="hk"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 9h9.5A1.5 1.5 0 0 1 20 10.5V19.5A1.5 1.5 0 0 1 18.5 21H10.5A1.5 1.5 0 0 1 9 19.5Z M15 9V5.5A1.5 1.5 0 0 0 13.5 4H5.5A1.5 1.5 0 0 0 4 5.5V13.5A1.5 1.5 0 0 0 5.5 15H9" /></svg></span>旁邊有複製圖示的，點一下就複製。</li>
+          <li><span class="hk"><Icon name="copy" /></span>旁邊有複製圖示的，點一下就複製；<span class="hk"><Icon name="edit" /></span>可以改寫。</li>
+          <li>月曆標題可以直接<b>打年份</b>跳過去；在月曆上捲動滾輪換月，在週條上換年；點週次選整週。</li>
+          <li>網址會跟著開始、結束、時區更新，可以直接<b>加入書籤或分享</b>（右上 <span class="hk"><Icon name="link" /></span> 複製連結）。</li>
           <li>中間的間隔可以<b>左右拖曳</b>數字，或點一下輸入 <code>+30天</code>、<code>47m × 16</code>。</li>
           <li>時區條和月曆上的 <i class="node" /> <i class="node end" /> 可以拖曳；點一下會移動比較近的那一端。</li>
           <li>任何文字（日期、時間戳、東京 15:00）都可以打在最上面的框，或在空白處直接貼上。</li>
@@ -105,6 +113,7 @@ const hands = computed(() => {
 .top-tools { display: flex; align-items: center; gap: .15rem; flex: none; margin-left: auto; }
 .compact .top-tools { gap: 0; }
 .compact .top-tools .icon-btn { width: 2.1rem; }
+.icon-btn.ok, .icon-btn.ok:hover { color: var(--good) !important; }
 .q { font-weight: 700; font-size: 1.02rem; line-height: 1; }
 .help { padding: 1rem 1.1rem 1.1rem; font-size: .9rem; line-height: 1.55; color: var(--ink-2); }
 .help-lead { color: var(--ink); margin-bottom: .6rem; }

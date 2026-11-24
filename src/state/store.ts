@@ -39,6 +39,8 @@ export const S = reactive({
   theme: 'system' as Theme,
   lens: 'zones' as Lens,
   readEnd: 'start' as End,
+  /** Readings pinned to the top, in order (keys of the formats). */
+  readPins: [] as string[],
   density: 100,
   map: true,
   dur: DUR_SAMPLE,
@@ -322,7 +324,7 @@ export function addZoneRow(id: string): boolean {
 export function removeZoneRow(id: string) { S.zones = S.zones.filter((z) => !sameZone(z, id)); }
 
 /* ---------- persistence ---------- */
-function defaultZones(): string[] {
+export function defaultZones(): string[] {
   const list = ['Asia/Taipei', 'Asia/Tokyo', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Australia/Sydney'];
   return list.filter((id) => isValidTzSafe(id) && !sameZone(id, LOCAL_TZ));
 }
@@ -351,6 +353,7 @@ export function loadState(): boolean {
   if (o.theme === 'light' || o.theme === 'dark' || o.theme === 'system') S.theme = o.theme;
   if (o.lens === 'zones' || o.lens === 'cal' || o.lens === 'read') S.lens = o.lens;
   if (o.readEnd === 'end') S.readEnd = 'end';
+  if (Array.isArray(o.readPins)) S.readPins = (o.readPins as unknown[]).filter((k): k is string => typeof k === 'string').slice(0, 20);
   if (typeof o.density === 'number' && DENSITY.some((d) => d.v === o.density)) S.density = o.density;
   if (typeof o.map === 'boolean') S.map = o.map;
   if (typeof o.dur === 'string' && o.dur.length <= 400) { S.dur = o.dur; S.durSample = !!o.durSample; }
@@ -358,7 +361,7 @@ export function loadState(): boolean {
 }
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 export function startPersisting() {
-  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.theme, S.lens, S.readEnd,
+  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endSample, S.endPreset, S.link?.expr, S.zones, S.theme, S.lens, S.readEnd, S.readPins,
     S.density, S.map, S.dur, S.durSample], () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -366,7 +369,7 @@ export function startPersisting() {
         localStorage.setItem(STORE_KEY, JSON.stringify({
           v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end,
           endSample: S.endSample, endPreset: S.endPreset, link: S.link ? S.link.expr : null, zones: S.zones,
-          theme: S.theme, lens: S.lens, readEnd: S.readEnd,
+          theme: S.theme, lens: S.lens, readEnd: S.readEnd, readPins: S.readPins,
           density: S.density, map: S.map, dur: S.dur, durSample: S.durSample,
         }));
       } catch { /* storage unavailable: everything still works for this visit */ }

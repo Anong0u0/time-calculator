@@ -12,13 +12,16 @@ import Toast from './components/Toast.vue';
 import Icon from './components/Icon.vue';
 import { S, type Lens, loadState, seedSample, startPersisting, startClock, undo, redo, bump } from './state/store';
 import { interpret } from './state/command';
+import { applyUrl, startUrlSync } from './state/url';
 import { focusCommand, ui } from './state/ui';
 import { readRem, remPx } from './composables/size';
 import { hideTip } from './composables/tip';
 
-loadState();
-seedSample();
+const hadSaved = loadState();
+// a link's own time wins over what was saved here; a link with a time but no end means no end
+if (!applyUrl(location.search, hadSaved)?.time) seedSample();
 startPersisting();
+startUrlSync();
 
 const vw = ref(window.innerWidth), vh = ref(window.innerHeight);
 type Layout = 'xwide' | 'wide' | 'square' | 'phone' | 'short';

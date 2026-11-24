@@ -220,7 +220,7 @@ input[type="text"]:focus-visible { outline: none; }
   transition: background .15s, color .15s;
 }
 .copy > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.copy .ic { opacity: .38; color: var(--ink-3); transition: opacity .15s, color .15s; width: 1em; height: 1em; }
+.copy .ic { opacity: .5; color: var(--ink-3); transition: opacity .15s, color .15s; width: 1em; height: 1em; }
 .copy:hover:not(:disabled) { background: var(--accent-wash); color: var(--accent); }
 .copy:hover:not(:disabled) .ic, .copy:focus-visible .ic { opacity: 1; color: var(--accent); }
 .copy.copied .ic { opacity: 1; color: var(--good); }
@@ -369,10 +369,10 @@ input[type="text"]:focus-visible { outline: none; }
 .app.dial .eq .ep-pre .chip, .app.dial .eq .sc-quick .chip { padding: 0 .55rem; }
 .app.dial .icon-btn { color: var(--ink-4); }
 .app.dial .icon-btn:hover:not(:disabled) { color: var(--ink); }
-/* copy icons appear where the pointer is; touch screens keep a faint hint */
-@media (hover: hover) {
-  .app.dial .copy:not(.ep-copy) .ic { opacity: 0; }
-  .app.dial .copy:not(.ep-copy):hover .ic, .app.dial .copy:not(.ep-copy):focus-visible .ic, .app.dial .copy.copied .ic { opacity: 1; }
-}
+/* every copyable value keeps its copy mark: quiet at rest, so the face stays calm, but always there to be found */
+.app.dial .copy .ic { opacity: .5; color: var(--accent); }
+.app.dial .copy:hover:not(:disabled) .ic, .app.dial .copy:focus-visible .ic { opacity: 1; }
+.app.dial .copy.copied { color: var(--good); }
+.app.dial .copy.copied .ic { opacity: 1; color: var(--good); }
 .app.dial .cmd-box { background: color-mix(in srgb, var(--surface-2) 55%, transparent); box-shadow: none; border-color: var(--hair-2); }
 .app.dial .cmd-box:focus-within { background: var(--surface-2); }

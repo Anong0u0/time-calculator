@@ -281,6 +281,8 @@ function editKey(e: KeyboardEvent) {
 const menuFor = ref<string | null>(null);
 const menuAnchor = ref<HTMLElement | null>(null);
 function openMenu(id: string, e: MouseEvent) { menuAnchor.value = e.currentTarget as HTMLElement; menuFor.value = menuFor.value === id ? null : id; }
+/** A pin on the map opens the same menu as the zone's name. */
+function pinMenu(id: string, el: HTMLElement) { menuAnchor.value = el; menuFor.value = menuFor.value === id ? null : id; }
 function asStart(id: string) { commit(() => setStartTz(id), { label: `開始時區：${zoneName(id)}`, say: `開始改用${zoneName(id)}時區，同一個時刻` }); menuFor.value = null; bump('start'); }
 function asEnd(id: string) { commit(() => setEndTz(id), { label: `結束時區：${zoneName(id)}`, say: `結束改用${zoneName(id)}時區，同一個時刻` }); menuFor.value = null; bump('end'); }
 function remove(id: string) { commit(() => removeZoneRow(id), { label: `移除${zoneName(id)}`, say: `已移除${zoneName(id)}` }); menuFor.value = null; moreOpen.value = false; }
@@ -322,9 +324,9 @@ const awayText = (which: End) => {
     </header>
 
     <div ref="body" class="zbody" :class="{ sec: withSec, side: !!side }" :style="{ '--rowh': rowH + 'px' }">
-      <WorldMap v-if="side" class="zmap-side" :which="winEnd" :zones="zoneRows" :height="side.h" :width="side.w" />
+      <WorldMap v-if="side" class="zmap-side" :which="winEnd" :zones="zoneRows" :height="side.h" :width="side.w" @pin="pinMenu" @add="add" />
       <div class="zlist">
-      <WorldMap v-if="mapH" :which="winEnd" :zones="zoneRows" :height="mapH" :width="bodyW" />
+      <WorldMap v-if="mapH" :which="winEnd" :zones="zoneRows" :height="mapH" :width="bodyW" @pin="pinMenu" @add="add" />
       <!-- the shared axis: ● and ○ live here -->
       <div class="zrow zaxis">
         <span v-if="!stacked" class="zc-name zc-axis-l"><em class="scale-cap">一天</em>{{ zoneName(win.tz) }}</span>

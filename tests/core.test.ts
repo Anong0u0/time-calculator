@@ -144,3 +144,49 @@ describe('command bar and the duration calculator', () => {
     expect(ui.durReq).toBe(before + 1);
   });
 });
+
+import { parseQuery, wallParam, parseWallParam, spanParam } from '../src/state/url';
+import { LOCAL_TZ } from '../src/core/zones';
+
+describe('address bar', () => {
+  test('wall times in the shortest form, and back', () => {
+    expect(wallParam({ y: 2026, mo: 11, d: 24, h: 0, mi: 0, s: 0 })).toBe('2026-11-24');
+    expect(wallParam({ y: 2026, mo: 11, d: 24, h: 16, mi: 5, s: 0 })).toBe('2026-11-24T16:05');
+    expect(wallParam({ y: 33, mo: 1, d: 2, h: 3, mi: 4, s: 5 })).toBe('0033-01-02T03:04:05');
+    expect(parseWallParam('2026-11-24T16:05', 'UTC')).toEqual({ y: 2026, mo: 11, d: 24, h: 16, mi: 5, s: 0 });
+    expect(parseWallParam('2026-2-30', 'UTC')).toBeNull();
+    // Unix seconds and milliseconds, read on the given clock
+    expect(parseWallParam('1700000000', 'UTC')).toEqual({ y: 2023, mo: 11, d: 14, h: 22, mi: 13, s: 20 });
+    expect(parseWallParam('1700000000000', 'Asia/Tokyo')).toEqual({ y: 2023, mo: 11, d: 15, h: 7, mi: 13, s: 20 });
+  });
+  test('spans round-trip through the compact form', () => {
+    for (const t of ['+1年2個月3週4天 5:06:07', '−3小時', '+28工作日', '+30天', '+0天']) {
+      const r = interpretSpanText(t);
+      if (r.kind !== 'span') throw new Error(t);
+      const back = interpretSpanText(spanParam(r.span));
+      if (back.kind !== 'span') throw new Error(spanParam(r.span));
+      expect(fmtSpan(back.span)).toBe(fmtSpan(r.span));
+    }
+    const r = interpretSpanText('+28工作日');
+    if (r.kind === 'span') expect(spanParam(r.span)).toBe('28bd');
+  });
+  test('reading a link', () => {
+    const u = parseQuery('?s=2000-01-01T08:00&tz=Asia/Tokyo&d=30d&z=Europe/London,Not/AZone,America/New_York');
+    expect(u?.time).toBe(true);
+    expect(u?.s).toEqual({ y: 2000, mo: 1, d: 1, h: 8, mi: 0, s: 0 });
+    expect(u?.tz).toBe('Asia/Tokyo');
+    expect(u?.d?.expr).toBe('+30天');
+    expect(u?.z).toEqual(['Europe/London', 'America/New_York']);
+    // a period end without a fixed date, unknown keys ignored
+    const p = parseQuery('?p=newyear&foo=1');
+    expect(p?.time).toBe(true);
+    expect(p?.p).toBe('newyear');
+    expect(p?.tz).toBeUndefined();
+    expect(parseQuery('?foo=1')).toBeNull();
+    // only the zone list: the time is left alone
+    expect(parseQuery('?z=Asia/Tokyo')?.time).toBe(false);
+    // + typed by hand arrives as a space and still reads
+    expect(parseQuery('?d=+3h')?.d?.expr).toBe('+3小時');
+    expect(LOCAL_TZ.length).toBeGreaterThan(0);
+  });
+});
