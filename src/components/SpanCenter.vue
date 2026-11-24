@@ -65,8 +65,8 @@ import { fitText } from '../composables/fit';
 import { useSize, fontsTick, remPx } from '../composables/size';
 import { useFlash } from '../composables/flash';
 
-/** big: the equation has the screen to itself (a full-screen countdown): the hero grows to the room it has. */
-const props = defineProps<{ compact?: boolean; tight?: boolean; big?: boolean }>();
+/** big: the equation has the screen to itself (or beside one lens): the hero grows to the room it has. */
+const props = defineProps<{ compact?: boolean; tight?: boolean; big?: boolean; solo?: boolean; cornerPad?: boolean }>();
 const mode = computed(() => (S.link ? 'link' : hasEnd.value ? 'fixed' : 'empty'));
 const N = { start: '開始', end: '結束' } as const;
 /** The one end that is now, when exactly one is. */
@@ -114,8 +114,11 @@ const box = ref<HTMLElement | null>(null);
 const line = ref<HTMLElement | null>(null);
 const { w: scW } = useSize(scEl);
 const { w: boxW, h: boxH } = useSize(box);
+/** Wide horizontal ribbon: solo span above 3–4 lenses splits left (hero + status) / right (units + chips) with no right-side void. */
+const ribbon = computed(() => !!props.solo && !props.big && !props.compact && scW.value >= 52 * remPx.value);
 const unitsCols = computed(() => {
   const r = remPx.value;
+  if (ribbon.value) return 3;
   if (!scW.value) return props.compact ? 2 : 3;
   if (scW.value >= 52 * r) return 6;
   if (scW.value >= 29 * r) return 3;
@@ -584,7 +587,7 @@ const calcBtn = ref<HTMLElement | null>(null);
 const calcBtnC = ref<HTMLElement | null>(null);
 const calcOpen = ref(false);
 const calcRef = ref<InstanceType<typeof DurationCalc> | null>(null);
-const calcHere = computed(() => ui.layout !== 'xwide');
+const calcHere = computed(() => !ui.durLens);
 const calcTip = computed(() => (calcHere.value ? '時長計算機：加減乘除時間長度' : '打開時長計算機'));
 function toggleCalc() {
   if (calcHere.value) calcOpen.value = !calcOpen.value;
@@ -608,7 +611,19 @@ watch(calcHere, (h) => {
   <section
     ref="scEl"
     class="panel sc"
-    :class="[`m-${mode}`, { compact, big, flash: flashing, neg: (heroSpan?.sign ?? 1) < 0, dropping }]"
+    :class="[
+      `m-${mode}`,
+      {
+        compact,
+        big,
+        solo,
+        ribbon,
+        'corner-pad': cornerPad,
+        flash: flashing,
+        neg: (heroSpan?.sign ?? 1) < 0,
+        dropping,
+      },
+    ]"
     aria-label="間隔"
     @animationend="flashing = false"
     @dragover="dragOver"
@@ -744,7 +759,7 @@ watch(calcHere, (h) => {
     </p>
 
     <div v-if="hasEnd && !(compact && tight)" class="sc-units">
-      <SpanUnits :cols="unitsCols" :inline="unitsCols < 6" :compact="compact" />
+      <SpanUnits :cols="unitsCols" :inline="unitsCols < 6" :compact="compact" :big="big" />
     </div>
 
     <div
@@ -1080,6 +1095,12 @@ watch(calcHere, (h) => {
   font-size: var(--hero-fs, 2.35rem);
 }
 /* big: the hero takes the height the band has; the line under it grows a little with it */
+.sc.corner-pad .sc-head {
+  padding-right: 2.25rem;
+}
+.sc.compact.corner-pad .hero-row {
+  padding-right: 2.25rem;
+}
 .sc.big .hero-row {
   flex: 1;
   min-height: 0;
@@ -1089,6 +1110,62 @@ watch(calcHere, (h) => {
 }
 .sc.big .status {
   font-size: clamp(0.9rem, 1.35vw, 1.6rem);
+}
+.sc.big.solo .hero-line {
+  text-align: center;
+}
+.sc.big.solo .hero-in {
+  height: clamp(3.6rem, 11vh, 5.2rem);
+  font-size: clamp(1.7rem, 3.6vw, 2.8rem);
+  text-align: center;
+}
+.sc.big.solo .status,
+.sc.big.solo .tape {
+  text-align: center;
+}
+.sc.big.solo .sc-quick {
+  justify-content: center;
+}
+.sc.big.solo .sc-quick :deep(.cr) {
+  flex: 0 1 auto;
+}
+/* wide top ribbon: 2-column layout eliminates right-side blank void and keeps the top band slim */
+.sc.ribbon {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-auto-rows: auto;
+  column-gap: 1.5rem;
+  row-gap: 0.3rem;
+  align-items: center;
+}
+.sc.ribbon .sc-head {
+  grid-column: 1 / -1;
+}
+.sc.ribbon .hero-row {
+  grid-column: 1;
+  grid-row: 2;
+}
+.sc.ribbon .status {
+  grid-column: 1;
+  grid-row: 3;
+}
+.sc.ribbon .tape {
+  grid-column: 1;
+  grid-row: 4;
+}
+.sc.ribbon .sc-units {
+  grid-column: 2;
+  grid-row: 2;
+  padding-top: 0;
+}
+.sc.ribbon .sc-quick {
+  grid-column: 2;
+  grid-row: 3 / span 2;
+  margin-top: 0;
+  padding-top: 0;
+}
+.sc.ribbon.m-empty .sc-quick {
+  grid-row: 2 / span 2;
 }
 .compact .hero-in {
   height: 2.8rem;

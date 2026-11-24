@@ -21,7 +21,7 @@ import {
 import { partsInTz, dayNum, countWeekdays, interpretSpanText, fmtSpan } from '../core/time';
 import { nf, nfMax, plainNum } from '../core/format';
 
-defineProps<{ cols?: number; inline?: boolean; compact?: boolean }>();
+defineProps<{ cols?: number; inline?: boolean; compact?: boolean; big?: boolean }>();
 const KEYS = ['週', '天', '小時', '分鐘', '秒', '工作日'] as const;
 const cells = computed(() => {
   if (gapSec.value == null || endMs.value == null)
@@ -132,7 +132,7 @@ function key(e: KeyboardEvent) {
 </script>
 
 <template>
-  <dl class="units" :class="{ inline, compact }" :style="{ '--cols': cols || 6 }" aria-label="換算成各種單位">
+  <dl class="units" :class="{ inline, compact, big }" :style="{ '--cols': cols || 6 }" aria-label="換算成各種單位">
     <div v-for="c in cells" :key="c.k" class="u">
       <dt>{{ c.k }}</dt>
       <dd v-if="editing === c.k">
@@ -225,6 +225,15 @@ function key(e: KeyboardEvent) {
 }
 .units.compact .u-v {
   font-size: max(var(--floor), 0.8rem);
+}
+.units.big .u {
+  padding: 0.5rem 0.7rem 0.55rem;
+}
+.units.big .u dt {
+  font-size: clamp(var(--fs-xs), 0.9vw, 0.95rem);
+}
+.units.big .u-v {
+  font-size: clamp(0.88rem, 1.2vw, 1.3rem);
 }
 .u-ed {
   flex: none;

@@ -154,11 +154,14 @@ const mapH = computed(() => {
   if (!S.map || side.value || !bodyH.value || !bodyW.value) return 0;
   const per = baseRowH.value + gap.value,
     rem = remPx.value;
-  const natural = Math.min(bodyW.value / MAP_RATIO, bodyH.value * 0.5);
   const fixed = axisH.value + gap.value * 2;
   const allRows = zoneRows.value.length * per;
   const withAll = bodyH.value - fixed - allRows;
-  if (withAll >= 7 * rem) return Math.floor(Math.min(natural, withAll));
+  if (withAll >= 7 * rem) {
+    const natural = Math.min(bodyW.value / MAP_RATIO, bodyH.value * 0.58);
+    return Math.floor(Math.min(natural, withAll));
+  }
+  const natural = Math.min(bodyW.value / MAP_RATIO, bodyH.value * 0.5);
   const minRows = Math.min(zoneRows.value.length, stacked.value ? 3 : 4);
   const withMin = bodyH.value - fixed - minRows * per - 2 * rem - gap.value;
   return withMin >= 5.5 * rem ? Math.floor(Math.min(natural, withMin)) : 0;
@@ -277,15 +280,16 @@ const allRows = computed<Row[]>(() => {
   });
 });
 const visible = computed(() => allRows.value.slice(0, capacity.value));
-/** Rows grow (up to half again) into whatever height is left, so the panel has no dead space. */
+/** Rows grow into whatever height is left, so a full-screen timezone board fills cleanly with no dead space. */
 const rowH = computed(() => {
   const n = visible.value.length,
     base = baseRowH.value;
   if (!bodyH.value || !n) return base;
   const reserve = (hidden.value.length ? 2 * remPx.value + gap.value : 0) + (mapH.value ? mapH.value + gap.value : 0);
   const per = (bodyH.value - axisH.value - reserve) / n - gap.value;
-  return Math.max(base, Math.min(base * 1.45, per));
+  return Math.max(base, Math.min(base * 2.15, per));
 });
+const zScale = computed(() => Math.min(1.38, Math.max(1, 1 + (rowH.value / Math.max(1, baseRowH.value) - 1) * 0.36)));
 const hidden = computed(() => allRows.value.slice(visible.value.length));
 const hm = (w: Wall) => `${pad(w.h)}:${pad(w.mi)}${withSec.value ? ':' + pad(w.s) : ''}`;
 
@@ -636,7 +640,12 @@ const awayText = (which: End) => {
       </button>
     </header>
 
-    <div ref="body" class="zbody" :class="{ sec: withSec, side: !!side }" :style="{ '--rowh': rowH + 'px' }">
+    <div
+      ref="body"
+      class="zbody"
+      :class="{ sec: withSec, side: !!side }"
+      :style="{ '--rowh': rowH + 'px', '--zs': zScale }"
+    >
       <WorldMap
         v-if="side"
         class="zmap-side"
@@ -924,8 +933,8 @@ const awayText = (which: End) => {
 
 <style scoped>
 .zp {
-  --zc-name: minmax(7.5rem, 1fr);
-  --zc-times: 8.6rem;
+  --zc-name: minmax(7.5rem, 11.5rem);
+  --zc-times: calc(8.6rem * var(--zs, 1));
 }
 .ph-ic {
   color: var(--ink-3);
@@ -1111,7 +1120,7 @@ const awayText = (which: End) => {
 }
 .zc-name b {
   font-weight: 600;
-  font-size: 0.93rem;
+  font-size: calc(0.93rem * var(--zs, 1));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1154,7 +1163,7 @@ const awayText = (which: End) => {
   color: var(--accent);
 }
 .sec {
-  --zc-times: 10.4rem;
+  --zc-times: calc(10.4rem * var(--zs, 1));
 }
 .zc-name small {
   font-size: var(--fs-xs);
@@ -1203,7 +1212,7 @@ const awayText = (which: End) => {
   font-size: 0.7rem;
 }
 .zt-v {
-  font-size: 0.9rem;
+  font-size: calc(0.9rem * var(--zs, 1));
   font-weight: 500;
   color: var(--ink);
   padding: 0 0.1rem;
@@ -1225,7 +1234,7 @@ const awayText = (which: End) => {
 
 .strip {
   position: relative;
-  height: clamp(1.75rem, calc(var(--rowh) * 0.64), 2.5rem);
+  height: clamp(1.75rem, calc(var(--rowh) * 0.62), 3.4rem);
   border-radius: 0.55rem;
   overflow: hidden;
   cursor: pointer;

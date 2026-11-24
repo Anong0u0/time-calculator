@@ -35,7 +35,7 @@ import {
 import { interpret } from '../state/command';
 import { editSpan } from '../state/ui';
 
-const props = defineProps<{ which: End; compact?: boolean }>();
+const props = defineProps<{ which: End; compact?: boolean; stacked?: boolean }>();
 type K = 'y' | 'mo' | 'd' | 'h' | 'mi' | 's';
 interface Seg {
   k: K;
@@ -254,7 +254,7 @@ const aria = (sg: Seg) => `${SUBJ.value}的${sg.name}`;
 </script>
 
 <template>
-  <div class="sdt mono" :class="{ empty, compact }" role="group" :aria-label="`${SUBJ}時間`">
+  <div class="sdt mono" :class="{ empty, compact, stacked }" role="group" :aria-label="`${SUBJ}時間`">
     <span class="grp">
       <template v-for="(sg, i) in SEGS.slice(0, 3)" :key="sg.k">
         <input
@@ -323,6 +323,21 @@ const aria = (sg: Seg) => `${SUBJ.value}的${sg.name}`;
   line-height: 1.15;
   letter-spacing: -0.01em;
   min-width: 0;
+}
+.sdt.stacked {
+  flex-direction: column;
+  align-items: center;
+  row-gap: 0.14em;
+}
+.sdt.stacked .grp:first-child {
+  font-size: 0.54em;
+  color: var(--ink-2);
+}
+.sdt.stacked .grp:first-child .seg {
+  color: var(--ink-2);
+}
+.sdt.stacked .grp:first-child .seg:focus {
+  color: var(--ink);
 }
 .grp {
   display: inline-flex;

@@ -12,21 +12,51 @@ export interface DragSortOpts {
 }
 export function useDragSort(opts: DragSortOpts) {
   const dragging = ref<number | null>(null);
-  let st: { id: number; el: HTMLElement; start: number; idx: number; grab: number; y: number } | null = null;
+  let st: {
+    id: number;
+    el: HTMLElement;
+    start: number;
+    idx: number;
+    grabX: number;
+    grabY: number;
+    x: number;
+    y: number;
+    grid: boolean;
+  } | null = null;
   function place() {
     if (!st) return;
     const s = st;
     s.el.style.transform = '';
-    const top = s.el.getBoundingClientRect().top;
-    s.el.style.transform = `translateY(${s.y - s.grab - top}px)`;
+    const r = s.el.getBoundingClientRect();
+    const dx = s.grid ? s.x - s.grabX - r.left : 0;
+    const dy = s.y - s.grabY - r.top;
+    s.el.style.transform = s.grid ? `translate(${dx}px, ${dy}px)` : `translateY(${dy}px)`;
   }
   function down(e: PointerEvent, idx: number) {
     if (e.button > 0) return;
-    const row = opts.rows()[idx];
+    const rows = opts.rows();
+    const row = rows[idx];
     if (!row) return;
     e.preventDefault();
     e.stopPropagation();
-    st = { id: e.pointerId, el: row, start: idx, idx, grab: e.clientY - row.getBoundingClientRect().top, y: e.clientY };
+    const r0 = row.getBoundingClientRect();
+    let grid = false;
+    if (rows.length >= 2) {
+      const a = rows[0].getBoundingClientRect(),
+        b = rows[1].getBoundingClientRect();
+      grid = Math.abs(a.top - b.top) < Math.min(a.height, b.height) * 0.5;
+    }
+    st = {
+      id: e.pointerId,
+      el: row,
+      start: idx,
+      idx,
+      grabX: e.clientX - r0.left,
+      grabY: e.clientY - r0.top,
+      x: e.clientX,
+      y: e.clientY,
+      grid,
+    };
     dragging.value = idx;
     row.classList.add('sorting');
     try {
@@ -37,13 +67,16 @@ export function useDragSort(opts: DragSortOpts) {
   }
   function moveP(e: PointerEvent) {
     if (!st || e.pointerId !== st.id) return;
+    st.x = e.clientX;
     st.y = e.clientY;
     const rows = opts.rows();
     let target = 0;
     rows.forEach((r, i) => {
       if (i === st!.idx) return;
       const rc = r.getBoundingClientRect();
-      if (e.clientY > rc.top + rc.height / 2) target++;
+      if (st!.grid) {
+        if (e.clientY > rc.bottom || (e.clientY >= rc.top && e.clientX > rc.left + rc.width / 2)) target++;
+      } else if (e.clientY > rc.top + rc.height / 2) target++;
     });
     target = Math.min(target, rows.length - 1);
     if (target !== st.idx) {

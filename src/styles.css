@@ -603,6 +603,17 @@ input[type='text']:focus-visible {
     ),
     linear-gradient(to bottom, transparent 45%, color-mix(in srgb, var(--ink) 3.5%, transparent)), var(--face);
 }
+.app.dial.solo {
+  background:
+    radial-gradient(64% 56% at 50% 45%, color-mix(in srgb, var(--surface-2) 82%, transparent), transparent 78%),
+    radial-gradient(100% 75% at 50% 42%, color-mix(in srgb, var(--accent) 5.5%, transparent), transparent 64%),
+    repeating-radial-gradient(
+      circle at 50% 45%,
+      transparent 0 9px,
+      color-mix(in srgb, var(--ink) 1.5%, transparent) 9px 10px
+    ),
+    linear-gradient(to bottom, transparent 50%, color-mix(in srgb, var(--ink) 3%, transparent)), var(--face);
+}
 .app.dial .panel {
   background: transparent;
   border: 0;
@@ -623,6 +634,14 @@ input[type='text']:focus-visible {
   margin: 0 1rem;
   padding: 0.35rem 0 0.5rem;
   border-bottom: 1px solid var(--hair-2);
+}
+.app.no-top > .panel.has-corner > .panel-head {
+  padding-right: 2.2rem;
+}
+.app.dial.no-top > .eq.row > .ep,
+.app.dial.no-top > .eq.row > .sc,
+.app.dial.no-top > .eq.stage > .sc {
+  padding-top: 0.48rem;
 }
 .app.dial > .panel .panel-head h2:not(.cal-title) {
   font-size: max(var(--floor), 0.82rem);
@@ -659,12 +678,12 @@ input[type='text']:focus-visible {
     inset 0 0 0 0.14em var(--accent),
     0 0 0 0.3em var(--accent-wash-2);
 }
-/* stacked band: the rail has its own lane on the left; the readings sit to its right */
-.app.dial .eq.stack .ep,
-.app.dial .eq.stack .sc {
+/* stacked band: the rail has its own lane on the left only when drawn; the readings sit to its right */
+.app.dial .eq.stack.has-vrail .ep,
+.app.dial .eq.stack.has-vrail .sc {
   padding-left: 2.05rem;
 }
-.app.dial .eq.stack .ep-head .node {
+.app.dial .eq.stack.has-vrail .ep-head .node {
   margin-left: -1.3rem;
   margin-right: 0.2rem;
 }

@@ -33,14 +33,25 @@ import {
 } from '../state/store';
 import { fmtDT, addDuration, partsInTz, WD, wdOf, pad, type Span } from '../core/time';
 import { editSpan } from '../state/ui';
+import type { EqMode } from '../state/layout';
 import { remPx, fontsTick } from '../composables/size';
 /** autoTight: the band sits in a cell of fixed height (short screens). It shows the quick chips only when they fit.
-    big: nothing else below it, so it takes the whole height and its readings grow to fill it. */
-const props = defineProps<{ compact?: boolean; stack?: boolean; autoTight?: boolean; big?: boolean }>();
+    big: nothing else below it (or beside one lens), so it takes the whole height and its readings grow to fill it.
+    mode: 'row' (left-to-right horizon), 'stack' (vertical with left rail), 'stage' (full-width span hero over rail and endpoints). */
+const props = defineProps<{
+  mode?: EqMode;
+  compact?: boolean;
+  autoTight?: boolean;
+  big?: boolean;
+  solo?: boolean;
+  cornerPad?: boolean;
+}>();
+const isStack = computed(() => props.mode === 'stack');
+const isStage = computed(() => props.mode === 'stage');
 
 /* ---------- the pieces shown: start, span and end can each be put away, and so can the rail ----------
    The grid is built from what is left; a joint (+ or =) stands only between the span and an end. */
-type Slot = 's' | 'j1' | 'm' | 'j2' | 'e';
+type Slot = 's' | 'j1' | 'm' | 'j2' | 'e' | 'div';
 const parts = computed(() => {
   const s = shown('start'),
     m = shown('span'),
@@ -52,13 +63,46 @@ const parts = computed(() => {
     sizes.push(size);
     at[k] = sizes.length;
   };
-  if (props.stack) {
-    if (s) put('s', 'auto');
+  if (isStack.value) {
+    const growEnd = props.big && !m;
+    if (s) put('s', growEnd ? 'minmax(0, 1fr)' : 'auto');
     if (s && m) put('j1', '.5rem');
     if (m) put('m', props.big ? 'minmax(0, 1fr)' : 'auto');
     if (m && e) put('j2', '.5rem');
-    if (e) put('e', 'auto');
+    if (e) put('e', growEnd ? 'minmax(0, 1fr)' : 'auto');
     return { s, m, e, rail, at, style: { gridTemplateRows: sizes.join(' ') } };
+  }
+  if (isStage.value && m && (s || e)) {
+    const midRow = rail ? (props.compact ? '1.9rem' : '2.4rem') : props.compact ? '1.65rem' : '2.1rem';
+    const stageRows = (top: string, bot: string) => (props.big ? `${top} ${midRow} ${bot}` : `auto ${midRow} auto`);
+    if (s && e) {
+      // 7 symmetric columns: span fills 1/-1, rail + operators share row 2, start (1/4) | div (4) | end (5/8) share row 3.
+      return {
+        s,
+        m,
+        e,
+        rail,
+        at: { j1: 2, div: 4, j2: 6 } as Partial<Record<Slot, number>>,
+        style: {
+          gridTemplateColumns:
+            'minmax(0, 0.72fr) 2.3rem minmax(0, 0.9fr) 1.5rem minmax(0, 0.9fr) 2.3rem minmax(0, 0.72fr)',
+          gridTemplateRows: stageRows('minmax(0, 1.3fr)', 'minmax(0, 0.85fr)'),
+        },
+      };
+    }
+    return {
+      s,
+      m,
+      e,
+      rail,
+      at: (s ? { j1: 2 } : { j2: 2 }) as Partial<Record<Slot, number>>,
+      style: {
+        gridTemplateColumns: s
+          ? 'minmax(0, 0.75fr) 2.3rem minmax(0, 2.25fr)'
+          : 'minmax(0, 2.25fr) 2.3rem minmax(0, 0.75fr)',
+        gridTemplateRows: stageRows('minmax(0, 1.35fr)', 'minmax(0, 0.75fr)'),
+      },
+    };
   }
   if (s) put('s', 'minmax(0, 1fr)');
   if (s && (m || e)) put('j1', '2.3rem');
@@ -74,20 +118,45 @@ const parts = computed(() => {
     style: { gridTemplateColumns: sizes.join(' '), gridTemplateRows: rail ? 'minmax(0, 1fr) 2rem' : 'minmax(0, 1fr)' },
   };
 });
-/** Where a piece goes: its column in a row (the joints on the rail's line), its row when stacked. */
+const topRightPart = computed<'s' | 'm' | 'e' | null>(() => {
+  if (!props.cornerPad) return null;
+  const { s, m, e } = parts.value;
+  if (isStage.value && m) return 'm';
+  if (isStack.value) return s ? 's' : m ? 'm' : e ? 'e' : null;
+  return e ? 'e' : m ? 'm' : s ? 's' : null;
+});
+/** Where a piece goes: its column in a row (the joints on the rail's line), its row when stacked, or its tier in stage mode. */
 function place(k: Slot, onRail = false) {
-  const i = parts.value.at[k];
-  if (props.stack) return { gridRow: String(i) };
-  return { gridRow: onRail && parts.value.rail ? '2' : '1', gridColumn: String(i) };
+  const { s, m, e, at } = parts.value;
+  if (isStack.value) return { gridRow: String(at[k]) };
+  if (isStage.value && m && (s || e)) {
+    if (k === 'm') return { gridRow: '1', gridColumn: '1 / -1' };
+    if (k === 'j1' || k === 'j2') return { gridRow: '2', gridColumn: String(at[k]) };
+    if (k === 'div') return { gridRow: '3', gridColumn: String(at.div) };
+    if (k === 's') return { gridRow: '3', gridColumn: e ? '1 / 4' : '1 / -1' };
+    if (k === 'e') return { gridRow: '3', gridColumn: s ? '5 / 8' : '1 / -1' };
+  }
+  return { gridRow: onRail && parts.value.rail ? '2' : '1', gridColumn: String(at[k]) };
 }
 const showOp1 = computed(() => parts.value.s && parts.value.m);
 const showOp2 = computed(() => parts.value.m && parts.value.e);
 /** The ruler runs under the span; with the span put away, along the whole rail. Next to an edge it leaves room for the rail's caption. */
-const rulerStyle = computed(() => ({ gridRow: '2', gridColumn: parts.value.m ? String(parts.value.at.m) : '1 / -1' }));
+const rulerStyle = computed(() => {
+  const { s, m, e, at } = parts.value;
+  if (isStage.value && m && (s || e)) {
+    return { gridRow: '2', gridColumn: s && e ? '3 / 6' : s ? '3' : '1' };
+  }
+  return { gridRow: '2', gridColumn: m ? String(at.m) : '1 / -1' };
+});
 const rulerEdge = computed(() => ({
   'edge-l': !parts.value.m || !parts.value.s,
   'edge-r': !parts.value.m || !parts.value.e,
 }));
+const stageActive = computed(() => isStage.value && parts.value.m && (parts.value.s || parts.value.e));
+const stageSingleEnd = computed(() => stageActive.value && !(parts.value.s && parts.value.e));
+const twinEnds = computed(
+  () => !!props.big && !isStack.value && !props.solo && !parts.value.m && parts.value.s && parts.value.e,
+);
 
 const root = ref<HTMLElement | null>(null);
 const tight = ref(!!props.autoTight);
@@ -134,7 +203,7 @@ function eqDown(e: PointerEvent) {
 }
 function eqMove(e: PointerEvent) {
   if (!eqDrag || e.pointerId !== eqDrag.id) return;
-  const dx = props.stack ? 0 : e.clientX - eqDrag.x;
+  const dx = isStack.value ? 0 : e.clientX - eqDrag.x;
   eqDrag.to = dx < -18 ? 'start' : dx > 18 ? 'end' : null;
   eqLean.value = eqDrag.to;
 }
@@ -320,7 +389,7 @@ const gripTip = (g: Grip) => {
 const v = reactive({ x: 0, top: 0, h: 0, a: 0, b: 0, ok: false });
 function placeRail() {
   const el = root.value;
-  if (!el || !props.stack || !parts.value.rail) {
+  if (!el || !isStack.value || !parts.value.rail) {
     v.ok = false;
     return;
   }
@@ -330,15 +399,15 @@ function placeRail() {
     rb = q('.eq-e .ep-head .node'),
     p1 = q('.op1'),
     p2 = q('.op2');
-  if (!ra || !rb || !p1 || !p2) {
+  if (!ra || !rb) {
     v.ok = false;
     return;
   }
   v.x = ra.left + ra.width / 2 - r0.left;
   v.top = ra.bottom - r0.top + 3;
   v.h = Math.max(0, rb.top - ra.bottom - 6);
-  v.a = p1.top + p1.height / 2 - ra.bottom - 3;
-  v.b = p2.top + p2.height / 2 - ra.bottom - 3;
+  v.a = p1 ? p1.top + p1.height / 2 - ra.bottom - 3 : 0;
+  v.b = p2 ? p2.top + p2.height / 2 - ra.bottom - 3 : v.h;
   v.ok = v.h > 10;
 }
 const relayout = () =>
@@ -376,23 +445,56 @@ watch(
     requestAnimationFrame(measure);
   },
 );
-watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
+watch([() => props.mode, fontsTick, hasEnd], () => nextTick(relayout));
 </script>
 
 <template>
   <div
     ref="root"
     class="eq"
-    :class="[stack ? 'stack' : 'row', { big }]"
+    :class="[isStack ? 'stack' : stageActive ? 'stage' : 'row', { big, solo, 'has-vrail': v.ok }]"
     :style="{ ...parts.style, ...(v.ok ? { '--rail-x': v.x + 'px' } : {}) }"
   >
-    <Endpoint v-if="parts.s" which="start" class="eq-s" :style="place('s')" :compact="compact" :big="big" />
-    <SpanCenter v-if="parts.m" class="eq-m" :style="place('m')" :compact="compact" :tight="tight" :big="big" />
-    <Endpoint v-if="parts.e" which="end" class="eq-e" :style="place('e')" :compact="compact" :big="big" />
+    <Endpoint
+      v-if="parts.s"
+      which="start"
+      class="eq-s"
+      :style="place('s')"
+      :compact="compact"
+      :big="big"
+      :solo="solo || twinEnds"
+      :stage="stageActive"
+      :wide-stage="stageSingleEnd"
+      :corner-pad="topRightPart === 's'"
+    />
+    <SpanCenter
+      v-if="parts.m"
+      class="eq-m"
+      :style="place('m')"
+      :compact="compact"
+      :tight="tight"
+      :big="big"
+      :solo="solo || stageActive"
+      :corner-pad="topRightPart === 'm'"
+    />
+    <Endpoint
+      v-if="parts.e"
+      which="end"
+      class="eq-e"
+      :style="place('e')"
+      :compact="compact"
+      :big="big"
+      :solo="solo || twinEnds"
+      :stage="stageActive"
+      :wide-stage="stageSingleEnd"
+      :corner-pad="topRightPart === 'e'"
+    />
 
-    <template v-if="!stack">
-      <span v-if="parts.at.j1" class="div div1" :style="place('j1')" aria-hidden="true" />
-      <span v-if="parts.at.j2" class="div div2" :style="place('j2')" aria-hidden="true" />
+    <template v-if="!isStack">
+      <span v-if="stageActive && parts.at.div" class="div div-stage" :style="place('div')" aria-hidden="true" />
+      <span v-else-if="!stageActive && parts.at.j1" class="div div1" :style="place('j1')" aria-hidden="true" />
+      <span v-if="!stageActive && parts.at.j2" class="div div2" :style="place('j2')" aria-hidden="true" />
+      <span v-if="stageActive && !parts.rail" class="stage-bar" aria-hidden="true" />
       <div v-if="parts.rail" class="track">
         <button
           type="button"
@@ -514,6 +616,22 @@ watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
 }
 .eq.row {
   padding-bottom: 0.3rem;
+}
+.eq.stage {
+  padding-bottom: 0.15rem;
+}
+.stage-bar {
+  grid-area: 2 / 1 / 3 / -1;
+  align-self: center;
+  height: 1px;
+  margin: 0 1.1rem;
+  background: var(--hair-2);
+}
+.eq.stage .readout,
+.eq.stage .eq-lean {
+  grid-area: 2 / 1 / 3 / -1;
+  bottom: auto;
+  top: -1.9rem;
 }
 .div {
   align-self: stretch;

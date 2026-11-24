@@ -221,9 +221,10 @@ function sorted(from: number, to: number) {
   sortSession++;
 }
 const body = ref<HTMLElement | null>(null);
+const listEl = ref<HTMLElement | null>(null);
 const popList = ref<HTMLElement | null>(null);
 const panelSort = useDragSort({
-  rows: () => [...(body.value?.querySelectorAll<HTMLElement>(':scope > .rd-row[data-k]') || [])],
+  rows: () => [...(listEl.value?.querySelectorAll<HTMLElement>(':scope > .rd-row[data-k]') || [])],
   move: reorder,
   done: sorted,
 });
@@ -255,17 +256,38 @@ const isoDur = computed(() => {
 });
 
 const { w: bodyW, h: bodyH } = useSize(body);
-const cols = computed(() => bodyW.value > 0 && bodyW.value >= 38 * remPx.value);
-const rowH = computed(() => (cols.value || !hasEnd.value ? 2.15 : 2.95) * remPx.value);
 const lenH = computed(() => (hasEnd.value ? 2.15 * remPx.value : 0));
+const singleCols = computed(() => bodyW.value > 0 && bodyW.value >= 38 * remPx.value);
+const singleRowH = computed(() => (singleCols.value || !hasEnd.value ? 2.15 : 2.95) * remPx.value);
+const fit1 = computed(() => {
+  const room = bodyH.value - lenH.value - 2.3 * remPx.value;
+  if (defs.value.length * singleRowH.value <= room) return defs.value.length;
+  return Math.max(0, Math.floor(room / singleRowH.value));
+});
+/** Use a two-column format grid on wide panels when one column would clip rows (or when only one end is shown). */
+const grid2 = computed(
+  () => bodyW.value >= (hasEnd.value ? 64 : 52) * remPx.value && (fit1.value < defs.value.length || !hasEnd.value),
+);
+const cellW = computed(() => (grid2.value ? (bodyW.value - 2.2 * remPx.value) / 2 : bodyW.value));
+const cols = computed(() => cellW.value > 0 && cellW.value >= 38 * remPx.value);
+const rowH = computed(() => (cols.value || !hasEnd.value ? 2.15 : 2.95) * remPx.value);
 const fit = computed(() => {
   // the foot (全部寫法 · 複製表格) is always there
   const room = bodyH.value - lenH.value - 2.3 * remPx.value;
-  if (defs.value.length * rowH.value <= room) return defs.value.length;
-  return Math.max(0, Math.floor(room / rowH.value));
+  const rowsAvail = Math.max(0, Math.floor(room / rowH.value));
+  const cap = grid2.value ? rowsAvail * 2 : rowsAvail;
+  return Math.min(defs.value.length, cap);
 });
 const shown = computed(() => (bodyH.value ? vals.value.slice(0, fit.value) : vals.value.slice(0, 6)));
 const rest = computed(() => vals.value.slice(shown.value.length));
+/** When every format fits with extra vertical room (full-screen 讀法), let rows breathe and scale type gently. */
+const rdRowH = computed(() => {
+  if (!bodyH.value || rest.value.length || !shown.value.length) return rowH.value;
+  const lines = (hasEnd.value ? 1 : 0) + (grid2.value ? Math.ceil(shown.value.length / 2) : shown.value.length);
+  const avail = (bodyH.value - 2.3 * remPx.value) / Math.max(1, lines);
+  return Math.max(rowH.value, Math.min(rowH.value * 1.48, avail));
+});
+const rdScale = computed(() => Math.min(1.22, Math.max(1, 1 + (rdRowH.value / Math.max(1, rowH.value) - 1) * 0.45)));
 const moreBtn = ref<HTMLElement | null>(null);
 const more = ref(false);
 const nowSec = computed(() => String(Math.floor(now.value / 1000)));
@@ -347,7 +369,7 @@ function editKey(e: KeyboardEvent) {
 </script>
 
 <template>
-  <section class="panel rd" :class="{ cols, one: !hasEnd }" aria-label="讀法">
+  <section class="panel rd" :class="{ cols, grid2, one: !hasEnd }" aria-label="讀法">
     <header class="panel-head">
       <Icon name="list" class="ph-ic" />
       <h2>讀法</h2>
@@ -366,92 +388,94 @@ function editKey(e: KeyboardEvent) {
         ><i class="dot" aria-hidden="true" /><em>現在</em>{{ nowSec }}</CopyBtn
       >
     </header>
-    <div ref="body" class="rd-body">
+    <div ref="body" class="rd-body" :style="{ '--rd-rh': rdRowH + 'px', '--rd-s': rdScale }">
       <div v-if="hasEnd" class="rd-row len" :class="{ hot: copiedKey === 'rd-dur' }">
         <span class="rd-k" v-tip="'ISO 8601 的長度寫法'">{{ copiedKey === 'rd-dur' ? '已複製' : '長度' }}</span>
         <span class="rd-v"><CopyBtn class="mono" :text="isoDur" k="rd-dur" label="ISO 長度" /></span>
       </div>
-      <div
-        v-for="(r, i) in shown"
-        :key="r.k"
-        class="rd-row"
-        :data-k="r.k"
-        :class="{ hot: hot(r.k), lifted: panelSort.dragging.value === i }"
-      >
-        <span class="rd-k">
-          <button
-            type="button"
-            class="rd-grip"
-            :aria-label="`拖曳或按 ↑↓ 調整「${r.label}」的位置`"
-            v-tip="'拖曳調整順序；也可以按 ↑↓'"
-            @pointerdown="panelSort.down($event, i)"
-            @pointermove="panelSort.move"
-            @pointerup="panelSort.up"
-            @pointercancel="panelSort.up"
-            @keydown="panelSort.key($event, i)"
-          >
-            <Icon name="grip" />
-          </button>
-          <span class="rd-kl" v-tip="r.tip">{{ hot(r.k) ? '已複製' : r.label }}</span>
-        </span>
-        <span class="rd-v"
-          ><i v-if="hasEnd && !cols" class="node" aria-hidden="true" />
-          <input
-            v-if="isEditing(r.k, 'start', 'panel')"
-            :ref="setEditEl"
-            v-model="editText"
-            class="rd-in"
-            :class="r.sans ? 'tnum' : 'mono'"
-            :aria-label="`開始的 ${r.label}`"
-            spellcheck="false"
-            autocomplete="off"
-            @keydown="editKey"
-            @blur="applyEdit"
-          />
-          <template v-else
-            ><CopyBtn
-              :class="r.sans ? 'tnum' : 'mono'"
-              :text="r.s"
-              :k="`rd-${r.k}-s`"
-              :label="`開始 ${r.label}`" /><button
+      <div ref="listEl" class="rd-list">
+        <div
+          v-for="(r, i) in shown"
+          :key="r.k"
+          class="rd-row"
+          :data-k="r.k"
+          :class="{ hot: hot(r.k), lifted: panelSort.dragging.value === i }"
+        >
+          <span class="rd-k">
+            <button
               type="button"
-              class="rd-edit"
-              v-tip="`改寫開始的 ${r.label}`"
-              :aria-label="`改寫開始的 ${r.label}`"
-              @click="startEdit(r.k, 'start', 'panel', r.s)"
+              class="rd-grip"
+              :aria-label="`拖曳或按 ↑↓ 調整「${r.label}」的位置`"
+              v-tip="'拖曳調整順序；也可以按 ↑↓'"
+              @pointerdown="panelSort.down($event, i)"
+              @pointermove="panelSort.move"
+              @pointerup="panelSort.up"
+              @pointercancel="panelSort.up"
+              @keydown="panelSort.key($event, i)"
             >
-              <Icon name="edit" /></button
-          ></template>
-        </span>
-        <span v-if="hasEnd" class="rd-v"
-          ><i v-if="!cols" class="node end" aria-hidden="true" />
-          <input
-            v-if="isEditing(r.k, 'end', 'panel')"
-            :ref="setEditEl"
-            v-model="editText"
-            class="rd-in"
-            :class="r.sans ? 'tnum' : 'mono'"
-            :aria-label="`結束的 ${r.label}`"
-            spellcheck="false"
-            autocomplete="off"
-            @keydown="editKey"
-            @blur="applyEdit"
-          />
-          <template v-else
-            ><CopyBtn
+              <Icon name="grip" />
+            </button>
+            <span class="rd-kl" v-tip="r.tip">{{ hot(r.k) ? '已複製' : r.label }}</span>
+          </span>
+          <span class="rd-v"
+            ><i v-if="hasEnd && !cols" class="node" aria-hidden="true" />
+            <input
+              v-if="isEditing(r.k, 'start', 'panel')"
+              :ref="setEditEl"
+              v-model="editText"
+              class="rd-in"
               :class="r.sans ? 'tnum' : 'mono'"
-              :text="r.e"
-              :k="`rd-${r.k}-e`"
-              :label="`結束 ${r.label}`" /><button
-              type="button"
-              class="rd-edit"
-              v-tip="`改寫結束的 ${r.label}`"
-              :aria-label="`改寫結束的 ${r.label}`"
-              @click="startEdit(r.k, 'end', 'panel', r.e)"
-            >
-              <Icon name="edit" /></button
-          ></template>
-        </span>
+              :aria-label="`開始的 ${r.label}`"
+              spellcheck="false"
+              autocomplete="off"
+              @keydown="editKey"
+              @blur="applyEdit"
+            />
+            <template v-else
+              ><CopyBtn
+                :class="r.sans ? 'tnum' : 'mono'"
+                :text="r.s"
+                :k="`rd-${r.k}-s`"
+                :label="`開始 ${r.label}`" /><button
+                type="button"
+                class="rd-edit"
+                v-tip="`改寫開始的 ${r.label}`"
+                :aria-label="`改寫開始的 ${r.label}`"
+                @click="startEdit(r.k, 'start', 'panel', r.s)"
+              >
+                <Icon name="edit" /></button
+            ></template>
+          </span>
+          <span v-if="hasEnd" class="rd-v"
+            ><i v-if="!cols" class="node end" aria-hidden="true" />
+            <input
+              v-if="isEditing(r.k, 'end', 'panel')"
+              :ref="setEditEl"
+              v-model="editText"
+              class="rd-in"
+              :class="r.sans ? 'tnum' : 'mono'"
+              :aria-label="`結束的 ${r.label}`"
+              spellcheck="false"
+              autocomplete="off"
+              @keydown="editKey"
+              @blur="applyEdit"
+            />
+            <template v-else
+              ><CopyBtn
+                :class="r.sans ? 'tnum' : 'mono'"
+                :text="r.e"
+                :k="`rd-${r.k}-e`"
+                :label="`結束 ${r.label}`" /><button
+                type="button"
+                class="rd-edit"
+                v-tip="`改寫結束的 ${r.label}`"
+                :aria-label="`改寫結束的 ${r.label}`"
+                @click="startEdit(r.k, 'end', 'panel', r.e)"
+              >
+                <Icon name="edit" /></button
+            ></template>
+          </span>
+        </div>
       </div>
       <div class="rd-foot">
         <button
@@ -598,25 +622,37 @@ function editKey(e: KeyboardEvent) {
   padding: 0.35rem 1rem 0.7rem;
   overflow: hidden;
 }
+.rd-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grid2 .rd-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 2.2rem;
+}
 .rd-row {
   display: grid;
-  grid-template-columns: 5.9rem minmax(0, 1fr);
+  grid-template-columns: calc(5.9rem * var(--rd-s, 1)) minmax(0, 1fr);
   grid-auto-rows: auto;
   column-gap: 0.6rem;
   align-items: center;
   padding: 0.3rem 0;
   border-top: 1px solid var(--hair);
-  min-height: 2.15rem;
+  min-height: var(--rd-rh, 2.15rem);
   flex: none;
 }
-.rd-row:first-child {
+.rd-body > .rd-row:first-child,
+.one .rd-list > .rd-row:first-child,
+.one.grid2 .rd-list > .rd-row:nth-child(2) {
   border-top: 0;
 }
 .rd-row .rd-v + .rd-v {
   grid-column: 2;
 }
 .cols .rd-row {
-  grid-template-columns: 6.2rem minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: calc(6.2rem * var(--rd-s, 1)) minmax(0, 1fr) minmax(0, 1fr);
 }
 .cols .rd-row .rd-v + .rd-v {
   grid-column: 3;
@@ -625,10 +661,11 @@ function editKey(e: KeyboardEvent) {
   grid-column: auto;
 }
 .rd-row.len {
-  grid-template-columns: 5.9rem minmax(0, 1fr) auto;
+  grid-template-columns: calc(5.9rem * var(--rd-s, 1)) minmax(0, 1fr) auto;
+  min-height: max(2.15rem, calc(var(--rd-rh, 2.15rem) * 0.85));
 }
 .cols .rd-row.len {
-  grid-template-columns: 6.2rem minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: calc(6.2rem * var(--rd-s, 1)) minmax(0, 1fr) minmax(0, 1fr);
 }
 .rd-k {
   grid-row: span 2;
@@ -636,7 +673,7 @@ function editKey(e: KeyboardEvent) {
   align-items: center;
   gap: 0.1rem;
   min-width: 0;
-  font-size: var(--fs-s);
+  font-size: calc(var(--fs-s) * var(--rd-s, 1));
   font-weight: 600;
   color: var(--ink-3);
   white-space: nowrap;
@@ -669,7 +706,7 @@ function editKey(e: KeyboardEvent) {
   flex: none;
 }
 .rd-v :deep(.copy) {
-  font-size: max(var(--floor), 0.82rem);
+  font-size: max(var(--floor), calc(0.82rem * var(--rd-s, 1)));
   color: var(--ink);
 }
 .len .rd-v :deep(.copy) {
@@ -928,6 +965,7 @@ function editKey(e: KeyboardEvent) {
 /* the row under the pointer lights up as a whole, so it is clear which pair of values belongs to which label */
 @media (hover: hover) {
   .rd-body > .rd-row:hover,
+  .rd-list > .rd-row:hover,
   .rd-pop .rd-row:hover {
     background: color-mix(in srgb, var(--accent) 4.5%, transparent);
   }
@@ -939,6 +977,7 @@ function editKey(e: KeyboardEvent) {
   }
 }
 .rd-body > .rd-row,
+.rd-list > .rd-row,
 .rd-pop .rd-row {
   margin: 0 -0.5rem;
   padding-left: 0.5rem;

@@ -514,7 +514,7 @@ const mScale = computed(() => {
   if (!W || !H) return 1;
   const cw = (W - 1.9 * r) / 7,
     ch = (H - (showYear.value ? 3.4 : 0) * r - 3.5 * r) / 6;
-  return Math.max(1, Math.min(1.9, Math.min(cw, ch * 1.25) / (3.4 * r)));
+  return Math.max(1, Math.min(2.2, Math.min(cw, ch * 1.25) / (3.4 * r)));
 });
 const lunRoom = computed(
   () =>
@@ -589,9 +589,9 @@ const yl = computed(() => {
   const cw = mw / 7,
     ch = Math.max(4, (mh - titleH - headH) / 6);
   const lun = S.prefs.lunar && ch >= 2.1 * r && cw >= 1.9 * r;
-  const fs = Math.max(8, Math.min(cw * 0.46, lun ? ch * 0.4 : ch * 0.58, 0.92 * r));
-  const dot = Math.max(8, Math.min(cw * 0.9, lun ? ch * 0.6 : ch * 0.94, 2.15 * r));
-  return { cols, rows, fs, dot, lun, head: Math.max(8, Math.min(fs * 0.85, 0.74 * r)) };
+  const fs = Math.max(8, Math.min(cw * 0.46, lun ? ch * 0.4 : ch * 0.58, 1.15 * r));
+  const dot = Math.max(8, Math.min(cw * 0.9, lun ? ch * 0.6 : ch * 0.94, 2.6 * r));
+  return { cols, rows, fs, dot, lun, head: Math.max(8, Math.min(fs * 0.85, 0.85 * r)) };
 });
 interface YDay {
   n: number;
@@ -803,7 +803,7 @@ const tip = computed(() =>
         </button>
       </span>
     </header>
-    <div ref="body" class="cal-body">
+    <div ref="body" class="cal-body" :style="{ '--ms': yearMode ? 1 : mScale }">
       <div
         v-if="yearMode"
         class="yg"
@@ -862,7 +862,6 @@ const tip = computed(() =>
       <div
         v-else
         class="grid"
-        :style="{ '--ms': mScale }"
         :class="{ lun: S.prefs.lunar && lunRoom }"
         role="grid"
         :aria-label="`${view.y} 年 ${view.mo} 月`"
@@ -1227,7 +1226,7 @@ const tip = computed(() =>
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 1.45rem 1.05rem minmax(0, 1fr);
+  grid-template-rows: max(1.45rem, calc(var(--yd) * 1.65)) max(1.05rem, calc(var(--yh) * 1.35)) minmax(0, 1fr);
 }
 .ym-t {
   justify-self: start;
@@ -1237,7 +1236,7 @@ const tip = computed(() =>
   padding: 0 0.35rem;
   margin-left: -0.35rem;
   border-radius: 0.45rem;
-  font-size: 0.84rem;
+  font-size: max(0.84rem, calc(var(--yd) * 1.04));
   font-weight: 650;
   color: var(--ink-2);
   white-space: nowrap;
@@ -1313,7 +1312,7 @@ const tip = computed(() =>
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: 1.5rem repeat(6, minmax(0, 1fr));
+  grid-template-rows: calc(1.5rem * (0.65 + 0.35 * var(--ms, 1))) repeat(6, minmax(0, 1fr));
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -1321,14 +1320,14 @@ const tip = computed(() =>
 .gh,
 .gr {
   display: grid;
-  grid-template-columns: 1.9rem repeat(7, minmax(0, 1fr));
+  grid-template-columns: calc(1.9rem * (0.7 + 0.3 * var(--ms, 1))) repeat(7, minmax(0, 1fr));
   align-items: stretch;
   min-height: 0;
 }
 .gh span {
   display: grid;
   place-items: center;
-  font-size: var(--fs-xs);
+  font-size: calc(var(--fs-xs) * (0.62 + 0.38 * var(--ms, 1)));
   font-weight: 600;
   color: var(--ink-3);
 }
@@ -1338,7 +1337,7 @@ const tip = computed(() =>
 .wkc {
   display: grid;
   place-items: center;
-  font-size: var(--fs-xs);
+  font-size: calc(var(--fs-xs) * (0.62 + 0.38 * var(--ms, 1)));
   color: var(--ink-3);
 }
 button.wkc {
@@ -1489,7 +1488,7 @@ button.wkc:hover {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  padding-left: 1.9rem;
+  padding-left: calc(1.9rem * (0.7 + 0.3 * var(--ms, 1)));
 }
 .yw {
   display: flex;
@@ -1563,7 +1562,7 @@ button.wkc:hover {
 }
 .cal-foot {
   flex: none;
-  font-size: 0.86rem;
+  font-size: calc(0.86rem * (0.72 + 0.28 * var(--ms, 1)));
   color: var(--ink-2);
   white-space: nowrap;
   overflow: hidden;

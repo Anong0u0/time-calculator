@@ -43,8 +43,17 @@ import { useSize, remPx } from '../composables/size';
 import { textToEnd } from '../state/command';
 import { useFlash } from '../composables/flash';
 
-/** big: the equation has the screen's height to itself, so the date and time grow to fill it. */
-const props = defineProps<{ which: End; compact?: boolean; big?: boolean }>();
+/** big: the equation has the screen's height to itself, so the date and time grow to fill it.
+    stage: sits in the wide bottom tier under the hero span. wideStage: the only endpoint in that bottom tier. */
+const props = defineProps<{
+  which: End;
+  compact?: boolean;
+  big?: boolean;
+  solo?: boolean;
+  stage?: boolean;
+  wideStage?: boolean;
+  cornerPad?: boolean;
+}>();
 const isStart = computed(() => props.which === 'start');
 const SUBJ = computed(() => (isStart.value ? '開始' : '結束'));
 const OTHER = computed(() => (isStart.value ? '結束' : '開始'));
@@ -131,16 +140,42 @@ const ruleTip = computed(() => {
 
 const root = ref<HTMLElement | null>(null);
 const { w: rootW, h: rootH } = useSize(root);
+/** Wide top ribbon: solo endpoint above 3–4 lenses splits left (date+time) / right (zone + chips). */
+const ribbon = computed(() => !!props.solo && !props.big && !props.compact && rootW.value >= 52 * remPx.value);
 /** As large as the panel allows: two lines (date, time) on big screens, one line when compact.
     With the whole height to itself, as large as the width and the height both allow. */
 const sdtSize = computed(() => {
   const w = rootW.value,
     r = remPx.value;
   if (!w) return undefined;
+  const cw = Math.max(0, w - (props.compact ? 1.6 : 2.2) * r);
+  if (ribbon.value) {
+    const px = Math.min(2.25 * r, Math.max(1.2 * r, (cw * 0.56) / 13.8));
+    return `${px.toFixed(1)}px`;
+  }
   let px = props.compact
-    ? Math.min(1.6 * r, Math.max(1.1 * r, w / 13.9))
-    : Math.min(2.25 * r, Math.max(1.2 * r, w / 8.1));
-  if (props.big && !props.compact && rootH.value) px = Math.max(px, Math.min(w / 8.1, (rootH.value - 10 * r) / 2.4));
+    ? Math.min(1.6 * r, Math.max(1.1 * r, cw / 13.5))
+    : Math.min(2.25 * r, Math.max(1.15 * r, cw / 8.8));
+  if (props.big && rootH.value) {
+    const chipsH = shown('chips') ? 2.6 : 0;
+    if (props.solo) {
+      const overhead = (props.compact ? 6.5 : 7.0 + chipsH) * r;
+      px = Math.max(px, Math.min(cw / 5.7, (rootH.value - overhead) / 2.05));
+    } else if (props.wideStage) {
+      // Single wide endpoint across the bottom of stage mode: fits date + time cleanly on one monumental horizontal line.
+      const overhead = (6.4 + chipsH) * r;
+      px = Math.max(px, Math.min(cw / 15.8, (rootH.value - overhead) / 1.35));
+    } else if (props.stage) {
+      // Paired wide endpoints across the bottom of stage mode: generous 2-line date/time, tightly composed.
+      const overhead = (6.6 + chipsH) * r;
+      px = Math.max(px, Math.min(cw / 8.8, (rootH.value - overhead) / 2.45));
+    } else if (!props.compact) {
+      const overhead = (6.8 + chipsH) * r;
+      px = Math.max(px, Math.min(cw / 8.8, (rootH.value - overhead) / 2.45));
+    } else {
+      px = Math.max(px, Math.min(cw / 12.5, (rootH.value - 5.5 * r) / 1.8));
+    }
+  }
   return `${px.toFixed(1)}px`;
 });
 const { flashing } = useFlash(() => pulse[props.which]);
@@ -181,7 +216,23 @@ function drop(e: DragEvent) {
   <section
     ref="root"
     class="panel ep"
-    :class="[which, { compact, big, flash: flashing, active: S.active === which, none: !has, dropping }]"
+    :class="[
+      which,
+      {
+        compact,
+        big,
+        solo,
+        stage,
+        'wide-stage': wideStage,
+        ribbon,
+        'has-sample': !isStart && S.endSample,
+        'corner-pad': cornerPad,
+        flash: flashing,
+        active: S.active === which,
+        none: !has,
+        dropping,
+      },
+    ]"
     :aria-label="label"
     :data-drop-end="which"
     @focusin="S.active = which"
@@ -275,7 +326,13 @@ function drop(e: DragEvent) {
       </span>
     </header>
 
-    <SegmentedDateTime :which="which" :compact="compact" class="ep-time" :style="{ '--sdt-size': sdtSize }" />
+    <SegmentedDateTime
+      :which="which"
+      :compact="compact"
+      :stacked="big && solo"
+      class="ep-time"
+      :style="{ '--sdt-size': sdtSize }"
+    />
 
     <div v-if="!compact" class="ep-meta">
       <button
@@ -484,8 +541,8 @@ button.tag:hover {
     display: none;
   }
 }
-/* A narrow header keeps the link tag as a clean round icon; the tooltip still says what it does. */
-@container (max-width: 15.5rem) {
+/* A narrow header keeps the link tag as a clean round icon before its text would truncate; the tooltip still says what it does. */
+@container (max-width: 19rem) {
   .tag.link {
     flex: none;
     width: 1.6rem;
@@ -493,6 +550,17 @@ button.tag:hover {
     justify-content: center;
   }
   .tag.link span {
+    display: none;
+  }
+}
+@container (max-width: 23rem) {
+  .has-sample .tag.link {
+    flex: none;
+    width: 1.6rem;
+    padding: 0;
+    justify-content: center;
+  }
+  .has-sample .tag.link span {
     display: none;
   }
 }
@@ -592,14 +660,86 @@ button.tag:hover {
   padding: 0.8rem;
 }
 /* the whole height: the time and its zone sit together in the middle, the shortcuts stay at the bottom */
+.ep.corner-pad .ep-head {
+  padding-right: 2.25rem;
+}
 .ep.big .ep-time {
   margin-top: auto;
 }
 .ep.big .ep-meta {
   margin-bottom: auto;
 }
+.ep.big.compact .ep-time {
+  margin-bottom: auto;
+}
 .ep.big .ep-pre {
   margin-top: 0;
+}
+.ep.big.solo .ep-time {
+  justify-content: center;
+}
+.ep.big.solo .ep-meta {
+  justify-content: center;
+  font-size: clamp(0.95rem, 1.35vw, 1.45rem);
+  gap: 0.9rem;
+}
+.ep.big.solo .ep-meta .tzb {
+  height: auto;
+  padding: 0.3rem 0.65rem;
+  margin-left: 0;
+}
+.ep.big.solo .ep-pre {
+  display: flex;
+  justify-content: center;
+}
+.ep.stage {
+  padding: 0.7rem 1.25rem 0.9rem;
+}
+.ep.stage .ep-meta {
+  font-size: clamp(0.9rem, 1.1vw, 1.1rem);
+}
+.ep.wide-stage .ep-time {
+  justify-content: center;
+}
+.ep.wide-stage .ep-meta {
+  justify-content: center;
+  font-size: clamp(0.95rem, 1.25vw, 1.25rem);
+  gap: 0.85rem;
+}
+.ep.wide-stage .ep-meta .tzb {
+  margin-left: 0;
+}
+.ep.wide-stage .ep-pre {
+  display: flex;
+  justify-content: center;
+}
+/* wide top ribbon: date+time on the left, zone + shortcuts on the right */
+.ep.ribbon {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  column-gap: 1.5rem;
+  row-gap: 0.3rem;
+  align-items: center;
+}
+.ep.ribbon .ep-head {
+  grid-column: 1 / -1;
+}
+.ep.ribbon .ep-time {
+  grid-column: 1;
+  grid-row: 2 / span 2;
+}
+.ep.ribbon .ep-meta {
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: flex-end;
+}
+.ep.ribbon .ep-pre {
+  grid-column: 2;
+  grid-row: 3;
+  margin-top: 0;
+  padding-top: 0;
+  display: flex;
+  justify-content: flex-end;
 }
 .ep.none .ep-time {
   opacity: 0.9;

@@ -134,6 +134,7 @@ export interface ViewPreset {
 export const VIEW_PRESETS: ViewPreset[] = [
   { k: 'all', name: '全部', show: PANELS.map((p) => p.k), tip: '每個面板都顯示' },
   { k: 'countdown', name: '滿版倒數', show: ['span', 'rail'], tip: '只留間隔：整個畫面就是倒數或已過的時間' },
+  { k: 'clock', name: '滿版時鐘', show: ['start'], tip: '只留開始：整個畫面就是大時鐘或指定時刻' },
   {
     k: 'eq',
     name: '方程式',

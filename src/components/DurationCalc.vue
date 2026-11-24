@@ -20,9 +20,9 @@ import {
 } from '../core/time';
 import { nfMax, plainNum, durWords } from '../core/format';
 import { fitText } from '../composables/fit';
-import { useSize, fontsTick } from '../composables/size';
+import { useSize, fontsTick, remPx } from '../composables/size';
 
-defineProps<{ compact?: boolean }>();
+const props = defineProps<{ compact?: boolean }>();
 const PRESETS: [string, string, string][] = [
   ['工時', '8h30m + 7h45m + 9:15 + 6h', '一週工時加總'],
   ['配速', '3:59:59 ÷ 42.195', '全馬 4 小時內的每公里配速'],
@@ -147,17 +147,30 @@ defineExpose({
     }),
 });
 
-/* the big result shrinks to fit its line */
+/* the big result grows when the calculator has room, and shrinks to fit its line */
+const dcEl = ref<HTMLElement | null>(null);
 const bigEl = ref<HTMLElement | null>(null);
 const resBox = ref<HTMLElement | null>(null);
+const { w: dcW, h: dcH } = useSize(dcEl);
 const { w: resW } = useSize(resBox);
-const refit = () => nextTick(() => fitText(bigEl.value, 0.45));
-watch([() => big.value.t, resW, fontsTick], refit);
+const spacious = computed(() => !props.compact && dcH.value >= 25 * remPx.value);
+const bigFs = computed(() => {
+  if (!spacious.value || !dcH.value) return null;
+  const r = remPx.value;
+  return Math.max(2.9 * r, Math.min(dcH.value * 0.16, dcW.value * 0.14, 6.2 * r));
+});
+const refit = () =>
+  nextTick(() => {
+    const m = spacious.value ? 0.2 : 0.45;
+    fitText(bigEl.value, m);
+    requestAnimationFrame(() => fitText(bigEl.value, m));
+  });
+watch([() => big.value.t, resW, bigFs, fontsTick], refit);
 onMounted(refit);
 </script>
 
 <template>
-  <div class="dc" :class="{ compact }">
+  <div ref="dcEl" class="dc" :class="{ compact, spacious }" :style="bigFs ? { '--dc-big': bigFs + 'px' } : undefined">
     <label class="dc-in" :class="{ bad: st.k === 'err' }">
       <input
         ref="input"
@@ -404,5 +417,34 @@ onMounted(refit);
 }
 .compact .dc-res {
   margin-top: 0.2rem;
+}
+/* spacious: when the calculator owns a tall or full-screen panel, center it at a comfortable measure and scale the readout */
+.dc.spacious {
+  width: 100%;
+  max-width: 56rem;
+  margin: 0 auto;
+  justify-content: center;
+  gap: clamp(0.65rem, 1.8vh, 1.25rem);
+}
+.dc.spacious .dc-in {
+  height: clamp(2.85rem, 6.5vh, 3.8rem);
+}
+.dc.spacious .dc-in input {
+  font-size: clamp(1.1rem, 2.2vh, 1.45rem);
+}
+.dc.spacious .dc-tape {
+  font-size: clamp(0.86rem, 1.5vh, 1.05rem);
+}
+.dc.spacious .dc-big-t {
+  font-size: var(--dc-big, 3.6rem);
+}
+.dc.spacious .dc-words {
+  font-size: clamp(0.95rem, 1.7vh, 1.2rem);
+}
+.dc.spacious .dc-totals {
+  font-size: clamp(0.86rem, 1.5vh, 1.05rem);
+}
+.dc.spacious .dc-totals > :deep(.copy) {
+  padding: 0.6rem 0.85rem;
 }
 </style>
