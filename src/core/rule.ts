@@ -466,7 +466,7 @@ export function decodeRule(code: string): Rule | null {
     if ((m = /^a([a-z]+)\.(start|mid|last|end)$/.exec(p)) && isPeriod(m[1])) { steps.push({ t: 'align', p: m[1], pos: m[2] as Pos }); continue; }
     if ((m = /^t(\d{2})(\d{2})(\d{2})?$/.exec(p)) && +m[1] <= 24 && +m[2] < 60 && +(m[3] || 0) < 60) { steps.push({ t: 'time', h: +m[1], mi: +m[2], s: +(m[3] || 0) }); continue; }
     if ((m = /^w([^|*]+)(?:\|([a-z]+))?(?:\*(-?\d+))?$/.exec(p))) {
-      let w = '';
+      let w: string;
       try { w = decodeURIComponent(m[1]); } catch { return null; }
       if (m[2] && !isScope(m[2])) return null;
       steps.push({ t: 'word', w, ...(m[2] ? { in: m[2] as Scope } : {}), ...(m[3] ? { k: +m[3] } : {}) });

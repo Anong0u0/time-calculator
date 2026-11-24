@@ -6,7 +6,7 @@ import Icon from './Icon.vue';
 import RuleBuilder from './RuleBuilder.vue';
 import { type Rule, decodeRule, encodeRule, ruleName } from '../core/rule';
 import {
-  S, type ChipRow, DEFAULT_CHIPS, CHIP_MAX, chipTarget, chipName, chipRule, runRule, tzOf, commit, applyRule, bump, toast, undo, ruleTick,
+  S, type ChipRow, DEFAULT_CHIPS, CHIP_MAX, chipTarget, chipName, chipRule, runRule, tzOf, commit, applyRule, bump, toast, ruleTick,
 } from '../state/store';
 import { useDragSort, moved } from '../composables/dragSort';
 import { partsInTz, WD, wdOf, pad } from '../core/time';
@@ -95,7 +95,6 @@ function saveWord() {
   asWord.value = false; wordName.value = '';
 }
 const broken = (i: number) => !chipRule(list.value[i]);
-void undo;
 </script>
 
 <template>

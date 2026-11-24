@@ -1,15 +1,23 @@
+<script lang="ts">
+/* one drag at a time, across every row (module scope: shared by every ChipRow) */
+import { reactive } from 'vue';
+import type { ChipRow as RowKey } from '../state/store';
+
+const shared = reactive({ on: false, row: null as RowKey | null, i: null as number | null, to: null as { row: RowKey; i: number } | null, off: false, dx: 0, dy: 0, onEnd: null as 'start' | 'end' | null, who: null as symbol | null });
+</script>
+
 <script setup lang="ts">
 /* A row of shortcuts, every one of them a rule the user can change. Click to apply.
    Right-click (or a long press) opens the editor on that shortcut; + adds one. With a mouse, drag a shortcut
    to reorder the row, onto another row to move it there, or off the rows to remove it.
    On the face a row keeps to one line, however many shortcuts it has: the ones that do not fit wait behind +N,
    which opens the whole row (wrap: the whole row, as in that popover). */
-import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
 import ChipEditor from './ChipEditor.vue';
-import { S, type ChipRow as RowKey, type Chip, CHIP_MAX, chipName, chipOn, chipProgress, chipTarget, chipRule, applyChip, applyRule, runRule, tzOf, commit, bump, ruleTick, toast, undo } from '../state/store';
-import { partsInTz, WD, wdOf, fmtDT, pad } from '../core/time';
+import { S, type Chip, CHIP_MAX, chipName, chipOn, chipProgress, chipTarget, chipRule, applyChip, applyRule, runRule, tzOf, commit, bump, ruleTick, toast } from '../state/store';
+import { partsInTz, WD, wdOf, pad } from '../core/time';
 import { useSize, fontsTick, remPx } from '../composables/size';
 
 const props = defineProps<{ row: RowKey; size?: 'sm' | 'lg'; pick?: (c: Chip) => boolean; fill?: boolean; wrap?: boolean }>();
@@ -119,7 +127,6 @@ function move(e: PointerEvent) {
 function up(e: PointerEvent) {
   if (!press || e.pointerId !== press.id) return;
   clearTimeout(press.timer);
-  const p = press;
   press = null;
   if (!drag.on) return;
   skipClick = true;
@@ -147,7 +154,6 @@ function up(e: PointerEvent) {
   }
   if (S.chips[to.row].length >= CHIP_MAX) { toast(`${ROW[to.row]}的快捷已經有 ${CHIP_MAX} 個，先移除幾個`); return; }
   commit(() => { const [x] = S.chips[from.row].splice(from.i, 1); S.chips[to.row].splice(to.i, 0, x); }, { label: `快捷移到${ROW[to.row]}`, say: `「${n}」移到${ROW[to.row]}的快捷` });
-  void p; void toast; void undo;
 }
 const isDragged = (i: number) => drag.on && drag.who === me && drag.i === i;
 const dropBefore = (i: number) => drag.on && drag.to?.row === props.row && drag.to.i === i && !isDragged(i);
@@ -157,12 +163,6 @@ function hover(c: Chip | null, e?: PointerEvent) {
   if (e && e.pointerType !== 'mouse') return;
   emit('preview', `${chipName(c)} → ${landing(c)}`);
 }
-void fmtDT;
-</script>
-
-<script lang="ts">
-/* one drag at a time, across every row */
-const shared = reactive({ on: false, row: null as RowKey | null, i: null as number | null, to: null as { row: RowKey; i: number } | null, off: false, dx: 0, dy: 0, onEnd: null as 'start' | 'end' | null, who: null as symbol | null });
 </script>
 
 <template>

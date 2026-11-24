@@ -12,14 +12,14 @@ function fallback(text: string): boolean {
   ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
   document.body.appendChild(ta);
   ta.select();
-  let ok = false;
+  let ok: boolean;
   try { ok = document.execCommand('copy'); } catch { ok = false; }
   ta.remove();
   return ok;
 }
 export async function copyText(text: string, key: string, label = '') {
   if (!text) return;
-  let ok = false;
+  let ok: boolean;
   try { await navigator.clipboard.writeText(text); ok = true; } catch { ok = fallback(text); }
   if (!ok) { toast('無法寫入剪貼簿，請手動選取'); return; }
   copiedKey.value = key;

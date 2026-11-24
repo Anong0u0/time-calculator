@@ -15,7 +15,7 @@ import {
 import { spanOfRule } from '../core/rule';
 import { parseDateTimeText } from '../core/parse';
 import { parseOptsFor, textToEnd } from '../state/command';
-import { type Span, type SpanInput, interpretSpanText, parseSpan, fmtSpan, pad, partsInTz, WD, wdOf, fmtDT, fmtClock, clamp, wallKey, DAY, SEC } from '../core/time';
+import { type Span, type SpanInput, interpretSpanText, fmtSpan, pad, partsInTz, WD, wdOf, fmtDT, fmtClock, wallKey, DAY, SEC } from '../core/time';
 import { spanTokens, nfMax, durWords } from '../core/format';
 import { ui, openDuration } from '../state/ui';
 import { fitText } from '../composables/fit';
@@ -257,7 +257,6 @@ function pickQuick(c: Chip): boolean {
   if (sp) { text.value = fmtSpan(sp); onInput(); }
   return true;
 }
-void parseSpan; void setLink;
 const bizShown = computed(() => !!S.link && (S.link.span.d > 0 || S.link.span.biz) && !S.link.span.y && !S.link.span.mo && !S.link.span.w);
 function toggleBiz() {
   if (!S.link) return;

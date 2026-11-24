@@ -55,6 +55,25 @@ test('panels answer the keyboard, and the calendar shows the whole year', async 
   await expect(cal.locator('.ym')).toHaveCount(12);
 });
 
+test('a shortcut dragged onto another row moves there', async ({ page }) => {
+  await page.goto('./');
+  const chips = (row: string) => page.locator(`[data-chip-row="${row}"] > [data-ci]`);
+  const startCount = await chips('start').count();
+  const spanCount = await chips('span').count();
+  const a = (await chips('span').first().boundingBox())!;
+  const z = (await chips('start').first().boundingBox())!;
+  const ax = a.x + a.width / 2, ay = a.y + a.height / 2;
+  await page.mouse.move(ax, ay);
+  await page.mouse.down();
+  // a few pixels first, on the chip itself, so the drag starts there
+  await page.mouse.move(ax + 4, ay);
+  await page.mouse.move(ax + 9, ay);
+  await page.mouse.move(z.x + 3, z.y + z.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await expect(chips('span')).toHaveCount(spanCount - 1);
+  await expect(chips('start')).toHaveCount(startCount + 1);
+});
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   test('the face fits the width', async ({ page }) => {

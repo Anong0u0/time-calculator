@@ -107,7 +107,7 @@ export function excelSerial(v: number): Wall | null {
 /* ---------- the general reader ---------- */
 const ALL: Given = { y: true, mo: true, d: true };
 interface Num { v: number; len: number; mark: '' | 'y' | 'mo' | 'd' | 'dd' }
-const KEEP = /[^\s,.\/\-_'’()（）、，:：;；t@]/i;
+const KEEP = /[^\s,./\-_'’()（）、，:：;；t@]/i;
 
 /** A date written out (any order, any separators, 民國, Chinese numerals …), without words that count from today. */
 export function parseAbsoluteText(input: string, ref?: number | ParseOpts): ParsedText | null {
@@ -118,7 +118,7 @@ export function parseAbsoluteText(input: string, ref?: number | ParseOpts): Pars
   if (/^@\s*\d/.test(s)) s = s.replace(/^@\s*/, '');
 
   // compact: 20261225, 20261225T1800, 202612251800Z
-  let m = /^(\d{4})(\d{2})(\d{2})(?:T?(\d{2})(\d{2})(\d{2})?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i.exec(s);
+  const m = /^(\d{4})(\d{2})(\d{2})(?:T?(\d{2})(\d{2})(\d{2})?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i.exec(s);
   if (m) {
     const w = { y: +m[1], mo: +m[2], d: +m[3], h: +(m[4] || 0), mi: +(m[5] || 0), s: +(m[6] || 0) };
     if (validWall(w)) return { kind: 'wall', wall: w, offset: parseOffset(m[7]), hasTime: !!m[4], how: m[4] ? '日期與時刻' : '日期', given: ALL };
@@ -312,7 +312,8 @@ export function parseAbsoluteText(input: string, ref?: number | ParseOpts): Pars
   if (D.y != null) { const yy = yearOf(D.y, D.yLen ?? 4); y = yy.y; yHow = yy.how; yAlt = yy.alt; }
   else if (yearShift != null && today) y = today.y + yearShift;
   else y = refY;
-  let mo = D.mo, d = D.d;
+  let mo = D.mo;
+  const d = D.d;
   if (mo == null && monthShift != null && today) { const t = addMonthsWall({ y: today.y, mo: today.mo, d: 1 }, monthShift); mo = t.mo; if (D.y == null && yearShift == null) y = t.y; }
   let ymd: YMD | null = null;
   if (mo != null || d != null || D.y != null) {

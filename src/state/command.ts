@@ -2,7 +2,7 @@
    "47m × 16", a range ("1/1 到 3/1", "2000/1/1 ~ 現在"), or a moment and a length ("2026/1/1 + 30天").
    Each reading of the text becomes a suggestion with a live preview; Enter applies the first. */
 import {
-  type Wall, normalizeWide, interpretSpanText, parseSpan, fmtSpan, fmtDT, fmtTime, fmtClock, pad, wdOf, WD,
+  type Wall, type Span, normalizeWide, interpretSpanText, parseSpan, fmtSpan, fmtDT, fmtTime, fmtClock, pad, wdOf, WD,
   toInstant, partsInTz, validWall, wallKey, isoWeek, isoWeekStart, isoWeeksInYear, addDaysWall, addDuration,
 } from '../core/time';
 import { parseDateTimeText, splitRange, splitDatePlusSpan, excelSerial, type ParseOpts, type ParsedText } from '../core/parse';
@@ -243,7 +243,7 @@ export function interpret(input: string): Suggestion[] {
   const dp = signed ? null : splitDatePlusSpan(text);
   if (dp) {
     const at = sideOf(dp.date, opts);
-    let sp = null;
+    let sp: Span | null;
     try { sp = parseSpan(dp.span); } catch { sp = null; }
     if (at && sp && !('time' in at)) {
       const span = { ...sp, sign: (sp.sign * dp.sign) as 1 | -1 };

@@ -4,7 +4,7 @@
 import { computed, ref, nextTick } from 'vue';
 import CopyBtn from './CopyBtn.vue';
 import Icon from './Icon.vue';
-import { S, startMs, endMs, gapSec, commit, setLink, checkSpan, linkTarget, linkSentence, followText, bump, toast, undo } from '../state/store';
+import { S, startMs, endMs, gapSec, commit, setLink, checkSpan, linkTarget, linkSentence, followText, bump, toast } from '../state/store';
 import { partsInTz, dayNum, countWeekdays, interpretSpanText, fmtSpan } from '../core/time';
 import { nf, nfMax, plainNum } from '../core/format';
 
@@ -60,7 +60,6 @@ function key(e: KeyboardEvent) {
   if (e.key === 'Enter') { e.preventDefault(); input.value?.blur(); }
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelled = true; input.value?.blur(); }
 }
-void undo;
 </script>
 
 <template>

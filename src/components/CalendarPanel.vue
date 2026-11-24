@@ -8,7 +8,7 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
-import { S, type End, type CalMode, now, startWall, endWall, hasEnd, commit, setWall, toast, undo, bump, ruleTick } from '../state/store';
+import { S, type End, type CalMode, now, startWall, endWall, hasEnd, commit, setWall, toast, bump, ruleTick } from '../state/store';
 import { type Wall, dayNum, fromDayNum, isoWeek, isoWeeksInYear, isoWeekStart, mod, WD, partsInTz, dayOfYear, fmtDT, daysInYear, usWeek } from '../core/time';
 import { lunarOfDay, lunarMonthName, lunarDayName, fmtLunar } from '../core/lunar';
 import { termOnDay, TERM_NAMES, CHINA_TZ } from '../core/terms';

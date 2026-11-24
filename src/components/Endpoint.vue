@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /* One end of the equation: a label, the date and time, its zone, and shortcuts.
    Both ends work alike: either can follow the clock (即時), and the span can compute either one. */
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import Icon from './Icon.vue';
 import SegmentedDateTime from './SegmentedDateTime.vue';
 import TzPicker from './TzPicker.vue';
@@ -12,10 +12,9 @@ import {
   S, type End, now, wallOf, msOf, tzOf, hasEnd, startNote, endNote, commit, setLive, setTz, clearEnd, freezeLink, linkFromMeasured,
   pulse, bump, isLive, isDerived, isLinked, linkTarget, linkSentence, followText, other, setFollow, shown,
 } from '../state/store';
-import { offsetAt, fmtOffset, fmtDT, fmtDate, fmtTime, isoOffset, clamp } from '../core/time';
+import { offsetAt, fmtOffset, fmtDT, fmtDate, fmtTime, isoOffset } from '../core/time';
 import { zoneName } from '../core/zones';
 import { relative } from '../core/format';
-import { nfMax } from '../core/format';
 import { useSize, remPx } from '../composables/size';
 import { textToEnd } from '../state/command';
 import { useFlash } from '../composables/flash';
@@ -109,7 +108,6 @@ function drop(e: DragEvent) {
   e.preventDefault();
   if (textToEnd(props.which, t)) bump(props.which);
 }
-void clamp; void nfMax; void now; void derived; void isDerived; void msOf;
 </script>
 
 <template>

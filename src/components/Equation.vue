@@ -10,7 +10,7 @@
 import Endpoint from './Endpoint.vue';
 import SpanCenter from './SpanCenter.vue';
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { S, now, hasEnd, railProgress, commit, freezeLink, linkFromMeasured, wallOf, linkSentence, followText, linkTarget, startMs, endMs, setInstant, type End, other, bump, tzOf, isLinked, shown } from '../state/store';
+import { S, now, hasEnd, railProgress, commit, freezeLink, linkFromMeasured, wallOf, linkSentence, followText, linkTarget, startMs, endMs, setInstant, type End, other, bump, tzOf, shown } from '../state/store';
 import { fmtDT, addDuration, partsInTz, WD, wdOf, pad, type Span } from '../core/time';
 import { editSpan } from '../state/ui';
 import { remPx, fontsTick } from '../composables/size';
@@ -204,7 +204,6 @@ const gripTip = (g: Grip) => {
   const st = scale().step.name;
   return g === 'both' ? `拖曳：兩端一起移動，間隔不變（每格 1 ${st}）；停在上面看那一點的時刻` : `拖曳或滾輪：移動${GRIP_NAME[g]}（每格 1 ${st}，按住 Shift 一次 10 格）`;
 };
-void isLinked;
 /** Stacked: the rail is measured from the ● and ○ in the headers and the + and = on it. */
 const v = reactive({ x: 0, top: 0, h: 0, a: 0, b: 0, ok: false });
 function placeRail() {

@@ -4,7 +4,7 @@
    Steps are put in order from the largest unit to the smallest, so "8pm tomorrow" and "明天晚上8點" are one rule.
    Any word in the vocabulary (built in or the user's own) can be used inside a sentence: 下個月發薪日, 明天下班.
    ============================================================ */
-import { type Wall, type YMD, normalizeWide, parseSpan, utcMs, validWall, partsInTz, fromDayNum } from './time';
+import { type Wall, type YMD, type Span, normalizeWide, parseSpan, utcMs, validWall, partsInTz, fromDayNum } from './time';
 import { parseAbsoluteText, cnNumber, type ParseOpts, type ParsedText } from './parse';
 import { type Rule, type Step, type Origin, type Scope, type Cond, type Unit, evalRule, ruleName } from './rule';
 import { wordNames, wordRule, wordKind, rulePrefs } from './vocab';
@@ -15,7 +15,6 @@ export interface RuleReading { rule: Rule; hasTime: boolean; how: string; offset
 export interface RuleParse { main: RuleReading; alts: RuleReading[]; relative: boolean }
 
 const CN = '〇零一二兩两三四五六七八九十百';
-const NUM = `(\\d+|[${CN}]+)`;
 const num = (t: string) => (/^\d+$/.test(t) ? +t : cnNumber(t));
 const WDS: Record<string, number> = { 日: 0, 天: 0, 七: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, '0': 0, '7': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 };
 const WK = '(?:星期|禮拜|礼拜|週|周)';
@@ -53,7 +52,6 @@ export function parseRuleText(input: string, opts: ParseOpts = {}): RuleParse | 
     if (m) s = s.slice(0, m.index) + ' ' + s.slice(m.index + m[0].length);
     return m;
   };
-  const before = (m: RegExpExecArray) => s.slice(0, m.index);
   let m: RegExpExecArray | null;
 
   /* where it starts: 開始, 結束 (and 那個月的 …: what the words after it are inside of) */
@@ -73,7 +71,7 @@ export function parseRuleText(input: string, opts: ParseOpts = {}): RuleParse | 
     // lunar months and 節氣 are not in parseSpan's units: take them out first
     const rest = t.replace(/(\d+|[一二兩两三四五六七八九十]+)\s*@([LT])/g, (_x, n, u) => { out.push({ t: 'move', n: sign * num(n), u: u === 'L' ? 'lmo' : 'term' }); return ' '; }).trim();
     if (rest) {
-      let sp = null;
+      let sp: Span | null;
       try { sp = parseSpan(rest); } catch { sp = null; }
       if (!sp) return null;
       const g = (sign * sp.sign) as 1 | -1;

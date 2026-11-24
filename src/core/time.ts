@@ -190,7 +190,7 @@ export function diffCalendar(a: number, b: number, tz: string): CalDiff {
   while (months > 0 && cursor > b) { months--; cursor = toInstant(addMonthsWall(A, months), tz); }
   for (;;) {
     const next = toInstant(addMonthsWall(A, months + 1), tz);
-    if (next <= b) { months++; cursor = next; } else break;
+    if (next <= b) months++; else break;
   }
   const base = addMonthsWall(A, months);
   let days = dayNum(B.y, B.mo, B.d) - dayNum(base.y, base.mo, base.d);
@@ -261,7 +261,7 @@ export function parseTimestamp(text: string): { ms: number; unit: TsUnit } | nul
 
 /* ---------- free-text date/time parsing ---------- */
 const FW: Record<string, string> = { '０': '0', '１': '1', '２': '2', '３': '3', '４': '4', '５': '5', '６': '6', '７': '7', '８': '8', '９': '9', '：': ':', '／': '/', '－': '-', '．': '.', '　': ' ', '＋': '+' };
-export const normalizeWide = (s: string) => String(s).replace(/[０-９：／－．　＋]/g, (c) => FW[c] || c);
+export const normalizeWide = (s: string) => String(s).replace(/[０-９：／－．\u3000＋]/g, (c) => FW[c] || c);
 
 export function parseOffset(str: string | undefined | null): number | null {
   if (!str) return null;
@@ -305,7 +305,7 @@ function tokenizeDuration(src: string): Tok[] {
   while (i < s.length) {
     const c = s[i];
     if (/\s/.test(c) || c === '個' || c === '个') { i++; continue; }
-    let m = /^(\d+):(\d{1,2})(?::(\d{1,2}(?:\.\d+)?))?/.exec(s.slice(i));
+    const m = /^(\d+):(\d{1,2})(?::(\d{1,2}(?:\.\d+)?))?/.exec(s.slice(i));
     if (m) {
       const h = +m[1], mi = +m[2], sec = m[3] !== undefined ? +m[3] : 0;
       if (mi > 59 || sec >= 60) throw new DurError(`「${m[0]}」的分或秒超過 59`, i, m[0].length);
@@ -632,7 +632,7 @@ const OPS_RE = /[*×xX·⋅乘/÷除()（）]|.[+＋\-−–—加減减]/;
 export function interpretSpanText(src: string): SpanInput {
   const raw = cnDigits(normalizeWide(src)).trim();
   if (!raw) return { kind: 'empty' };
-  let first: DurError | null = null;
+  let first: DurError;
   try {
     const sp = parseSpan(raw);
     if (!sp) return { kind: 'empty' };
