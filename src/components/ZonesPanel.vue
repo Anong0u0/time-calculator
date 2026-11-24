@@ -18,6 +18,7 @@ import { zoneName, sameZone, tzLongName } from '../core/zones';
 import { clockOf } from '../state/command';
 import { useSize, remPx } from '../composables/size';
 import { tipAt, hideTip } from '../composables/tip';
+import { useFlash } from '../composables/flash';
 
 const SUBJ = { start: '開始', end: '結束' } as const;
 const winPick = ref<End>('start');
@@ -349,8 +350,7 @@ const rowSort = useDragSort({
   done: (_from, to) => { toast(`${zoneName(zoneRows.value[to])}移到第 ${to + 1} 列`, undo); orderSession++; },
 });
 
-const flashing = ref(false);
-watch(() => pulse.zones, () => { flashing.value = false; requestAnimationFrame(() => { flashing.value = true; }); });
+const { flashing } = useFlash(() => pulse.zones);
 const winLabel = computed(() => { const d = win.value.d0; return `${d.mo}/${d.d}（${WD[wdOf(d)]}）${zoneName(win.value.tz)}`; });
 const winShort = computed(() => { const d = win.value.d0; return `${d.mo}/${d.d}（${WD[wdOf(d)]}）`; });
 const outRight = computed(() => (xe.value != null && xe.value > 1 ? 'end' : xs.value > 1 ? 'start' : null));

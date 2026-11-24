@@ -18,6 +18,7 @@ import { relative } from '../core/format';
 import { nfMax } from '../core/format';
 import { useSize, remPx } from '../composables/size';
 import { textToEnd } from '../state/command';
+import { useFlash } from '../composables/flash';
 
 /** big: the equation has the screen's height to itself, so the date and time grow to fill it. */
 const props = defineProps<{ which: End; compact?: boolean; big?: boolean }>();
@@ -86,8 +87,7 @@ const sdtSize = computed(() => {
   if (props.big && !props.compact && rootH.value) px = Math.max(px, Math.min(w / 8.1, (rootH.value - 10 * r) / 2.4));
   return `${px.toFixed(1)}px`;
 });
-const flashing = ref(false);
-watch(() => pulse[props.which], () => { flashing.value = false; requestAnimationFrame(() => { flashing.value = true; }); });
+const { flashing } = useFlash(() => pulse[props.which]);
 const noteText = computed(() => (note.value === 'gap' ? '夏令時間跳過這段時刻，已往後推' : note.value === 'overlap' ? '這個時刻出現兩次，取較早的一次' : ''));
 const linkTip = computed(() => (S.link
   ? `連動中：${linkSentence()}。${followText()}。點一下改成固定在目前的時刻`

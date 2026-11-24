@@ -8,13 +8,12 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
-import { S, type End, type CalMode, now, startWall, endWall, hasEnd, commit, setWall, toast, undo, bump } from '../state/store';
+import { S, type End, type CalMode, now, startWall, endWall, hasEnd, commit, setWall, toast, undo, bump, ruleTick } from '../state/store';
 import { type Wall, dayNum, fromDayNum, isoWeek, isoWeeksInYear, isoWeekStart, mod, WD, partsInTz, dayOfYear, fmtDT, daysInYear, usWeek } from '../core/time';
 import { lunarOfDay, lunarMonthName, lunarDayName, fmtLunar } from '../core/lunar';
 import { termOnDay, TERM_NAMES, CHINA_TZ } from '../core/terms';
 import { decodeRule, dayMatches, type Cond } from '../core/rule';
 import { vocab } from '../core/vocab';
-import { ruleTick } from '../state/store';
 import { useSize, remPx } from '../composables/size';
 import { nf } from '../core/format';
 
@@ -23,8 +22,12 @@ function setView(w: { y: number; mo: number } | null) { if (w) { view.y = w.y; v
 /** A change made on this calendar: the month shown stays where the user is looking. */
 let selfEdit = false;
 function here<T>(fn: () => T): T { selfEdit = true; try { return fn(); } finally { nextTick(() => { selfEdit = false; }); } }
-watch(() => startWall.value.y * 100 + startWall.value.mo, (v, o) => { if (v !== o && !selfEdit) setView(startWall.value); });
-watch(() => (endWall.value ? endWall.value.y * 100 + endWall.value.mo : null), (v, o) => { if (v != null && v !== o && !selfEdit) setView(endWall.value); });
+/** Year and month as one number (202611): what the grids compare, so they redraw when the month changes, not with every second. */
+const ymOf = (w: { y: number; mo: number }) => w.y * 100 + w.mo;
+const sYM = computed(() => ymOf(startWall.value));
+const eYM = computed(() => (endWall.value ? ymOf(endWall.value) : null));
+watch(sYM, () => { if (!selfEdit) setView(startWall.value); });
+watch(eYM, (v) => { if (v != null && !selfEdit) setView(endWall.value); });
 function shift(m: number) {
   const t = view.y * 12 + view.mo - 1 + m;
   const y = Math.floor(t / 12);
@@ -65,9 +68,10 @@ function yearEnter() { const t = yearText.value.trim(); if (/^\d{1,4}$/.test(t))
 function pickMonth(m: number) { view.mo = m; S.calMode = 'month'; jump.value = false; }
 function gotoWall(w: { y: number; mo: number } | null) { setView(w); yearText.value = String(view.y); jump.value = false; }
 const todayWall = computed(() => partsInTz(now.value, S.startTz));
+const tYM = computed(() => ymOf(todayWall.value));
 const monthMarks = computed(() => Array.from({ length: 12 }, (_, i) => {
-  const m = i + 1, sw = startWall.value, ew = endWall.value, tw = todayWall.value;
-  return { mo: m, cur: m === view.mo, s: sw.y === view.y && sw.mo === m, e: !!ew && ew.y === view.y && ew.mo === m, today: tw.y === view.y && tw.mo === m };
+  const m = i + 1, ym = view.y * 100 + m;
+  return { mo: m, cur: m === view.mo, s: sYM.value === ym, e: eYM.value === ym, today: tYM.value === ym };
 }));
 let wheelAcc = 0, wheelAt = 0;
 function onWheel(e: WheelEvent, unit: 'mo' | 'y') {
@@ -347,7 +351,7 @@ const yl = computed(() => {
 interface YDay { n: number; d: number; today: boolean; s: boolean; e: boolean; inR: boolean; rL: boolean; rR: boolean; wkend: boolean; label: string; lun: Lun | null }
 const yearMonths = computed(() => {
   if (!yearMode.value) return [];
-  const sw = startWall.value, ew = endWall.value, tw = todayWall.value, room = yl.value.lun;
+  const room = yl.value.lun;
   return Array.from({ length: 12 }, (_, i) => {
     const mo = i + 1, n1 = dayNum(view.y, mo, 1), len = dim(view.y, mo), first = weekStartOf(n1);
     const cells: (YDay | null)[] = Array.from({ length: 42 }, (_, k) => {
@@ -362,7 +366,8 @@ const yearMonths = computed(() => {
         label: `${view.y} 年 ${mo} 月 ${d} 日 週${WD[wd]}${lun ? `，${lun.full}` : ''}${s ? '，開始' : ''}${e ? '，結束' : ''}${n === todayN.value ? '，今天' : ''}`,
       };
     });
-    return { mo, cells, s: sw.y === view.y && sw.mo === mo, e: !!ew && ew.y === view.y && ew.mo === mo, today: tw.y === view.y && tw.mo === mo };
+    const ym = view.y * 100 + mo;
+    return { mo, cells, s: sYM.value === ym, e: eYM.value === ym, today: tYM.value === ym };
   });
 });
 const atStartY = computed(() => view.y === startWall.value.y);

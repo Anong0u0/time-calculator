@@ -4,15 +4,15 @@ import { ref, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import DurationCalc from './DurationCalc.vue';
 import { ui } from '../state/ui';
+import { useFlash } from '../composables/flash';
 
 const calc = ref<InstanceType<typeof DurationCalc> | null>(null);
-const flashing = ref(false);
+const { flashing, flash } = useFlash();
 /* A request can arrive just before this lens mounts (its tab opens because of it), so answer on mount too. */
 async function answer() {
   if (ui.durReq === ui.durSeen) return;
   ui.durSeen = ui.durReq;
-  flashing.value = false;
-  requestAnimationFrame(() => { flashing.value = true; });
+  flash();
   await nextTick();
   calc.value?.select();
 }

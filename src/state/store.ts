@@ -6,9 +6,8 @@
    ============================================================ */
 import { reactive, computed, ref, watch } from 'vue';
 import {
-  type Wall, type Span, type WallNote, DAY, partsInTz, wallToInstant, toInstant, addDuration, validWall, fmtSpan,
-  spanBetween, diffCalendar, fmtDT, interpretSpanText, fmtSpan as fmtSpanT,
-  isValidTz as isValidTzSafe,
+  type Wall, type Span, type WallNote, DAY, partsInTz, wallToInstant, addDuration, validWall, fmtSpan,
+  spanBetween, diffCalendar, fmtDT, interpretSpanText, isValidTz,
 } from '../core/time';
 import { LOCAL_TZ, sameZone, zoneName } from '../core/zones';
 import {
@@ -170,42 +169,38 @@ const own = (which: End): Point | null => {
   return { wall: w, ms: r.ms, note: r.note };
 };
 const RANGE_ERR = '超出可計算範圍（西元 1–9999 年）';
+/** `fromMs` moved by the span (dir −1: back), read on the wall clock of `toTz`; null when it leaves years 1–9999. */
+function project(fromMs: number, fromTz: string, sp: Span, dir: 1 | -1, toTz: string): Point | null {
+  const r = addDuration(fromMs, fromTz, sp, (dir * sp.sign) as 1 | -1, sp.biz);
+  if (!Number.isFinite(r.ms)) return null;
+  const w = partsInTz(r.ms, toTz);
+  return validWall(w) ? { wall: w, ms: r.ms, note: null } : null;
+}
 const ends = computed<{ s: Point; e: Point | typeof NONE; err: string | null }>(() => {
+  const sp = S.link?.span;
   // an end that follows a rule reading the other end comes after it
   if (isFollowing('start') && readsOther('start') && !isLinked('start')) {
     const e = own('end');
-    const st = fromRule('start', e ? e.ms : null) || own('start')!;
-    if (S.link && S.linkTo === 'end') {
-      const sp = S.link.span;
-      const r = addDuration(st.ms, S.startTz, sp, sp.sign, sp.biz);
-      const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.endTz) : null;
-      return { s: st, e: w && validWall(w) ? { wall: w, ms: r.ms, note: null } : NONE, err: w ? null : RANGE_ERR };
+    const s = fromRule('start', e ? e.ms : null) || own('start')!;
+    if (sp && S.linkTo === 'end') {
+      const pe = project(s.ms, S.startTz, sp, 1, S.endTz);
+      return { s, e: pe || NONE, err: pe ? null : RANGE_ERR };
     }
-    return { s: st, e: e || NONE, err: null };
+    return { s, e: e || NONE, err: null };
   }
-  if (isFollowing('end') && readsOther('end') && !isLinked('end')) {
-    const st = own('start')!;
-    let s0 = st;
-    if (S.link && S.linkTo === 'start') s0 = st; // cannot happen: a link to the start needs a held end
-    const e = fromRule('end', s0.ms) || own('end');
-    return { s: s0, e: e || NONE, err: null };
+  const s = own('start')!;
+  // (a link to the start needs a held end, so an end following a rule has no link to think of)
+  if (isFollowing('end') && readsOther('end') && !isLinked('end')) return { s, e: fromRule('end', s.ms) || own('end') || NONE, err: null };
+  if (sp && S.linkTo === 'end') {
+    const pe = project(s.ms, S.startTz, sp, 1, S.endTz);
+    return { s, e: pe || NONE, err: pe ? null : RANGE_ERR };
   }
-  const ownS = own('start')!;
-  if (S.link) {
-    const sp = S.link.span;
-    if (S.linkTo === 'end') {
-      const r = addDuration(ownS.ms, S.startTz, sp, sp.sign, sp.biz);
-      const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.endTz) : null;
-      return w && validWall(w) ? { s: ownS, e: { wall: w, ms: r.ms, note: null }, err: null } : { s: ownS, e: NONE, err: RANGE_ERR };
-    }
-    const ownE = own('end');
-    if (ownE) {
-      const r = addDuration(ownE.ms, S.endTz, sp, -sp.sign as 1 | -1, sp.biz);
-      const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.startTz) : null;
-      return w && validWall(w) ? { s: { wall: w, ms: r.ms, note: null }, e: ownE, err: null } : { s: ownS, e: ownE, err: RANGE_ERR };
-    }
+  const e = own('end');
+  if (sp && e) {
+    const ps = project(e.ms, S.endTz, sp, -1, S.startTz);
+    return { s: ps || s, e, err: ps ? null : RANGE_ERR };
   }
-  return { s: ownS, e: own('end') || NONE, err: null };
+  return { s, e: e || NONE, err: null };
 });
 export const startWall = computed<Wall>(() => ends.value.s.wall);
 export const startMs = computed(() => ends.value.s.ms);
@@ -453,18 +448,15 @@ export function linkSentence(to: End = S.linkTo, expr = S.link?.expr || ''): str
 export const followText = (to: End = S.linkTo) => `${SUBJ_NAME[other(to)]}改了，${SUBJ_NAME[to]}跟著動`;
 /** Where `to` would land with this span (end = start + span, or start = end − span). */
 export function checkSpan(sp: Span, to: End = linkTarget()): { ok: true; ms: number; w: Wall } | { ok: false; err: string } {
-  const from = to === 'end' ? startMs.value : endMs.value;
-  if (from == null) return { ok: false, err: '先設定結束，開始才能從結束往回算' };
-  const r = addDuration(from, to === 'end' ? S.startTz : S.endTz, sp, (to === 'end' ? sp.sign : -sp.sign) as 1 | -1, sp.biz);
-  const w = Number.isFinite(r.ms) ? partsInTz(r.ms, tzOf(to)) : null;
-  if (!w || !validWall(w)) return { ok: false, err: RANGE_ERR };
-  return { ok: true, ms: r.ms, w };
+  const from = other(to), fromMs = msOf(from);
+  if (fromMs == null) return { ok: false, err: '先設定結束，開始才能從結束往回算' };
+  const p = project(fromMs, tzOf(from), sp, to === 'end' ? 1 : -1, tzOf(to));
+  return p ? { ok: true, ms: p.ms, w: p.wall } : { ok: false, err: RANGE_ERR };
 }
 export function setLink(sp: Span, to: End = linkTarget()): boolean {
   const c = checkSpan(sp, to);
   if (!c.ok) { toast(c.err); return false; }
   unhookFrom(to);
-  if (isFollowing(other(to)) && readsOther(other(to))) pinRule(other(to));
   S.link = { expr: fmtSpan(sp), span: { ...sp } };
   S.linkTo = to;
   S.rules[to] = null;
@@ -489,7 +481,7 @@ export function linkFromMeasured(to: End = linkTarget()): boolean {
 }
 export function clearEnd() {
   if (isLinked('start')) freezeLink();
-  if (isFollowing('start') && readsOther('start')) pinRule('start');
+  unhookFrom('end');
   S.end = null; S.endLive = false; S.link = null; S.endSample = false; S.rules.end = null; S.active = 'start';
 }
 /** A rule's starting point at the other end, after the ends trade places. */
@@ -538,7 +530,7 @@ export function applyRule(which: End, rule: Rule, opts: { name?: string; follow?
   const follow = opts.follow ?? (reads.size > 0 || S.prefs.followNow);
   if (follow && reads.has(other(which))) {
     if (isLinked(other(which))) freezeLink();
-    if (isFollowing(other(which)) && readsOther(other(which))) pinRule(other(which));
+    unhookFrom(which);
   }
   if (!setInstant(which, res.ms)) return false;
   S.rules[which] = { code: encodeRule(rule), name: opts.name || ruleName(rule, S.prefs), follow, from: res.from };
@@ -563,7 +555,7 @@ export function chipOn(row: ChipRow, c: Chip): boolean {
   const which = chipTarget(row);
   if (isNowRule(r)) return isLive(which);
   const sp = spanOfRule(r, which);
-  if (sp) return isLinked(which) && !!S.link && S.link.expr === fmtSpanT(which === 'end' ? sp : { ...sp, sign: -sp.sign as 1 | -1 }) && S.link.span.biz === sp.biz;
+  if (sp) return isLinked(which) && !!S.link && S.link.expr === fmtSpan(which === 'end' ? sp : { ...sp, sign: -sp.sign as 1 | -1 }) && S.link.span.biz === sp.biz;
   return S.rules[which]?.code === c.code;
 }
 /** How far now is through the period the chip ends (月底: through this month), for the chip to fill like a bar. */
@@ -627,7 +619,7 @@ export function removeZoneRow(id: string) { S.zones = S.zones.filter((z) => !sam
 /* ---------- persistence ---------- */
 export function defaultZones(): string[] {
   const list = ['Asia/Taipei', 'Asia/Tokyo', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Australia/Sydney'];
-  return list.filter((id) => isValidTzSafe(id) && !sameZone(id, LOCAL_TZ));
+  return list.filter((id) => isValidTz(id) && !sameZone(id, LOCAL_TZ));
 }
 export function loadState(): boolean {
   S.zones = defaultZones();
@@ -640,8 +632,8 @@ export function loadState(): boolean {
     const r = { y: +(x.y as number), mo: +(x.mo as number), d: +(x.d as number), h: +(x.h as number), mi: +(x.mi as number), s: +(x.s as number) };
     return validWall(r) ? r : null;
   };
-  if (isValidTzSafe(o.startTz)) S.startTz = o.startTz as string;
-  if (isValidTzSafe(o.endTz)) S.endTz = o.endTz as string;
+  if (isValidTz(o.startTz)) S.startTz = o.startTz as string;
+  if (isValidTz(o.endTz)) S.endTz = o.endTz as string;
   const st = W(o.start);
   if (o.live === false && st) { S.live = false; S.start = st; }
   const en = W(o.end);
@@ -670,7 +662,7 @@ export function loadState(): boolean {
   if (typeof o.link === 'string') S.link = mkLink(o.link);
   S.linkTo = o.linkTo === 'start' && S.link && (S.endLive || S.end) ? 'start' : 'end';
   if (S.link && S.linkTo === 'end') S.endLive = false;
-  if (Array.isArray(o.zones)) S.zones = (o.zones as unknown[]).filter((z): z is string => isValidTzSafe(z)).slice(0, ZMAX);
+  if (Array.isArray(o.zones)) S.zones = (o.zones as unknown[]).filter((z): z is string => isValidTz(z)).slice(0, ZMAX);
   if (o.theme === 'light' || o.theme === 'dark' || o.theme === 'system') S.theme = o.theme;
   if (o.lens === 'zones' || o.lens === 'cal' || o.lens === 'read' || o.lens === 'dur') S.lens = o.lens;
   if (o.readEnd === 'end') S.readEnd = 'end';
@@ -687,21 +679,20 @@ export function loadState(): boolean {
   if (typeof o.dur === 'string' && o.dur.length <= 400) { S.dur = o.dur; S.durSample = !!o.durSample; }
   return true;
 }
+/** What this device keeps (read back by loadState). Watched as is, so a field listed here is also saved when it changes. */
+const persisted = () => ({
+  v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end, endLive: S.endLive,
+  endSample: S.endSample, rules: S.rules, link: S.link ? S.link.expr : null, linkTo: S.linkTo, zones: S.zones,
+  theme: S.theme, lens: S.lens, readEnd: S.readEnd, readOrder: S.readOrder,
+  density: S.density, map: S.map, hidden: S.hidden, calMode: S.calMode, dur: S.dur, durSample: S.durSample,
+  chips: S.chips, words: S.words, wordsOff: S.wordsOff, prefs: S.prefs,
+});
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 export function startPersisting() {
-  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.rules, S.link?.expr, S.linkTo, S.zones, S.theme, S.lens, S.readEnd, S.readOrder,
-    S.density, S.map, S.hidden, S.calMode, S.dur, S.durSample, S.chips, S.words, S.wordsOff, S.prefs], () => {
+  watch(persisted, () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(STORE_KEY, JSON.stringify({
-          v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end, endLive: S.endLive,
-          endSample: S.endSample, rules: S.rules, link: S.link ? S.link.expr : null, linkTo: S.linkTo, zones: S.zones,
-          theme: S.theme, lens: S.lens, readEnd: S.readEnd, readOrder: S.readOrder,
-          density: S.density, map: S.map, hidden: S.hidden, calMode: S.calMode, dur: S.dur, durSample: S.durSample,
-          chips: S.chips, words: S.words, wordsOff: S.wordsOff, prefs: S.prefs,
-        }));
-      } catch { /* storage unavailable: everything still works for this visit */ }
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(persisted())); } catch { /* storage unavailable: everything still works for this visit */ }
     }, 300);
   }, { deep: true });
 }

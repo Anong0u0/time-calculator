@@ -48,10 +48,15 @@ function bind(on: boolean) {
   const i = stack.indexOf(me);
   if (i >= 0) stack.splice(i, 1);
   if (on) stack.push(me);
-  const f = on ? document.addEventListener.bind(document) : document.removeEventListener.bind(document);
-  f('pointerdown', onDown as EventListener, true);
-  f('keydown', onKey as EventListener, true);
-  (on ? window.addEventListener : window.removeEventListener)('resize', place);
+  if (on) {
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', place);
+  } else {
+    document.removeEventListener('pointerdown', onDown, true);
+    document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('resize', place);
+  }
 }
 /* the content can grow or change width while open (a tab, an editor opening): keep it on screen */
 let ro: ResizeObserver | null = null;

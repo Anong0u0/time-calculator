@@ -20,6 +20,7 @@ import { spanTokens, nfMax, durWords } from '../core/format';
 import { ui, openDuration } from '../state/ui';
 import { fitText } from '../composables/fit';
 import { useSize, fontsTick, remPx } from '../composables/size';
+import { useFlash } from '../composables/flash';
 
 /** big: the equation has the screen to itself (a full-screen countdown): the hero grows to the room it has. */
 const props = defineProps<{ compact?: boolean; tight?: boolean; big?: boolean }>();
@@ -63,7 +64,8 @@ const heroFs = computed(() => {
   return Math.max(base, Math.min(boxH.value * 0.78, boxW.value * 0.32));
 });
 const refit = () => nextTick(() => { const m = props.big ? 0.05 : 0.42; fitText(line.value, m); requestAnimationFrame(() => fitText(line.value, m)); });
-watch([() => toks.value.map((t) => ('v' in t ? t.v : ':')).join(''), boxW, boxH, heroFs, () => props.compact, fontsTick], refit);
+// digits are tabular, so the width only changes with the shape (how many digits, which units), not every second
+watch([shape, boxW, boxH, heroFs, () => props.compact, fontsTick], refit);
 onMounted(refit);
 
 /* ---------- typing ---------- */
@@ -347,8 +349,7 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
   return { segs: [{ t: '現在走到 ' }, { t: `${nfMax(f * 100, 1)}%`, b: true }, { t: ' · 還有 ' }, { t: left(eMs - n), b: true }], tone: '' };
 });
 
-const flashing = ref(false);
-watch(() => pulse.span, () => { flashing.value = false; requestAnimationFrame(() => { flashing.value = true; }); });
+const { flashing } = useFlash(() => pulse.span);
 
 /* ---------- the duration calculator: a popover here, or its own column on four-column screens ---------- */
 const calcBtn = ref<HTMLElement | null>(null);
