@@ -9,7 +9,8 @@ const P: Record<string, string> = {
   swapv: 'M8 3 4 7l4 4 M4 7h12 M16 21l4-4-4-4 M20 17H8',
   link: 'M10 13.5a4.5 4.5 0 0 0 6.8.5l2.9-2.9a4.6 4.6 0 0 0-6.5-6.5l-1.6 1.6 M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.9 2.9a4.6 4.6 0 0 0 6.5 6.5l1.6-1.6',
   pin: 'M12 16v5 M7 16h10l-1.6-2.6a2 2 0 0 1-.3-1V7.5h.9a1.5 1.5 0 0 0 0-3H8a1.5 1.5 0 0 0 0 3h.9v4.9a2 2 0 0 1-.3 1Z',
-  globe: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M3.5 9h17 M3.5 15h17 M12 3c-2.6 2.6-3.6 5.6-3.6 9s1 6.4 3.6 9 M12 3c2.6 2.6 3.6 5.6 3.6 9s-1 6.4-3.6 9',
+  globe:
+    'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M3.5 9h17 M3.5 15h17 M12 3c-2.6 2.6-3.6 5.6-3.6 9s1 6.4 3.6 9 M12 3c2.6 2.6 3.6 5.6 3.6 9s-1 6.4-3.6 9',
   plus: 'M12 5v14 M5 12h14',
   minus: 'M5 12h14',
   grip: 'M9 6h.01 M15 6h.01 M9 12h.01 M15 12h.01 M9 18h.01 M15 18h.01',
@@ -29,14 +30,16 @@ const P: Record<string, string> = {
   arrowR: 'M5 12h14 M13 6l6 6-6 6',
   enter: 'M20 5v6a3 3 0 0 1-3 3H5 M9 10l-4 4 4 4',
   live: 'M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M7.1 7.1a7 7 0 0 0 0 9.8 M16.9 7.1a7 7 0 0 1 0 9.8',
-  brief: 'M4.5 8h15A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-9A1.5 1.5 0 0 1 4.5 8Z M9 8V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v2 M3 13h18',
+  brief:
+    'M4.5 8h15A1.5 1.5 0 0 1 21 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-9A1.5 1.5 0 0 1 4.5 8Z M9 8V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v2 M3 13h18',
   span: 'M4 7v10 M20 7v10 M4 12h16 M8 9l-4 3 4 3 M16 9l4 3-4 3',
   info: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M12 11v5 M12 7.5h.01',
   calc: 'M6.5 3h11A1.5 1.5 0 0 1 19 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5v-15A1.5 1.5 0 0 1 6.5 3Z M8 6.5h8v3H8Z M8.5 13h.01 M12 13h.01 M15.5 13h.01 M8.5 16.5h.01 M12 16.5h.01 M15.5 16.5h.01',
   edit: 'M4 20h4L18.6 9.4a2.1 2.1 0 0 0-3-3L5 17Z M13.6 7.4l3 3',
   sliders: 'M4 7h9 M17 7h3 M4 17h3 M11 17h9 M15 4.5v5 M9 14.5v5',
   map: 'M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6Z M9 4v14 M15 6v14',
-  panels: 'M4.5 4h15A1.5 1.5 0 0 1 21 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-13A1.5 1.5 0 0 1 4.5 4Z M3 9.5h18 M10 9.5V20',
+  panels:
+    'M4.5 4h15A1.5 1.5 0 0 1 21 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-13A1.5 1.5 0 0 1 4.5 4Z M3 9.5h18 M10 9.5V20',
   full: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
   shrink: 'M9 4v5H4 M15 4v5h5 M9 20v-5H4 M15 20v-5h5',
 };
@@ -44,7 +47,16 @@ defineProps<{ name: string }>();
 </script>
 
 <template>
-  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <svg
+    class="ic"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
     <path :d="P[name] || ''" />
   </svg>
 </template>

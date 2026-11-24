@@ -13,17 +13,31 @@ function fallback(text: string): boolean {
   document.body.appendChild(ta);
   ta.select();
   let ok: boolean;
-  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    ok = false;
+  }
   ta.remove();
   return ok;
 }
 export async function copyText(text: string, key: string, label = '') {
   if (!text) return;
   let ok: boolean;
-  try { await navigator.clipboard.writeText(text); ok = true; } catch { ok = fallback(text); }
-  if (!ok) { toast('無法寫入剪貼簿，請手動選取'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    ok = fallback(text);
+  }
+  if (!ok) {
+    toast('無法寫入剪貼簿，請手動選取');
+    return;
+  }
   copiedKey.value = key;
   clearTimeout(timer);
-  timer = setTimeout(() => { copiedKey.value = null; }, 1600);
+  timer = setTimeout(() => {
+    copiedKey.value = null;
+  }, 1600);
   toast(`已複製${label ? label + ' ' : ''}${text.length > 48 ? text.slice(0, 46) + '…' : text}`);
 }

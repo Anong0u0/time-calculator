@@ -8,7 +8,9 @@ const test = base.extend<{ noErrors: void }>({
     async ({ page }, use) => {
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
-      page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+      page.on('console', (m) => {
+        if (m.type() === 'error') errors.push(m.text());
+      });
       await use();
       expect(errors).toEqual([]);
     },
@@ -62,7 +64,8 @@ test('a shortcut dragged onto another row moves there', async ({ page }) => {
   const spanCount = await chips('span').count();
   const a = (await chips('span').first().boundingBox())!;
   const z = (await chips('start').first().boundingBox())!;
-  const ax = a.x + a.width / 2, ay = a.y + a.height / 2;
+  const ax = a.x + a.width / 2,
+    ay = a.y + a.height / 2;
   await page.mouse.move(ax, ay);
   await page.mouse.down();
   // a few pixels first, on the chip itself, so the drag starts there

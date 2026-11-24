@@ -10,7 +10,8 @@
     "test": "bun test",
     "typecheck": "vue-tsc --noEmit",
     "e2e": "vite build && playwright test",
-    "lint": "eslint ."
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "vue": "^3.5"

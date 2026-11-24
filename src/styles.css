@@ -4,112 +4,164 @@
    ============================================================ */
 :root {
   color-scheme: light;
-  --bg: #E9ECF2;
-  --bg-2: #DFE3EB;
-  --surface: #F8F9FB;
-  --surface-2: #FFFFFF;
-  --well: #EEF1F6;
-  --well-2: #E4E8F0;
-  --ink: #0B1222;
+  --bg: #e9ecf2;
+  --bg-2: #dfe3eb;
+  --surface: #f8f9fb;
+  --surface-2: #ffffff;
+  --well: #eef1f6;
+  --well-2: #e4e8f0;
+  --ink: #0b1222;
   --ink-2: #384257;
-  --ink-3: #5B6579;
-  --ink-4: #737D92;
-  --hair: rgba(11, 18, 34, .08);
-  --hair-2: rgba(11, 18, 34, .15);
-  --accent: #2B44D6;
-  --accent-2: #4058EA;
-  --accent-ink: #FFFFFF;
-  --accent-wash: rgba(43, 68, 214, .075);
-  --accent-wash-2: rgba(43, 68, 214, .16);
-  --accent-line: rgba(43, 68, 214, .42);
-  --now: #D83A24;
-  --now-wash: rgba(216, 58, 36, .1);
-  --good: #0A7351;
-  --good-wash: rgba(10, 115, 81, .1);
-  --warn: #8C5608;
-  --warn-wash: rgba(140, 86, 8, .1);
-  --h0: #1C2550; --h0-ink: #B5BFE4;
-  --h1: #6977A8; --h1-ink: #FFFFFF;
-  --h2: #D3D9E8; --h2-ink: #263048;
-  --h3: #FFFFFF; --h3-ink: #0B1222;
-  --shadow: 0 1px 1px rgba(11, 18, 34, .04), 0 18px 40px -30px rgba(11, 18, 34, .35);
-  --shadow-hero: 0 1px 1px rgba(11, 18, 34, .05), 0 30px 60px -40px rgba(30, 45, 140, .45);
-  --shadow-pop: 0 28px 64px -24px rgba(11, 18, 34, .42), 0 2px 10px rgba(11, 18, 34, .08);
-  --glow: rgba(43, 68, 214, .10);
-  --f-sans: "Archivo", "Noto Sans TC", "PingFang TC", "Heiti TC", "Microsoft JhengHei", system-ui, sans-serif;
-  --fs-xs: max(var(--floor), .74rem);
-  --fs-s: max(calc(var(--floor) + .5px), .8rem);
-  --f-mono: "Martian Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Noto Sans TC", monospace;
+  --ink-3: #5b6579;
+  --ink-4: #737d92;
+  --hair: rgba(11, 18, 34, 0.08);
+  --hair-2: rgba(11, 18, 34, 0.15);
+  --accent: #2b44d6;
+  --accent-2: #4058ea;
+  --accent-ink: #ffffff;
+  --accent-wash: rgba(43, 68, 214, 0.075);
+  --accent-wash-2: rgba(43, 68, 214, 0.16);
+  --accent-line: rgba(43, 68, 214, 0.42);
+  --now: #d83a24;
+  --now-wash: rgba(216, 58, 36, 0.1);
+  --good: #0a7351;
+  --good-wash: rgba(10, 115, 81, 0.1);
+  --warn: #8c5608;
+  --warn-wash: rgba(140, 86, 8, 0.1);
+  --h0: #1c2550;
+  --h0-ink: #b5bfe4;
+  --h1: #6977a8;
+  --h1-ink: #ffffff;
+  --h2: #d3d9e8;
+  --h2-ink: #263048;
+  --h3: #ffffff;
+  --h3-ink: #0b1222;
+  --shadow: 0 1px 1px rgba(11, 18, 34, 0.04), 0 18px 40px -30px rgba(11, 18, 34, 0.35);
+  --shadow-hero: 0 1px 1px rgba(11, 18, 34, 0.05), 0 30px 60px -40px rgba(30, 45, 140, 0.45);
+  --shadow-pop: 0 28px 64px -24px rgba(11, 18, 34, 0.42), 0 2px 10px rgba(11, 18, 34, 0.08);
+  --glow: rgba(43, 68, 214, 0.1);
+  --f-sans: 'Archivo', 'Noto Sans TC', 'PingFang TC', 'Heiti TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  --fs-xs: max(var(--floor), 0.74rem);
+  --fs-s: max(calc(var(--floor) + 0.5px), 0.8rem);
+  --f-mono: 'Martian Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, 'Noto Sans TC', monospace;
   --r-lg: 1.5rem;
   --r-md: 1rem;
-  --r-sm: .7rem;
-  --gap: .75rem;
-  --ease: cubic-bezier(.2, .8, .2, 1);
+  --r-sm: 0.7rem;
+  --gap: 0.75rem;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   /* density: set from the display settings. The smallest text follows it, never below 9px. */
   --density: 1;
   --floor: max(9px, calc(11px * var(--density)));
-  --face: #F2F4F8;
-  --map-day: #A9B2C6;
-  --map-night: #1B2653;
-  --map-sea-day: rgba(11, 18, 34, .045);
-  --map-sea-night: rgba(27, 38, 83, .16);
-  --map-term: rgba(43, 68, 214, .5);
+  --face: #f2f4f8;
+  --map-day: #a9b2c6;
+  --map-night: #1b2653;
+  --map-sea-day: rgba(11, 18, 34, 0.045);
+  --map-sea-night: rgba(27, 38, 83, 0.16);
+  --map-term: rgba(43, 68, 214, 0.5);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #060910; --bg-2: #0A0E18;
-    --surface: #0D121E; --surface-2: #121927;
-    --well: #0A0F19; --well-2: #161E2E;
-    --ink: #E7EBF6; --ink-2: #AAB3C8; --ink-3: #8790A8; --ink-4: #6B7590;
-    --hair: rgba(231, 235, 246, .075); --hair-2: rgba(231, 235, 246, .15);
-    --accent: #8EA3FF; --accent-2: #AABAFF; --accent-ink: #060910;
-    --accent-wash: rgba(142, 163, 255, .09); --accent-wash-2: rgba(142, 163, 255, .2); --accent-line: rgba(142, 163, 255, .5);
-    --now: #FF6B52; --now-wash: rgba(255, 107, 82, .15);
-    --good: #4AD3A3; --good-wash: rgba(74, 211, 163, .12);
-    --warn: #EDB656; --warn-wash: rgba(237, 182, 86, .12);
-    --h0: #070B16; --h0-ink: #7380A3;
-    --h1: #19223F; --h1-ink: #B3BDDE;
-    --h2: #2A3561; --h2-ink: #DDE3F6;
-    --h3: #4258B5; --h3-ink: #FFFFFF;
-    --shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 18px 40px -28px rgba(0, 0, 0, .8);
-    --shadow-hero: 0 0 0 1px rgba(142, 163, 255, .08), 0 30px 60px -40px rgba(0, 0, 0, .9);
-    --shadow-pop: 0 0 0 1px rgba(231, 235, 246, .08), 0 28px 64px -20px rgba(0, 0, 0, .85);
-    --glow: rgba(110, 135, 255, .13);
-    --face: #0A0F1A;
-  --map-day: #C5CDE4; --map-night: #232D55; --map-sea-day: rgba(231, 235, 246, .045); --map-sea-night: rgba(150, 165, 230, .05); --map-term: rgba(142, 163, 255, .55);
+    --bg: #060910;
+    --bg-2: #0a0e18;
+    --surface: #0d121e;
+    --surface-2: #121927;
+    --well: #0a0f19;
+    --well-2: #161e2e;
+    --ink: #e7ebf6;
+    --ink-2: #aab3c8;
+    --ink-3: #8790a8;
+    --ink-4: #6b7590;
+    --hair: rgba(231, 235, 246, 0.075);
+    --hair-2: rgba(231, 235, 246, 0.15);
+    --accent: #8ea3ff;
+    --accent-2: #aabaff;
+    --accent-ink: #060910;
+    --accent-wash: rgba(142, 163, 255, 0.09);
+    --accent-wash-2: rgba(142, 163, 255, 0.2);
+    --accent-line: rgba(142, 163, 255, 0.5);
+    --now: #ff6b52;
+    --now-wash: rgba(255, 107, 82, 0.15);
+    --good: #4ad3a3;
+    --good-wash: rgba(74, 211, 163, 0.12);
+    --warn: #edb656;
+    --warn-wash: rgba(237, 182, 86, 0.12);
+    --h0: #070b16;
+    --h0-ink: #7380a3;
+    --h1: #19223f;
+    --h1-ink: #b3bdde;
+    --h2: #2a3561;
+    --h2-ink: #dde3f6;
+    --h3: #4258b5;
+    --h3-ink: #ffffff;
+    --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 40px -28px rgba(0, 0, 0, 0.8);
+    --shadow-hero: 0 0 0 1px rgba(142, 163, 255, 0.08), 0 30px 60px -40px rgba(0, 0, 0, 0.9);
+    --shadow-pop: 0 0 0 1px rgba(231, 235, 246, 0.08), 0 28px 64px -20px rgba(0, 0, 0, 0.85);
+    --glow: rgba(110, 135, 255, 0.13);
+    --face: #0a0f1a;
+    --map-day: #c5cde4;
+    --map-night: #232d55;
+    --map-sea-day: rgba(231, 235, 246, 0.045);
+    --map-sea-night: rgba(150, 165, 230, 0.05);
+    --map-term: rgba(142, 163, 255, 0.55);
   }
 }
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #060910; --bg-2: #0A0E18;
-  --surface: #0D121E; --surface-2: #121927;
-  --well: #0A0F19; --well-2: #161E2E;
-  --ink: #E7EBF6; --ink-2: #AAB3C8; --ink-3: #8790A8; --ink-4: #6B7590;
-  --hair: rgba(231, 235, 246, .075); --hair-2: rgba(231, 235, 246, .15);
-  --accent: #8EA3FF; --accent-2: #AABAFF; --accent-ink: #060910;
-  --accent-wash: rgba(142, 163, 255, .09); --accent-wash-2: rgba(142, 163, 255, .2); --accent-line: rgba(142, 163, 255, .5);
-  --now: #FF6B52; --now-wash: rgba(255, 107, 82, .15);
-  --good: #4AD3A3; --good-wash: rgba(74, 211, 163, .12);
-  --warn: #EDB656; --warn-wash: rgba(237, 182, 86, .12);
-  --h0: #070B16; --h0-ink: #7380A3;
-  --h1: #19223F; --h1-ink: #B3BDDE;
-  --h2: #2A3561; --h2-ink: #DDE3F6;
-  --h3: #4258B5; --h3-ink: #FFFFFF;
-  --shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 18px 40px -28px rgba(0, 0, 0, .8);
-  --shadow-hero: 0 0 0 1px rgba(142, 163, 255, .08), 0 30px 60px -40px rgba(0, 0, 0, .9);
-  --shadow-pop: 0 0 0 1px rgba(231, 235, 246, .08), 0 28px 64px -20px rgba(0, 0, 0, .85);
-  --glow: rgba(110, 135, 255, .13);
-  --map-day: #C5CDE4; --map-night: #232D55; --map-sea-day: rgba(231, 235, 246, .045); --map-sea-night: rgba(150, 165, 230, .05); --map-term: rgba(142, 163, 255, .55);
-  --face: #0A0F1A;
+  --bg: #060910;
+  --bg-2: #0a0e18;
+  --surface: #0d121e;
+  --surface-2: #121927;
+  --well: #0a0f19;
+  --well-2: #161e2e;
+  --ink: #e7ebf6;
+  --ink-2: #aab3c8;
+  --ink-3: #8790a8;
+  --ink-4: #6b7590;
+  --hair: rgba(231, 235, 246, 0.075);
+  --hair-2: rgba(231, 235, 246, 0.15);
+  --accent: #8ea3ff;
+  --accent-2: #aabaff;
+  --accent-ink: #060910;
+  --accent-wash: rgba(142, 163, 255, 0.09);
+  --accent-wash-2: rgba(142, 163, 255, 0.2);
+  --accent-line: rgba(142, 163, 255, 0.5);
+  --now: #ff6b52;
+  --now-wash: rgba(255, 107, 82, 0.15);
+  --good: #4ad3a3;
+  --good-wash: rgba(74, 211, 163, 0.12);
+  --warn: #edb656;
+  --warn-wash: rgba(237, 182, 86, 0.12);
+  --h0: #070b16;
+  --h0-ink: #7380a3;
+  --h1: #19223f;
+  --h1-ink: #b3bdde;
+  --h2: #2a3561;
+  --h2-ink: #dde3f6;
+  --h3: #4258b5;
+  --h3-ink: #ffffff;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 40px -28px rgba(0, 0, 0, 0.8);
+  --shadow-hero: 0 0 0 1px rgba(142, 163, 255, 0.08), 0 30px 60px -40px rgba(0, 0, 0, 0.9);
+  --shadow-pop: 0 0 0 1px rgba(231, 235, 246, 0.08), 0 28px 64px -20px rgba(0, 0, 0, 0.85);
+  --glow: rgba(110, 135, 255, 0.13);
+  --map-day: #c5cde4;
+  --map-night: #232d55;
+  --map-sea-day: rgba(231, 235, 246, 0.045);
+  --map-sea-night: rgba(150, 165, 230, 0.05);
+  --map-term: rgba(142, 163, 255, 0.55);
+  --face: #0a0f1a;
 }
 
 /* ---------- base: one screen, never scrolls ---------- */
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 html {
   height: 100%;
   overflow: hidden;
-  font-size: calc(clamp(13px, calc(4px + .42vw + .62vh), 18px) * var(--density));
+  font-size: calc(clamp(13px, calc(4px + 0.42vw + 0.62vh), 18px) * var(--density));
   -webkit-text-size-adjust: 100%;
   overscroll-behavior: none;
 }
@@ -129,20 +181,76 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
-#app { height: 100%; }
-button, input { font: inherit; color: inherit; }
-button { cursor: pointer; background: none; border: 0; padding: 0; }
-button:disabled { cursor: default; }
-h1, h2, h3, p, dl, dd, ul { margin: 0; padding: 0; }
-ul { list-style: none; }
-:focus { outline: none; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: .5rem; }
-input[type="text"]:focus-visible { outline: none; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.mono { font-family: var(--f-mono); font-stretch: 75%; font-variant-numeric: tabular-nums; }
-.tnum { font-variant-numeric: tabular-nums; }
-.ell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ic { width: 1.15em; height: 1.15em; flex: none; display: inline-block; vertical-align: -.18em; }
+#app {
+  height: 100%;
+}
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+button:disabled {
+  cursor: default;
+}
+h1,
+h2,
+h3,
+p,
+dl,
+dd,
+ul {
+  margin: 0;
+  padding: 0;
+}
+ul {
+  list-style: none;
+}
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+input[type='text']:focus-visible {
+  outline: none;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.mono {
+  font-family: var(--f-mono);
+  font-stretch: 75%;
+  font-variant-numeric: tabular-nums;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+.ell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ic {
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+  display: inline-block;
+  vertical-align: -0.18em;
+}
 
 /* ---------- surfaces ---------- */
 .panel {
@@ -157,111 +265,315 @@ input[type="text"]:focus-visible { outline: none; }
   border-radius: var(--r-lg);
   box-shadow: var(--shadow);
 }
-.panel-head { display: flex; align-items: center; gap: .6rem; flex: none; min-height: 2.6rem; padding: .7rem 1rem 0; min-width: 0; }
-.panel-head h2 { font-size: 1rem; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
-.panel-sub { flex: 1; min-width: 0; font-size: .86rem; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.panel.flash { animation: panelFlash .9s var(--ease); }
-@keyframes panelFlash { 0% { box-shadow: 0 0 0 .3rem var(--accent-wash-2), var(--shadow); } }
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: none;
+  min-height: 2.6rem;
+  padding: 0.7rem 1rem 0;
+  min-width: 0;
+}
+.panel-head h2 {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.panel-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.86rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.panel.flash {
+  animation: panelFlash 0.9s var(--ease);
+}
+@keyframes panelFlash {
+  0% {
+    box-shadow:
+      0 0 0 0.3rem var(--accent-wash-2),
+      var(--shadow);
+  }
+}
 
 /* ---------- start ● / end ○ glyphs, the same everywhere ---------- */
-.node { display: inline-block; flex: none; width: .62em; height: .62em; border-radius: 50%; background: var(--accent); vertical-align: .06em; }
-.node.end { background: transparent; box-shadow: inset 0 0 0 .14em var(--accent); }
+.node {
+  display: inline-block;
+  flex: none;
+  width: 0.62em;
+  height: 0.62em;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.06em;
+}
+.node.end {
+  background: transparent;
+  box-shadow: inset 0 0 0 0.14em var(--accent);
+}
 
 /* ---------- controls ---------- */
 .chip {
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: .35rem;
+  gap: 0.35rem;
   height: 2rem;
-  padding: 0 .7rem;
+  padding: 0 0.7rem;
   border-radius: 99rem;
-  font-size: .86rem;
+  font-size: 0.86rem;
   font-weight: 550;
   white-space: nowrap;
   color: var(--ink-2);
   background: var(--well);
   border: 1px solid var(--hair);
-  transition: background .18s, color .18s, border-color .18s, transform .18s;
+  transition:
+    background 0.18s,
+    color 0.18s,
+    border-color 0.18s,
+    transform 0.18s;
 }
-.chip:hover { color: var(--ink); background: var(--accent-wash); border-color: var(--accent-wash-2); }
-.chip:active { transform: scale(.97); }
-.chip[aria-pressed="true"] { color: var(--accent); background: var(--accent-wash); border-color: var(--accent-line); }
+.chip:hover {
+  color: var(--ink);
+  background: var(--accent-wash);
+  border-color: var(--accent-wash-2);
+}
+.chip:active {
+  transform: scale(0.97);
+}
+.chip[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-color: var(--accent-line);
+}
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
-  height: 2.2rem; padding: 0 .8rem; border-radius: .8rem;
-  font-size: .88rem; font-weight: 600; white-space: nowrap;
-  color: var(--ink); background: var(--surface-2); border: 1px solid var(--hair-2);
-  transition: background .18s, border-color .18s, color .18s, transform .18s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 2.2rem;
+  padding: 0 0.8rem;
+  border-radius: 0.8rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--hair-2);
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s,
+    transform 0.18s;
 }
-.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-.btn:active:not(:disabled) { transform: scale(.98); }
-.btn:disabled { opacity: .45; }
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.btn:disabled {
+  opacity: 0.45;
+}
 .icon-btn {
   flex: none;
-  width: 2.2rem; height: 2.2rem;
-  display: inline-grid; place-items: center;
-  border-radius: .75rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 0.75rem;
   color: var(--ink-3);
-  transition: background .18s, color .18s;
+  transition:
+    background 0.18s,
+    color 0.18s;
 }
-.icon-btn:hover:not(:disabled) { background: var(--well-2); color: var(--ink); }
-.icon-btn:disabled { opacity: .35; }
-.seg-ctl { display: inline-flex; padding: .18rem; gap: .12rem; border-radius: .8rem; background: var(--well); border: 1px solid var(--hair); flex: none; }
-.seg-ctl button { display: inline-flex; align-items: center; gap: .35rem; height: 1.8rem; padding: 0 .6rem; border-radius: .6rem; font-size: .84rem; font-weight: 600; color: var(--ink-3); white-space: nowrap; transition: background .18s, color .18s, box-shadow .18s; }
-.seg-ctl button:hover { color: var(--ink); }
-.seg-ctl button[aria-pressed="true"], .seg-ctl button[aria-selected="true"] { background: var(--surface-2); color: var(--accent); box-shadow: 0 1px 2px rgba(11, 18, 34, .1), 0 0 0 1px var(--hair); }
+.icon-btn:hover:not(:disabled) {
+  background: var(--well-2);
+  color: var(--ink);
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+}
+.seg-ctl {
+  display: inline-flex;
+  padding: 0.18rem;
+  gap: 0.12rem;
+  border-radius: 0.8rem;
+  background: var(--well);
+  border: 1px solid var(--hair);
+  flex: none;
+}
+.seg-ctl button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 1.8rem;
+  padding: 0 0.6rem;
+  border-radius: 0.6rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  white-space: nowrap;
+  transition:
+    background 0.18s,
+    color 0.18s,
+    box-shadow 0.18s;
+}
+.seg-ctl button:hover {
+  color: var(--ink);
+}
+.seg-ctl button[aria-pressed='true'],
+.seg-ctl button[aria-selected='true'] {
+  background: var(--surface-2);
+  color: var(--accent);
+  box-shadow:
+    0 1px 2px rgba(11, 18, 34, 0.1),
+    0 0 0 1px var(--hair);
+}
 
 /* a value you can copy: the icon is always there, louder on hover, a check once copied */
 .copy {
-  display: inline-flex; align-items: center; gap: .45rem; min-width: 0; max-width: 100%;
-  padding: .12rem .35rem; margin: -.12rem -.35rem;
-  border-radius: .5rem; text-align: left; white-space: nowrap;
-  transition: background .15s, color .15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.12rem 0.35rem;
+  margin: -0.12rem -0.35rem;
+  border-radius: 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
-.copy > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.copy .ic { opacity: .5; color: var(--ink-3); transition: opacity .15s, color .15s; width: 1em; height: 1em; }
-.copy:hover:not(:disabled) { background: var(--accent-wash); color: var(--accent); }
-.copy:hover:not(:disabled) .ic, .copy:focus-visible .ic { opacity: 1; color: var(--accent); }
-.copy.copied .ic { opacity: 1; color: var(--good); }
-.copy:disabled { cursor: default; color: var(--ink-4); }
-@media (hover: none) { .copy .ic { opacity: .7; } }
+.copy > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.copy .ic {
+  opacity: 0.5;
+  color: var(--ink-3);
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+  width: 1em;
+  height: 1em;
+}
+.copy:hover:not(:disabled) {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.copy:hover:not(:disabled) .ic,
+.copy:focus-visible .ic {
+  opacity: 1;
+  color: var(--accent);
+}
+.copy.copied .ic {
+  opacity: 1;
+  color: var(--good);
+}
+.copy:disabled {
+  cursor: default;
+  color: var(--ink-4);
+}
+@media (hover: none) {
+  .copy .ic {
+    opacity: 0.7;
+  }
+}
 
 /* a value you can type over: a dashed baseline says so */
-.editable { cursor: text; background-image: linear-gradient(to right, var(--ink-4) 45%, transparent 45%); background-size: .32rem 1px; background-repeat: repeat-x; background-position: 0 100%; }
-.editable:hover { background-color: var(--accent-wash); color: var(--accent); background-image: linear-gradient(to right, var(--accent) 45%, transparent 45%); }
+.editable {
+  cursor: text;
+  background-image: linear-gradient(to right, var(--ink-4) 45%, transparent 45%);
+  background-size: 0.32rem 1px;
+  background-repeat: repeat-x;
+  background-position: 0 100%;
+}
+.editable:hover {
+  background-color: var(--accent-wash);
+  color: var(--accent);
+  background-image: linear-gradient(to right, var(--accent) 45%, transparent 45%);
+}
 
-.kbd { font: 500 var(--fs-xs)/1 var(--f-mono); font-stretch: 75%; padding: .2rem .35rem; border-radius: .35rem; background: var(--well-2); color: var(--ink-3); border: 1px solid var(--hair); white-space: nowrap; }
+.kbd {
+  font: 500 var(--fs-xs)/1 var(--f-mono);
+  font-stretch: 75%;
+  padding: 0.2rem 0.35rem;
+  border-radius: 0.35rem;
+  background: var(--well-2);
+  color: var(--ink-3);
+  border: 1px solid var(--hair);
+  white-space: nowrap;
+}
 
 /* ---------- tooltip, toast, popovers ---------- */
 .tip {
-  position: fixed; z-index: 90; pointer-events: none;
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
   max-width: min(22rem, calc(100vw - 20px));
-  padding: .45rem .65rem; border-radius: .6rem;
-  background: var(--ink); color: var(--surface);
-  font-size: .82rem; line-height: 1.45; font-weight: 500;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.6rem;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  font-weight: 500;
   box-shadow: var(--shadow-pop);
-  opacity: 0; transform: translateY(3px);
-  transition: opacity .14s, transform .14s var(--ease);
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    opacity 0.14s,
+    transform 0.14s var(--ease);
 }
-.tip.show { opacity: 1; transform: none; }
-.tip .kbd { background: color-mix(in srgb, var(--surface) 18%, transparent); color: inherit; border-color: transparent; }
+.tip.show {
+  opacity: 1;
+  transform: none;
+}
+.tip .kbd {
+  background: color-mix(in srgb, var(--surface) 18%, transparent);
+  color: inherit;
+  border-color: transparent;
+}
 .pop {
-  position: fixed; z-index: 70;
-  background: var(--surface-2); color: var(--ink);
-  border: 1px solid var(--hair-2); border-radius: 1.2rem;
+  position: fixed;
+  z-index: 70;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--hair-2);
+  border-radius: 1.2rem;
   box-shadow: var(--shadow-pop);
   /* taller than the room it has: it scrolls instead of running off the screen */
-  overflow-y: auto; overscroll-behavior: contain;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .pop { animation: popIn .16s var(--ease); }
-  @keyframes popIn { from { opacity: .3; transform: translateY(-.35rem) scale(.985); } }
+  .pop {
+    animation: popIn 0.16s var(--ease);
+  }
+  @keyframes popIn {
+    from {
+      opacity: 0.3;
+      transform: translateY(-0.35rem) scale(0.985);
+    }
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   /* Turn motion off outright. A tiny duration would still animate every property (transition-property defaults to all),
      so inherited font sizes would lag a frame and text-fitting would measure stale widths. */
-  *, *::before, *::after { transition: none !important; animation: none !important; }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 /* ============================================================
@@ -284,106 +596,379 @@ input[type="text"]:focus-visible { outline: none; }
   background:
     radial-gradient(62% 40% at 50% 17%, color-mix(in srgb, var(--surface-2) 80%, transparent), transparent 78%),
     radial-gradient(110% 70% at 50% -12%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 62%),
-    repeating-radial-gradient(circle at 50% 22%, transparent 0 9px, color-mix(in srgb, var(--ink) 1.6%, transparent) 9px 10px),
-    linear-gradient(to bottom, transparent 45%, color-mix(in srgb, var(--ink) 3.5%, transparent)),
-    var(--face);
+    repeating-radial-gradient(
+      circle at 50% 22%,
+      transparent 0 9px,
+      color-mix(in srgb, var(--ink) 1.6%, transparent) 9px 10px
+    ),
+    linear-gradient(to bottom, transparent 45%, color-mix(in srgb, var(--ink) 3.5%, transparent)), var(--face);
 }
-.app.dial .panel { background: transparent; border: 0; border-radius: 0; box-shadow: none; }
-.app.dial .panel.flash { animation: dialFlash 1s var(--ease); }
-@keyframes dialFlash { 0% { background-color: var(--accent-wash); } }
+.app.dial .panel {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app.dial .panel.flash {
+  animation: dialFlash 1s var(--ease);
+}
+@keyframes dialFlash {
+  0% {
+    background-color: var(--accent-wash);
+  }
+}
 
 /* ---------- labels: each section is named like text printed on a dial, over an engraved line ---------- */
-.app.dial > .panel > .panel-head { margin: 0 1rem; padding: .35rem 0 .5rem; border-bottom: 1px solid var(--hair-2); }
-.app.dial > .panel .panel-head h2:not(.cal-title) { font-size: max(var(--floor), .82rem); font-weight: 650; letter-spacing: .16em; color: var(--ink-3); }
-.app.dial > .panel .panel-head .ph-ic { color: var(--ink-4); width: 1em; height: 1em; }
-.app.dial .panel-sub { color: var(--ink-4); }
-.app.dial .sc-head h2 { letter-spacing: .14em; }
-.app.dial .ep-head h2 { letter-spacing: .1em; }
+.app.dial > .panel > .panel-head {
+  margin: 0 1rem;
+  padding: 0.35rem 0 0.5rem;
+  border-bottom: 1px solid var(--hair-2);
+}
+.app.dial > .panel .panel-head h2:not(.cal-title) {
+  font-size: max(var(--floor), 0.82rem);
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+.app.dial > .panel .panel-head .ph-ic {
+  color: var(--ink-4);
+  width: 1em;
+  height: 1em;
+}
+.app.dial .panel-sub {
+  color: var(--ink-4);
+}
+.app.dial .sc-head h2 {
+  letter-spacing: 0.14em;
+}
+.app.dial .ep-head h2 {
+  letter-spacing: 0.1em;
+}
 
 /* ---------- the main reading ---------- */
 /* the span is the centre of the face: lit softly from within, no frame */
-.app.dial .sc { background: radial-gradient(70% 90% at 50% 40%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%); }
+.app.dial .sc {
+  background: radial-gradient(70% 90% at 50% 40%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%);
+}
 /* the end you touched last: its hand glows */
-.app.dial .ep.active .ep-head .node { box-shadow: 0 0 0 .3em var(--accent-wash-2); }
-.app.dial .ep.active .ep-head .node.end { box-shadow: inset 0 0 0 .14em var(--accent), 0 0 0 .3em var(--accent-wash-2); }
+.app.dial .ep.active .ep-head .node {
+  box-shadow: 0 0 0 0.3em var(--accent-wash-2);
+}
+.app.dial .ep.active .ep-head .node.end {
+  box-shadow:
+    inset 0 0 0 0.14em var(--accent),
+    0 0 0 0.3em var(--accent-wash-2);
+}
 /* stacked band: the rail has its own lane on the left; the readings sit to its right */
-.app.dial .eq.stack .ep, .app.dial .eq.stack .sc { padding-left: 2.05rem; }
-.app.dial .eq.stack .ep-head .node { margin-left: -1.3rem; margin-right: .2rem; }
+.app.dial .eq.stack .ep,
+.app.dial .eq.stack .sc {
+  padding-left: 2.05rem;
+}
+.app.dial .eq.stack .ep-head .node {
+  margin-left: -1.3rem;
+  margin-right: 0.2rem;
+}
 
 /* ---------- scales, all drawn the same way ---------- */
 /* the day scale: 24 hour ticks across the axis, every 6 hours taller */
 .app.dial .strip.axis {
-  background-image: repeating-linear-gradient(to right, var(--ink-4) 0 1px, transparent 1px 25%), repeating-linear-gradient(to right, var(--hair-2) 0 1px, transparent 1px 4.16667%);
-  background-size: 100% .7rem, 100% .4rem; background-position: 0 50%, 0 50%; background-repeat: no-repeat;
+  background-image:
+    repeating-linear-gradient(to right, var(--ink-4) 0 1px, transparent 1px 25%),
+    repeating-linear-gradient(to right, var(--hair-2) 0 1px, transparent 1px 4.16667%);
+  background-size:
+    100% 0.7rem,
+    100% 0.4rem;
+  background-position:
+    0 50%,
+    0 50%;
+  background-repeat: no-repeat;
 }
-.app.dial .strip.axis::before { height: 1px; margin-top: -.5px; background: var(--hair-2); }
+.app.dial .strip.axis::before {
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--hair-2);
+}
 /* the year scale: one tick per week; the shown month taller, the range in lume, the hands full height */
-.app.dial .yw { gap: 0; align-items: stretch; height: 1.15rem; border-bottom: 1px solid var(--hair-2); }
-.app.dial .w, .app.dial .w.cur, .app.dial .w.inR, .app.dial .w.s, .app.dial .w.e { background: transparent; opacity: 1; border-radius: 0; box-shadow: none; }
-.app.dial .w::before { content: ''; position: absolute; left: 50%; bottom: 0; width: 1px; height: 32%; background: var(--hair-2); transition: height .12s, background .12s; }
-.app.dial .w.cur::before { height: 58%; background: var(--ink-4); }
-.app.dial .w.inR { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 65%, transparent); }
-.app.dial .w.inR::before { background: var(--accent); opacity: .7; }
-.app.dial .w.s::before, .app.dial .w.e::before { top: .42rem; height: auto; width: 2px; margin-left: -1px; background: var(--accent); opacity: 1; }
+.app.dial .yw {
+  gap: 0;
+  align-items: stretch;
+  height: 1.15rem;
+  border-bottom: 1px solid var(--hair-2);
+}
+.app.dial .w,
+.app.dial .w.cur,
+.app.dial .w.inR,
+.app.dial .w.s,
+.app.dial .w.e {
+  background: transparent;
+  opacity: 1;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app.dial .w::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 1px;
+  height: 32%;
+  background: var(--hair-2);
+  transition:
+    height 0.12s,
+    background 0.12s;
+}
+.app.dial .w.cur::before {
+  height: 58%;
+  background: var(--ink-4);
+}
+.app.dial .w.inR {
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 65%, transparent);
+}
+.app.dial .w.inR::before {
+  background: var(--accent);
+  opacity: 0.7;
+}
+.app.dial .w.s::before,
+.app.dial .w.e::before {
+  top: 0.42rem;
+  height: auto;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  opacity: 1;
+}
 /* the two hands on this scale too: ● over the start's week, ○ over the end's */
-.app.dial .w.s { background: radial-gradient(circle at 50% .2rem, var(--accent) 0 .17rem, transparent .19rem); }
-.app.dial .w.e { background: radial-gradient(circle at 50% .2rem, transparent 0 .1rem, var(--accent) .11rem .19rem, transparent .21rem); }
-.app.dial .w:hover::before { height: 85%; background: var(--ink-2); }
+.app.dial .w.s {
+  background: radial-gradient(circle at 50% 0.2rem, var(--accent) 0 0.17rem, transparent 0.19rem);
+}
+.app.dial .w.e {
+  background: radial-gradient(
+    circle at 50% 0.2rem,
+    transparent 0 0.1rem,
+    var(--accent) 0.11rem 0.19rem,
+    transparent 0.21rem
+  );
+}
+.app.dial .w:hover::before {
+  height: 85%;
+  background: var(--ink-2);
+}
 /* the world map is printed on the face, not set in a frame */
-.app.dial .wm { background: none; border: 0; border-radius: 0; overflow: visible; }
+.app.dial .wm {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
 
 /* ---------- detail recedes with distance from the hands ----------
    In each scale the marks of ● and ○ (and red now) are full strength; the rest of the scale is quieter. */
-.app.dial .gh span, .app.dial .wkc { color: var(--ink-4); }
-.app.dial .wkc.hit { color: var(--accent); }
-.app.dial .day { color: var(--ink-3); }
-.app.dial .dn { font-weight: 450; }
-.app.dial .day.we:not(.s):not(.e), .app.dial .day.out, .app.dial .day.out.we:not(.s):not(.e) { color: var(--ink-4); }
-.app.dial .day.inR { color: var(--ink); }
-.app.dial .day.s .dn, .app.dial .day.e .dn { font-weight: 650; }
-.app.dial .rd-v .copy { color: var(--ink-2); }
-.app.dial .len .rd-v .copy { color: var(--accent); }
+.app.dial .gh span,
+.app.dial .wkc {
+  color: var(--ink-4);
+}
+.app.dial .wkc.hit {
+  color: var(--accent);
+}
+.app.dial .day {
+  color: var(--ink-3);
+}
+.app.dial .dn {
+  font-weight: 450;
+}
+.app.dial .day.we:not(.s):not(.e),
+.app.dial .day.out,
+.app.dial .day.out.we:not(.s):not(.e) {
+  color: var(--ink-4);
+}
+.app.dial .day.inR {
+  color: var(--ink);
+}
+.app.dial .day.s .dn,
+.app.dial .day.e .dn {
+  font-weight: 650;
+}
+.app.dial .rd-v .copy {
+  color: var(--ink-2);
+}
+.app.dial .len .rd-v .copy {
+  color: var(--accent);
+}
 /* the week track is the year scale: named in the gutter like a subdial's printed scale */
-.app.dial .year { position: relative; }
-.app.dial .year::before { content: '一年'; position: absolute; left: 0; top: .2rem; font-size: var(--fs-xs); font-weight: 600; letter-spacing: .08em; color: var(--ink-4); }
-.app.dial .day.inR::before { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.app.dial .rd-k { color: var(--ink-4); }
-.app.dial .zc-name small, .app.dial .zt small { color: var(--ink-4); }
+.app.dial .year {
+  position: relative;
+}
+.app.dial .year::before {
+  content: '一年';
+  position: absolute;
+  left: 0;
+  top: 0.2rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+.app.dial .day.inR::before {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.app.dial .rd-k {
+  color: var(--ink-4);
+}
+.app.dial .zc-name small,
+.app.dial .zt small {
+  color: var(--ink-4);
+}
 /* unit conversions: label over number, no cells */
-.app.dial .units { background: none; border: 0; border-radius: 0; gap: .1rem 1.2rem; }
-.app.dial .units .u { background: none; padding: .3rem 0; }
-.app.dial .dc-totals { background: none; border: 0; border-radius: 0; gap: .1rem 1.2rem; }
-.app.dial .dc-totals > .copy { background: none; padding: .25rem 0; }
+.app.dial .units {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  gap: 0.1rem 1.2rem;
+}
+.app.dial .units .u {
+  background: none;
+  padding: 0.3rem 0;
+}
+.app.dial .dc-totals {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  gap: 0.1rem 1.2rem;
+}
+.app.dial .dc-totals > .copy {
+  background: none;
+  padding: 0.25rem 0;
+}
 /* work and night: a coloured word, not a badge */
-.app.dial .zs, .app.dial .zs-work, .app.dial .zs-off, .app.dial .zs-wkend, .app.dial .zs-night { background: none; padding: 0; }
-.app.dial .zs::before { content: ''; display: inline-block; width: .42em; height: .42em; margin-right: .28em; border-radius: 50%; background: currentColor; vertical-align: .08em; }
-.app.dial .zs-night { color: var(--ink-3); }
-.app.dial .zs-off, .app.dial .zs-wkend { color: var(--ink-4); }
+.app.dial .zs,
+.app.dial .zs-work,
+.app.dial .zs-off,
+.app.dial .zs-wkend,
+.app.dial .zs-night {
+  background: none;
+  padding: 0;
+}
+.app.dial .zs::before {
+  content: '';
+  display: inline-block;
+  width: 0.42em;
+  height: 0.42em;
+  margin-right: 0.28em;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 0.08em;
+}
+.app.dial .zs-night {
+  color: var(--ink-3);
+}
+.app.dial .zs-off,
+.app.dial .zs-wkend {
+  color: var(--ink-4);
+}
 /* the 24-hour strips are a scale, not the headline: a softer night in light mode */
-:root:not([data-theme="dark"]) .app.dial { --h0: #5E6995; --h0-ink: #EEF1FA; --h1: #9CA6C9; --h1-ink: #FFFFFF; --h2: #DEE2ED; --h3: #F8F9FC; }
-.app.dial .lbl { font-weight: 550; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .app.dial { --h0: #070B16; --h0-ink: #7380A3; --h1: #19223F; --h2: #2A3561; } }
+:root:not([data-theme='dark']) .app.dial {
+  --h0: #5e6995;
+  --h0-ink: #eef1fa;
+  --h1: #9ca6c9;
+  --h1-ink: #ffffff;
+  --h2: #dee2ed;
+  --h3: #f8f9fc;
+}
+.app.dial .lbl {
+  font-weight: 550;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .app.dial {
+    --h0: #070b16;
+    --h0-ink: #7380a3;
+    --h1: #19223f;
+    --h2: #2a3561;
+  }
+}
 
 /* ---------- controls are quiet until touched ---------- */
-.app.dial .chip { background-color: transparent; border-color: var(--hair-2); color: var(--ink-2); }
-.app.dial .chip:hover { background-color: var(--accent-wash); border-color: var(--accent-line); color: var(--accent); }
-.app.dial .chip[aria-pressed="true"] { background-color: var(--accent-wash); border-color: var(--accent-line); color: var(--accent); }
-.app.dial .eq .ep-pre .chip, .app.dial .eq .sc-quick .chip { padding: 0 .55rem; }
-.app.dial .icon-btn { color: var(--ink-4); }
-.app.dial .icon-btn:hover:not(:disabled) { color: var(--ink); }
+.app.dial .chip {
+  background-color: transparent;
+  border-color: var(--hair-2);
+  color: var(--ink-2);
+}
+.app.dial .chip:hover {
+  background-color: var(--accent-wash);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.app.dial .chip[aria-pressed='true'] {
+  background-color: var(--accent-wash);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.app.dial .eq .ep-pre .chip,
+.app.dial .eq .sc-quick .chip {
+  padding: 0 0.55rem;
+}
+.app.dial .icon-btn {
+  color: var(--ink-4);
+}
+.app.dial .icon-btn:hover:not(:disabled) {
+  color: var(--ink);
+}
 /* every copyable value keeps its copy mark: quiet at rest, so the face stays calm, but always there to be found */
-.app.dial .copy .ic { opacity: .5; color: var(--accent); }
-.app.dial .copy:hover:not(:disabled) .ic, .app.dial .copy:focus-visible .ic { opacity: 1; }
-.app.dial .copy.copied { color: var(--good); }
-.app.dial .copy.copied .ic { opacity: 1; color: var(--good); }
-.app.dial .cmd-box { background: color-mix(in srgb, var(--surface-2) 55%, transparent); box-shadow: none; border-color: var(--hair-2); }
-.app.dial .cmd-box:focus-within { background: var(--surface-2); }
+.app.dial .copy .ic {
+  opacity: 0.5;
+  color: var(--accent);
+}
+.app.dial .copy:hover:not(:disabled) .ic,
+.app.dial .copy:focus-visible .ic {
+  opacity: 1;
+}
+.app.dial .copy.copied {
+  color: var(--good);
+}
+.app.dial .copy.copied .ic {
+  opacity: 1;
+  color: var(--good);
+}
+.app.dial .cmd-box {
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  box-shadow: none;
+  border-color: var(--hair-2);
+}
+.app.dial .cmd-box:focus-within {
+  background: var(--surface-2);
+}
 
 /* ---------- fingers: what can be hit is larger than what is drawn ---------- */
 @media (pointer: coarse) {
-  .op, .tag, .zt-v, .icon-btn, .rd-edit, .wk-ed { position: relative; }
-  .op::after, .knob::after, .tag::after, .zt-v::after, .wk-ed::after { content: ''; position: absolute; inset: -.55rem; }
-  .icon-btn::after, .rd-edit::after { content: ''; position: absolute; inset: -.3rem; }
-  .knob { width: 1.9rem; height: 1.9rem; margin: -.95rem 0 0 -.95rem; }
-  .seg { padding-top: .1em; padding-bottom: .1em; }
+  .op,
+  .tag,
+  .zt-v,
+  .icon-btn,
+  .rd-edit,
+  .wk-ed {
+    position: relative;
+  }
+  .op::after,
+  .knob::after,
+  .tag::after,
+  .zt-v::after,
+  .wk-ed::after {
+    content: '';
+    position: absolute;
+    inset: -0.55rem;
+  }
+  .icon-btn::after,
+  .rd-edit::after {
+    content: '';
+    position: absolute;
+    inset: -0.3rem;
+  }
+  .knob {
+    width: 1.9rem;
+    height: 1.9rem;
+    margin: -0.95rem 0 0 -0.95rem;
+  }
+  .seg {
+    padding-top: 0.1em;
+    padding-bottom: 0.1em;
+  }
 }

@@ -1,13 +1,16 @@
 import { SEC, MIN, HOUR, DAY, pad, splitSeconds, type Span, type CalDiff } from './time';
 
 const NF: Record<string, Intl.NumberFormat> = {};
-export const nf = (n: number, d = 0) => (NF['f' + d] ||= new Intl.NumberFormat('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d })).format(n);
-export const nfMax = (n: number, d: number) => (NF['m' + d] ||= new Intl.NumberFormat('zh-TW', { maximumFractionDigits: d })).format(n);
+export const nf = (n: number, d = 0) =>
+  (NF['f' + d] ||= new Intl.NumberFormat('zh-TW', { minimumFractionDigits: d, maximumFractionDigits: d })).format(n);
+export const nfMax = (n: number, d: number) =>
+  (NF['m' + d] ||= new Intl.NumberFormat('zh-TW', { maximumFractionDigits: d })).format(n);
 export const plainNum = (n: number, d: number) => String(+n.toFixed(d));
 
 const RTF = new Intl.RelativeTimeFormat('zh-TW', { numeric: 'auto' });
 export function relative(ms: number, now: number): string {
-  const diff = ms - now, a = Math.abs(diff);
+  const diff = ms - now,
+    a = Math.abs(diff);
   if (a < 1500) return '就是現在';
   if (a < 60 * SEC) return RTF.format(Math.round(diff / SEC), 'second');
   if (a < 60 * MIN) return RTF.format(Math.round(diff / MIN), 'minute');
@@ -42,9 +45,13 @@ export type HeroTok =
   | { t: 'sign'; v: string };
 
 /** Big numbers, small units: 1個月 8天 19:19:26 */
-export function spanTokens(sp: Span | (CalDiff & { sign: number; w?: number; biz?: boolean }), { plus = false, clock = false } = {}): HeroTok[] {
+export function spanTokens(
+  sp: Span | (CalDiff & { sign: number; w?: number; biz?: boolean }),
+  { plus = false, clock = false } = {},
+): HeroTok[] {
   const t: HeroTok[] = [];
-  if (sp.sign < 0) t.push({ t: 'sign', v: '−' }); else if (plus) t.push({ t: 'sign', v: '+' });
+  if (sp.sign < 0) t.push({ t: 'sign', v: '−' });
+  else if (plus) t.push({ t: 'sign', v: '+' });
   const date: ['y' | 'mo' | 'w' | 'd', number, string][] = [];
   if (sp.y) date.push(['y', sp.y, '年']);
   if (sp.mo) date.push(['mo', sp.mo, '個月']);
@@ -53,7 +60,11 @@ export function spanTokens(sp: Span | (CalDiff & { sign: number; w?: number; biz
   for (const [k, n, u] of date) t.push({ t: 'num', k, v: nf(n) }, { t: 'unit', v: u });
   const parts = (sp.h ? 1 : 0) + (sp.mi ? 1 : 0) + (sp.s ? 1 : 0);
   if (clock || parts > 1) {
-    t.push({ t: 'num', k: 'h', v: clock || date.length ? pad(sp.h) : String(sp.h) }, { t: 'colon' }, { t: 'num', k: 'mi', v: pad(sp.mi) });
+    t.push(
+      { t: 'num', k: 'h', v: clock || date.length ? pad(sp.h) : String(sp.h) },
+      { t: 'colon' },
+      { t: 'num', k: 'mi', v: pad(sp.mi) },
+    );
     if (clock || sp.s) t.push({ t: 'colon' }, { t: 'num', k: 's', v: pad(sp.s) });
   } else if (parts === 1) {
     const [k, u]: ['h' | 'mi' | 's', string] = sp.h ? ['h', '小時'] : sp.mi ? ['mi', '分'] : ['s', '秒'];

@@ -29,7 +29,11 @@ export function useDragSort(opts: DragSortOpts) {
     st = { id: e.pointerId, el: row, start: idx, idx, grab: e.clientY - row.getBoundingClientRect().top, y: e.clientY };
     dragging.value = idx;
     row.classList.add('sorting');
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* fine */ }
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* fine */
+    }
   }
   function moveP(e: PointerEvent) {
     if (!st || e.pointerId !== st.id) return;
@@ -60,7 +64,16 @@ export function useDragSort(opts: DragSortOpts) {
   }
   function key(e: KeyboardEvent, idx: number) {
     const n = opts.rows().length;
-    const to = e.key === 'ArrowUp' ? idx - 1 : e.key === 'ArrowDown' ? idx + 1 : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : null;
+    const to =
+      e.key === 'ArrowUp'
+        ? idx - 1
+        : e.key === 'ArrowDown'
+          ? idx + 1
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? n - 1
+              : null;
     if (to == null) return;
     e.preventDefault();
     if (to < 0 || to >= n || to === idx) return;

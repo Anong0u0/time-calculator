@@ -19,18 +19,30 @@ export const ui = reactive({
   /** The browser shows the page full screen. */
   fullscreen: false,
 });
-export function editSpan(text = '') { ui.spanEditText = text; ui.spanEditReq++; }
+export function editSpan(text = '') {
+  ui.spanEditText = text;
+  ui.spanEditReq++;
+}
 /** Focus the command bar. With `select`, the prefilled text is selected so typing replaces it.
     When the top bar is put away, it comes back first: typing is never out of reach. */
 export function focusCommand(text = '', select = false) {
-  ui.commandText = text; ui.commandSelect = select;
-  if (shown('top')) { ui.commandReq++; return; }
+  ui.commandText = text;
+  ui.commandSelect = select;
+  if (shown('top')) {
+    ui.commandReq++;
+    return;
+  }
   setShown('top', true);
-  nextTick(() => { ui.commandReq++; });
+  nextTick(() => {
+    ui.commandReq++;
+  });
 }
 /** Put an expression in the duration calculator and show it. */
 export function openDuration(text?: string) {
-  if (text != null && text.trim()) { S.dur = text.trim(); S.durSample = false; }
+  if (text != null && text.trim()) {
+    S.dur = text.trim();
+    S.durSample = false;
+  }
   ui.durReq++;
 }
 
@@ -42,8 +54,12 @@ export async function toggleFullscreen() {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen();
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 if (typeof document !== 'undefined') {
-  document.addEventListener('fullscreenchange', () => { ui.fullscreen = !!document.fullscreenElement; });
+  document.addEventListener('fullscreenchange', () => {
+    ui.fullscreen = !!document.fullscreenElement;
+  });
 }

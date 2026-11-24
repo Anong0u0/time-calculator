@@ -1,8 +1,28 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  isoWeek, isoWeeksInYear, isoWeekStart, usWeek, diffCalendar, toInstant, wallToInstant, partsInTz, addDuration,
-  parseSpan, fmtSpan, evalDuration, interpretSpanText, parseTimestamp, addBusinessDays,
-  countWeekdays, dayNum, spanBetween, fmtClock, isoDuration, fmtOffset, offsetAt, nextLeap,
+  isoWeek,
+  isoWeeksInYear,
+  isoWeekStart,
+  usWeek,
+  diffCalendar,
+  toInstant,
+  wallToInstant,
+  partsInTz,
+  addDuration,
+  parseSpan,
+  fmtSpan,
+  evalDuration,
+  interpretSpanText,
+  parseTimestamp,
+  addBusinessDays,
+  countWeekdays,
+  dayNum,
+  spanBetween,
+  fmtClock,
+  isoDuration,
+  fmtOffset,
+  offsetAt,
+  nextLeap,
 } from '../src/core/time';
 import { searchZones, zoneInText, DIR } from '../src/core/zones';
 import { parseDateTimeText } from '../src/core/parse';
@@ -57,7 +77,8 @@ describe('calendar arithmetic', () => {
 
 describe('spans and expressions', () => {
   test('parseSpan round trips', () => {
-    for (const t of ['+1年6個月', '−2週3天', '+20工作日', '+40天 10:34:29', '+3小時']) expect(fmtSpan(parseSpan(t))).toBe(t);
+    for (const t of ['+1年6個月', '−2週3天', '+20工作日', '+40天 10:34:29', '+3小時'])
+      expect(fmtSpan(parseSpan(t))).toBe(t);
     expect(parseSpan('3天前')).toMatchObject({ sign: -1, d: 3 });
     expect(() => parseSpan('30')).toThrow();
   });
@@ -84,7 +105,10 @@ describe('spans and expressions', () => {
 
 describe('free text', () => {
   test('dates, times and timestamps', () => {
-    expect(parseDateTimeText('2026-12-25 18:00')).toMatchObject({ kind: 'wall', wall: { y: 2026, mo: 12, d: 25, h: 18 } });
+    expect(parseDateTimeText('2026-12-25 18:00')).toMatchObject({
+      kind: 'wall',
+      wall: { y: 2026, mo: 12, d: 25, h: 18 },
+    });
     expect(parseDateTimeText('2026年12月25日 下午3點', 2026)).toMatchObject({ kind: 'wall', wall: { h: 15 } });
     expect(parseDateTimeText('12/25', 2026)).toMatchObject({ kind: 'wall', wall: { y: 2026, mo: 12, d: 25 } });
     expect(parseDateTimeText('15:30')).toMatchObject({ kind: 'time', h: 15, mi: 30 });
@@ -120,7 +144,8 @@ describe('restored instruments', () => {
     expect(Math.abs(Math.abs(dec.lon) - 180)).toBeLessThan(3);
   });
   test('the land mask and city coordinates', () => {
-    const cell = (lat: number, lon: number) => isLand(Math.floor((LAND.top - lat) / LAND.step), Math.floor((lon + 180) / LAND.step));
+    const cell = (lat: number, lon: number) =>
+      isLand(Math.floor((LAND.top - lat) / LAND.step), Math.floor((lon + 180) / LAND.step));
     expect(cell(23, 13)).toBe(true); // Sahara
     expect(cell(0, -140)).toBe(false); // central Pacific
     expect(cell(25.03, 121.56)).toBe(true); // Taipei
@@ -197,20 +222,29 @@ describe('address bar', () => {
     const was = { location: g.location, history: g.history };
     const writes: string[] = [];
     g.location = { pathname: '/', search: '', hash: '' };
-    g.history = { state: null, replaceState: (_s: unknown, _t: string, u: string) => { writes.push(u); } };
-    const dur = S.dur, durSample = S.durSample;
+    g.history = {
+      state: null,
+      replaceState: (_s: unknown, _t: string, u: string) => {
+        writes.push(u);
+      },
+    };
+    const dur = S.dur,
+      durSample = S.durSample;
     const stop = startUrlSync();
     try {
       await Bun.sleep(300);
       expect(writes).toEqual([]);
-      S.dur = '3h × 4'; S.durSample = false;
+      S.dur = '3h × 4';
+      S.durSample = false;
       await Bun.sleep(300);
       expect(writes.length).toBe(1);
       expect(writes[0]).toContain('calc=');
     } finally {
       stop();
-      S.dur = dur; S.durSample = durSample;
-      g.location = was.location; g.history = was.history;
+      S.dur = dur;
+      S.durSample = durSample;
+      g.location = was.location;
+      g.history = was.history;
     }
   });
 });
@@ -226,8 +260,20 @@ describe('reading any way of writing a date', () => {
     return `${w.y}-${w.mo}-${w.d} ${w.h}:${w.mi}`;
   };
   test('separators, order and words do not matter', () => {
-    for (const t of ['2000/1/1/20:34', '2000.1.1 20.34', '2000-01-01T20:34', '20000101 2034', '2000 1 1 20 34', '1/1/2000 8:34pm', 'Jan 1 2000 8:34 PM',
-      '2000年1月1日晚上8點34分', '二〇〇〇年一月一日晚上八點三十四分', '2000/1/1(六)20:34', 'Sat, 1 Jan 2000 20:34:00']) expect(read(t)).toBe('2000-1-1 20:34');
+    for (const t of [
+      '2000/1/1/20:34',
+      '2000.1.1 20.34',
+      '2000-01-01T20:34',
+      '20000101 2034',
+      '2000 1 1 20 34',
+      '1/1/2000 8:34pm',
+      'Jan 1 2000 8:34 PM',
+      '2000年1月1日晚上8點34分',
+      '二〇〇〇年一月一日晚上八點三十四分',
+      '2000/1/1(六)20:34',
+      'Sat, 1 Jan 2000 20:34:00',
+    ])
+      expect(read(t)).toBe('2000-1-1 20:34');
   });
   test('words that count from today', () => {
     expect(read('明天下午3點')).toBe('2026-11-25 15:0');
@@ -258,7 +304,8 @@ describe('reading any way of writing a date', () => {
     expect(parseDateTimeText('2026-11-24T08:13:05.123Z')).toMatchObject({ kind: 'wall', offset: 0, wall: { s: 5 } });
   });
   test('lengths and other text are left alone', () => {
-    for (const t of ['30天', '3月', '15日', '5年', '2h 45m', '47m × 16', '東京', 'W12']) expect(parseDateTimeText(t, { year: 2026, today })).toBeNull();
+    for (const t of ['30天', '3月', '15日', '5年', '2h 45m', '47m × 16', '東京', 'W12'])
+      expect(parseDateTimeText(t, { year: 2026, today })).toBeNull();
     expect(read('2000年')).toBe('2000-1-1 0:0');
   });
   test('ranges and a moment plus a length are split', () => {
@@ -282,7 +329,10 @@ describe('reading any way of writing a date', () => {
     expect(parseReading('iso', '2026-11-24T16:13:05+08:00', ctx)).toEqual({ ms: Date.UTC(2026, 10, 24, 8, 13, 5) });
   });
   test('lengths: fractions, words, ISO and sums', () => {
-    const f = (t: string) => { const r = interpretSpanText(t); return r.kind === 'span' ? fmtSpan(r.span) : r.kind; };
+    const f = (t: string) => {
+      const r = interpretSpanText(t);
+      return r.kind === 'span' ? fmtSpan(r.span) : r.kind;
+    };
     expect(f('1.5天')).toBe('+1天 12小時');
     expect(f('2h30')).toBe('+2:30');
     expect(f('三天前')).toBe('−3天');
@@ -297,7 +347,8 @@ describe('the two ends are alike', () => {
   test('the end can follow the clock, and the span can count the start back from it', async () => {
     const st = await import('../src/state/store');
     const { S, setWall, setLive, setLink, startMs, endMs, swapEnds, now, isDerived, linkTarget } = st;
-    S.startTz = 'UTC'; S.endTz = 'UTC';
+    S.startTz = 'UTC';
+    S.endTz = 'UTC';
     setWall('start', { y: 2000, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
     setLive('end', true);
     expect(endMs.value).toBe(Math.floor(now.value / 1000) * 1000);
@@ -322,7 +373,8 @@ describe('the two ends are alike', () => {
   test('a live end and a backward span survive the address bar', async () => {
     const { S, setWall, setLive, setLink, isDerived } = await import('../src/state/store');
     const { buildQuery, applyUrl } = await import('../src/state/url');
-    S.startTz = 'UTC'; S.endTz = 'UTC';
+    S.startTz = 'UTC';
+    S.endTz = 'UTC';
     setWall('start', { y: 2000, mo: 1, d: 1, h: 0, mi: 0, s: 0 });
     S.link = null;
     setLive('end', true);
@@ -347,8 +399,12 @@ import { wordRule, setVocab, rulePrefs } from '../src/core/vocab';
 
 describe('the lunar calendar and the solar terms', () => {
   test('terms land within a minute of the published times', () => {
-    const near = (y: number, k: number, iso: string) => expect(Math.abs(termMoment(y, k) - Date.parse(iso))).toBeLessThan(90_000);
-    near(2024, 0, '2024-03-20T03:06Z'); near(2024, 6, '2024-06-20T20:51Z'); near(2025, 18, '2025-12-21T15:03Z'); near(2000, 0, '2000-03-20T07:35Z');
+    const near = (y: number, k: number, iso: string) =>
+      expect(Math.abs(termMoment(y, k) - Date.parse(iso))).toBeLessThan(90_000);
+    near(2024, 0, '2024-03-20T03:06Z');
+    near(2024, 6, '2024-06-20T20:51Z');
+    near(2025, 18, '2025-12-21T15:03Z');
+    near(2000, 0, '2000-03-20T07:35Z');
     expect(TERM_NAMES[18]).toBe('冬至');
   });
   test('lunar dates, leap months and new years', () => {
@@ -358,7 +414,13 @@ describe('the lunar calendar and the solar terms', () => {
     expect(lunarNewYear(2027)).toEqual({ y: 2027, mo: 2, d: 6 });
     expect(lunarNewYear(2030)).toEqual({ y: 2030, mo: 2, d: 3 });
     // the almanac's leap months where the browser's calendar disagrees
-    for (const [y, m] of [[1917, 2], [1922, 5], [1987, 6], [2033, 11]]) expect(lunarYear(y)!.months.find((x) => x.leap)!.m).toBe(m);
+    for (const [y, m] of [
+      [1917, 2],
+      [1922, 5],
+      [1987, 6],
+      [2033, 11],
+    ])
+      expect(lunarYear(y)!.months.find((x) => x.leap)!.m).toBe(m);
     expect(fromLunar(2026, 8, 15)).toBe(n(2026, 9, 25));
   });
 });
@@ -397,7 +459,15 @@ describe('rules', () => {
     expect(at('+30天')).toBe('2026-04-13 09:30');
   });
   test('stored as a short text and read back', () => {
-    for (const t of ['明晚', '下個月底', '冬至那一刻', '結束前最後一個週五', '下下個中秋', '第三個週三', '2000/1/1 20:34']) {
+    for (const t of [
+      '明晚',
+      '下個月底',
+      '冬至那一刻',
+      '結束前最後一個週五',
+      '下下個中秋',
+      '第三個週三',
+      '2000/1/1 20:34',
+    ]) {
       const r = parseRuleText(t)!.main.rule;
       expect(encodeRule(decodeRule(encodeRule(r))!)).toBe(encodeRule(r));
     }
@@ -405,12 +475,24 @@ describe('rules', () => {
     expect(ruleName(parseRuleText('明年春節')!.main.rule)).toBe('明年 春節');
   });
   test('a link is a rule', () => {
-    const r: Rule = { o: { t: 'other' }, steps: [{ t: 'move', n: 1, u: 'mo' }, { t: 'move', n: 7, u: 'd' }] };
+    const r: Rule = {
+      o: { t: 'other' },
+      steps: [
+        { t: 'move', n: 1, u: 'mo' },
+        { t: 'move', n: 7, u: 'd' },
+      ],
+    };
     expect(spanOfRule(r, 'end')).toMatchObject({ sign: 1, mo: 1, d: 7 });
     expect(spanOfRule({ o: { t: 'now' }, steps: [] }, 'end')).toBeNull();
   });
   test('your own words', () => {
-    setVocab([{ name: '發薪日', code: 'n/pnext!:d5' }, { name: '下班', code: 'n/t1800' }], []);
+    setVocab(
+      [
+        { name: '發薪日', code: 'n/pnext!:d5' },
+        { name: '下班', code: 'n/t1800' },
+      ],
+      [],
+    );
     expect(at('下個月發薪日')).toBe('2026-12-05 00:00');
     expect(at('明天下班')).toBe('2026-11-25 18:00');
     expect(at('發薪日')).toBe('2026-12-05 00:00');

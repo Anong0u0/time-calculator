@@ -2,8 +2,30 @@
    and the undo history. The store is one module-wide state, so every test starts from reset(). */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import {
-  S, now, history, DEFAULT_APP_PREFS, startMs, endMs, linkErr, gapSec, isLinked, isFollowing, isDerived, commit, undo, redo,
-  breakCoalesce, setWall, setLive, setLink, freezeLink, clearEnd, swapEnds, applyRule, setFollow, setStartTz,
+  S,
+  now,
+  history,
+  DEFAULT_APP_PREFS,
+  startMs,
+  endMs,
+  linkErr,
+  gapSec,
+  isLinked,
+  isFollowing,
+  isDerived,
+  commit,
+  undo,
+  redo,
+  breakCoalesce,
+  setWall,
+  setLive,
+  setLink,
+  freezeLink,
+  clearEnd,
+  swapEnds,
+  applyRule,
+  setFollow,
+  setStartTz,
 } from '../src/state/store';
 import type { Wall, Span } from '../src/core/time';
 import type { Rule } from '../src/core/rule';
@@ -19,8 +41,17 @@ const startOfEndMonth: Rule = { o: { t: 'end' }, steps: [{ t: 'align', p: 'mo', 
 function reset() {
   now.value = NOW;
   Object.assign(S, {
-    startTz: 'UTC', endTz: 'UTC', start: wall(2026, 1, 1), live: false, end: null, endLive: false, endSample: false,
-    link: null, linkTo: 'end', rules: { start: null, end: null }, prefs: { ...DEFAULT_APP_PREFS },
+    startTz: 'UTC',
+    endTz: 'UTC',
+    start: wall(2026, 1, 1),
+    live: false,
+    end: null,
+    endLive: false,
+    endSample: false,
+    link: null,
+    linkTo: 'end',
+    rules: { start: null, end: null },
+    prefs: { ...DEFAULT_APP_PREFS },
   });
   history.undo.length = 0;
   history.redo.length = 0;
@@ -130,7 +161,8 @@ describe('how the ends are worked out', () => {
   test('changing the start zone keeps the instant, and a shared end zone follows', () => {
     setWall('start', wall(2026, 1, 1, 12));
     setWall('end', wall(2026, 1, 2, 12));
-    const s0 = startMs.value, e0 = endMs.value;
+    const s0 = startMs.value,
+      e0 = endMs.value;
     setStartTz('Asia/Tokyo');
     expect(S.endTz).toBe('Asia/Tokyo');
     expect(S.start.h).toBe(21);
@@ -152,7 +184,9 @@ describe('undo history', () => {
 
   test('refused and empty changes leave no step', () => {
     expect(commit(() => false)).toBe(false);
-    commit(() => { S.start = wall(2026, 1, 1); });
+    commit(() => {
+      S.start = wall(2026, 1, 1);
+    });
     expect(history.undo.length).toBe(0);
   });
 

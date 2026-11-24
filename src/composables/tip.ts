@@ -38,7 +38,10 @@ export function hideTip() {
 }
 /** A tooltip for something that is not an element of its own, such as a spot on a strip. */
 export function tipAt(text: string | null, r?: { left: number; right: number; top: number; bottom: number }) {
-  if (!text || !r) { if (!cur) box?.classList.remove('show'); return; }
+  if (!text || !r) {
+    if (!cur) box?.classList.remove('show');
+    return;
+  }
   cur = null;
   placeAt(text, r);
 }
@@ -58,12 +61,28 @@ export const tip: Directive<TipEl, string | null | undefined> = {
       clearTimeout(timer);
       timer = setTimeout(() => show(el), cur ? 60 : 380);
     };
-    const leave = () => { clearTimeout(timer); if (cur === el) hideTip(); };
-    const focus = () => { try { if (el.matches(':focus-visible')) show(el); } catch { /* old browsers */ } };
+    const leave = () => {
+      clearTimeout(timer);
+      if (cur === el) hideTip();
+    };
+    const focus = () => {
+      try {
+        if (el.matches(':focus-visible')) show(el);
+      } catch {
+        /* old browsers */
+      }
+    };
     const down = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') { leave(); return; }
+      if (e.pointerType === 'mouse') {
+        leave();
+        return;
+      }
       clearTimeout(touchTimer);
-      touchTimer = setTimeout(() => { show(el); clearTimeout(hideTimer); hideTimer = setTimeout(hideTip, 2600); }, 520);
+      touchTimer = setTimeout(() => {
+        show(el);
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(hideTip, 2600);
+      }, 520);
     };
     const up = () => clearTimeout(touchTimer);
     el.addEventListener('pointerenter', enter);
@@ -87,8 +106,12 @@ export const tip: Directive<TipEl, string | null | undefined> = {
     const v = binding.value || '';
     if (v === el._tip) return;
     el._tip = v;
-    if (v) el.setAttribute('aria-description', v); else el.removeAttribute('aria-description');
-    if (cur === el) { if (v) show(el); else hideTip(); }
+    if (v) el.setAttribute('aria-description', v);
+    else el.removeAttribute('aria-description');
+    if (cur === el) {
+      if (v) show(el);
+      else hideTip();
+    }
   },
   beforeUnmount(el) {
     el._tipOff?.();

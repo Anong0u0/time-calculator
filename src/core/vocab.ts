@@ -8,8 +8,21 @@ import { type Rule, type RulePrefs, DEFAULT_PREFS, decodeRule } from './rule';
 import { TERM_NAMES } from './terms';
 
 export type WordKind = 'part' | 'period' | 'holiday' | 'lunar' | 'term' | 'mine';
-export interface WordDef { name: string; code: string; kind: WordKind; alias?: string[]; note?: string }
-export const KIND_NAME: Record<WordKind, string> = { part: '一天中的時段', period: '期間的位置', holiday: '節日', lunar: '農曆節日', term: '節氣', mine: '我的詞' };
+export interface WordDef {
+  name: string;
+  code: string;
+  kind: WordKind;
+  alias?: string[];
+  note?: string;
+}
+export const KIND_NAME: Record<WordKind, string> = {
+  part: '一天中的時段',
+  period: '期間的位置',
+  holiday: '節日',
+  lunar: '農曆節日',
+  term: '節氣',
+  mine: '我的詞',
+};
 
 const next = (c: string) => `n/pnext!:${c}`;
 export const BUILTIN: WordDef[] = [
@@ -61,11 +74,19 @@ export const BUILTIN: WordDef[] = [
   { name: '尾牙', code: next('lmo12,ld16'), kind: 'lunar' },
   { name: '除夕', code: next('lmo12,ld-1'), kind: 'lunar', alias: ['除夕夜'], note: '農曆年的最後一天' },
 
-  ...[19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((k): WordDef => ({ name: TERM_NAMES[k], code: next(`t${k}`), kind: 'term', ...(k === 1 ? { alias: ['清明節'] } : {}) })),
+  ...[19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((k): WordDef => ({
+    name: TERM_NAMES[k],
+    code: next(`t${k}`),
+    kind: 'term',
+    ...(k === 1 ? { alias: ['清明節'] } : {}),
+  })),
 ];
 
 /* ---------- the vocabulary in use: built-ins (less the removed and the redefined) and the user's own ---------- */
-export interface MyWord { name: string; code: string }
+export interface MyWord {
+  name: string;
+  code: string;
+}
 let mine: MyWord[] = [];
 let removed = new Set<string>();
 let prefs: RulePrefs = { ...DEFAULT_PREFS };
@@ -78,7 +99,10 @@ export function setVocab(words: MyWord[], off: string[]) {
   ruleCache.clear();
   namesCache = null;
 }
-export function setRulePrefs(p: RulePrefs) { prefs = { ...p }; version++; }
+export function setRulePrefs(p: RulePrefs) {
+  prefs = { ...p };
+  version++;
+}
 export const rulePrefs = () => prefs;
 export const vocabVersion = () => version;
 export const builtinOf = (name: string) => BUILTIN.find((b) => b.name === name || b.alias?.includes(name));
@@ -90,7 +114,9 @@ export function vocab(): (WordDef & { custom: boolean; builtin: boolean })[] {
     const m = mine.find((x) => x.name === b.name);
     out.push({ ...b, code: m ? m.code : b.code, custom: !!m, builtin: true });
   }
-  for (const m of mine) if (!BUILTIN.some((b) => b.name === m.name)) out.push({ name: m.name, code: m.code, kind: 'mine', custom: true, builtin: false });
+  for (const m of mine)
+    if (!BUILTIN.some((b) => b.name === m.name))
+      out.push({ name: m.name, code: m.code, kind: 'mine', custom: true, builtin: false });
   return out;
 }
 /** The rule a word (or one of its other names) stands for. */
@@ -106,13 +132,21 @@ export function wordRule(name: string): Rule | null {
   ruleCache.set(name, r);
   return r;
 }
-export const wordKind = (name: string): WordKind | null => (mine.some((x) => x.name === name) && !builtinOf(name) ? 'mine' : builtinOf(name) && !removed.has(builtinOf(name)!.name) ? builtinOf(name)!.kind : null);
+export const wordKind = (name: string): WordKind | null =>
+  mine.some((x) => x.name === name) && !builtinOf(name)
+    ? 'mine'
+    : builtinOf(name) && !removed.has(builtinOf(name)!.name)
+      ? builtinOf(name)!.kind
+      : null;
 let namesCache: string[] | null = null;
 /** All names text can use, longest first so 中秋節 is read before 中秋. */
 export function wordNames(): string[] {
   if (namesCache) return namesCache;
   const set = new Set<string>();
-  for (const w of vocab()) { set.add(w.name); for (const a of w.alias || []) set.add(a); }
+  for (const w of vocab()) {
+    set.add(w.name);
+    for (const a of w.alias || []) set.add(a);
+  }
   namesCache = [...set].sort((a, b) => b.length - a.length);
   return namesCache;
 }

@@ -14,5 +14,13 @@
     "types": ["bun"],
     "useDefineForClassFields": true
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "tests/**/*.ts", "e2e/**/*.ts", "vite.config.ts", "playwright.config.ts", "src/env.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "tests/**/*.ts",
+    "e2e/**/*.ts",
+    "vite.config.ts",
+    "playwright.config.ts",
+    "src/env.d.ts"
+  ]
 }

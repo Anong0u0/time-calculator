@@ -32,7 +32,18 @@ onMounted(answer);
 </template>
 
 <style scoped>
-.ph-ic { color: var(--ink-3); }
-.du-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: .55rem 1rem .9rem; overflow: hidden; }
-.du-body > .dc { flex: 1; }
+.ph-ic {
+  color: var(--ink-3);
+}
+.du-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.55rem 1rem 0.9rem;
+  overflow: hidden;
+}
+.du-body > .dc {
+  flex: 1;
+}
 </style>

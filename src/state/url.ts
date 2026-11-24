@@ -25,12 +25,33 @@ import { type Wall, type Span, validWall, partsInTz, pad, interpretSpanText, fmt
 import { LOCAL_TZ, sameZone } from '../core/zones';
 import { decodeRule, ruleName } from '../core/rule';
 import {
-  S, ZMAX, type Link, type End, type Panel, type CalMode, commit, applyRule, defaultZones, isLinked, OLD_PRESETS, PANELS, showOnly, shownList,
-  shown, viewSnap, restoreView, toast, undo,
+  S,
+  ZMAX,
+  type Link,
+  type End,
+  type Panel,
+  type CalMode,
+  commit,
+  applyRule,
+  defaultZones,
+  isLinked,
+  OLD_PRESETS,
+  PANELS,
+  showOnly,
+  shownList,
+  shown,
+  viewSnap,
+  restoreView,
+  toast,
+  undo,
 } from './store';
 
 const TIME_KEYS = ['s', 'e', 'd', 'ds', 'p', 'tz', 'etz', 'er', 'sr'] as const;
-interface UrlRule { code: string; name: string; follow: boolean }
+interface UrlRule {
+  code: string;
+  name: string;
+  follow: boolean;
+}
 
 /* ---------- values ---------- */
 /** 2026-11-24, 2026-11-24T16:13 or 2026-11-24T16:13:05: the shortest form that keeps the time. */
@@ -73,22 +94,40 @@ function linkParam(v: string): Link | null {
 /* ---------- reading a link ---------- */
 export interface UrlState {
   time: boolean;
-  tz?: string; etz?: string;
-  s?: Wall; e?: Wall; eLive?: boolean; d?: Link; ds?: Link; er?: UrlRule; sr?: UrlRule;
-  z?: string[]; calc?: string;
-  v?: Panel[]; cm?: CalMode;
+  tz?: string;
+  etz?: string;
+  s?: Wall;
+  e?: Wall;
+  eLive?: boolean;
+  d?: Link;
+  ds?: Link;
+  er?: UrlRule;
+  sr?: UrlRule;
+  z?: string[];
+  calc?: string;
+  v?: Panel[];
+  cm?: CalMode;
 }
 export function parseQuery(search: string): UrlState | null {
   const q = new URLSearchParams(search);
-  const get = (k: string) => { const v = q.get(k); return v == null ? undefined : v.trim(); };
+  const get = (k: string) => {
+    const v = q.get(k);
+    return v == null ? undefined : v.trim();
+  };
   const time = TIME_KEYS.some((k) => q.has(k));
   const out: UrlState = { time };
   if (time) {
-    const tz = get('tz'), etz = get('etz');
+    const tz = get('tz'),
+      etz = get('etz');
     out.tz = tz && isValidTz(tz) ? tz : undefined;
     out.etz = etz && isValidTz(etz) ? etz : undefined;
-    const sTz = out.tz || LOCAL_TZ, eTz = out.etz || sTz;
-    const s = get('s'), e = get('e'), d = get('d'), ds = get('ds'), p = get('p');
+    const sTz = out.tz || LOCAL_TZ,
+      eTz = out.etz || sTz;
+    const s = get('s'),
+      e = get('e'),
+      d = get('d'),
+      ds = get('ds'),
+      p = get('p');
     if (s && s !== 'now') out.s = parseWallParam(s, sTz) || undefined;
     if (d) out.d = linkParam(d) || undefined;
     else if (ds) out.ds = linkParam(ds) || undefined;
@@ -106,7 +145,12 @@ export function parseQuery(search: string): UrlState | null {
     if (!out.er && p && OLD_PRESETS[p]) out.er = { ...OLD_PRESETS[p], follow: false };
   }
   const z = get('z');
-  if (z != null) out.z = z.split(',').map((x) => x.trim()).filter((x) => x && isValidTz(x)).slice(0, ZMAX);
+  if (z != null)
+    out.z = z
+      .split(',')
+      .map((x) => x.trim())
+      .filter((x) => x && isValidTz(x))
+      .slice(0, ZMAX);
   const calc = get('calc');
   if (calc != null && calc.length <= 400) out.calc = calc;
   const v = get('v');
@@ -129,31 +173,53 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
   if (u.v) showOnly(u.v);
   if (u.cm) S.calMode = u.cm;
   const viewChanged = JSON.stringify(view) !== JSON.stringify(viewSnap());
-  commit(() => {
-    if (u.time) {
-      S.startTz = u.tz || LOCAL_TZ;
-      S.endTz = u.etz || S.startTz;
-      if (u.s) { S.start = u.s; S.live = false; } else S.live = true;
-      S.end = null; S.endLive = false; S.link = null; S.linkTo = 'end'; S.endSample = false; S.rules = { start: null, end: null };
-      const put = (which: End, r: UrlRule | undefined, held: boolean) => {
-        if (!r) return;
-        // held: the moment came with the link, the rule is its name; otherwise the rule is read now
-        if (held && !r.follow) S.rules[which] = { code: r.code, name: r.name, follow: false, from: null };
-        else applyRule(which, decodeRule(r.code)!, { name: r.name, follow: r.follow });
-      };
-      if (u.d) S.link = u.d;
-      else {
-        if (u.eLive) S.endLive = true;
-        else if (u.e) S.end = u.e;
-        if (u.ds && (S.endLive || S.end)) { S.link = u.ds; S.linkTo = 'start'; S.live = false; }
+  commit(
+    () => {
+      if (u.time) {
+        S.startTz = u.tz || LOCAL_TZ;
+        S.endTz = u.etz || S.startTz;
+        if (u.s) {
+          S.start = u.s;
+          S.live = false;
+        } else S.live = true;
+        S.end = null;
+        S.endLive = false;
+        S.link = null;
+        S.linkTo = 'end';
+        S.endSample = false;
+        S.rules = { start: null, end: null };
+        const put = (which: End, r: UrlRule | undefined, held: boolean) => {
+          if (!r) return;
+          // held: the moment came with the link, the rule is its name; otherwise the rule is read now
+          if (held && !r.follow) S.rules[which] = { code: r.code, name: r.name, follow: false, from: null };
+          else applyRule(which, decodeRule(r.code)!, { name: r.name, follow: r.follow });
+        };
+        if (u.d) S.link = u.d;
+        else {
+          if (u.eLive) S.endLive = true;
+          else if (u.e) S.end = u.e;
+          if (u.ds && (S.endLive || S.end)) {
+            S.link = u.ds;
+            S.linkTo = 'start';
+            S.live = false;
+          }
+        }
+        if (!u.d) put('end', u.er, !!u.e);
+        put('start', u.sr, !!u.s);
       }
-      if (!u.d) put('end', u.er, !!u.e);
-      put('start', u.sr, !!u.s);
-    }
-    if (u.z) S.zones = u.z;
-    if (u.calc != null) { S.dur = u.calc; S.durSample = false; }
-  }, { label: '套用連結', say: hadSaved && !viewChanged ? '已套用連結裡的時間' : undefined });
-  if (hadSaved && viewChanged) toast(u.time ? '已套用連結裡的時間與版面' : '已套用連結裡的版面', () => { if (u.time) undo(); restoreView(view); });
+      if (u.z) S.zones = u.z;
+      if (u.calc != null) {
+        S.dur = u.calc;
+        S.durSample = false;
+      }
+    },
+    { label: '套用連結', say: hadSaved && !viewChanged ? '已套用連結裡的時間' : undefined },
+  );
+  if (hadSaved && viewChanged)
+    toast(u.time ? '已套用連結裡的時間與版面' : '已套用連結裡的版面', () => {
+      if (u.time) undo();
+      restoreView(view);
+    });
   return u;
 }
 
@@ -161,7 +227,8 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
 /** The query for the state now; empty for a first visit's untouched sample. */
 export function buildQuery(): string {
   const out: [string, string][] = [];
-  const untouched = S.live && S.endSample && !S.link && !S.endLive && S.startTz === LOCAL_TZ && sameZone(S.endTz, S.startTz);
+  const untouched =
+    S.live && S.endSample && !S.link && !S.endLive && S.startTz === LOCAL_TZ && sameZone(S.endTz, S.startTz);
   if (!untouched) {
     const rule = (which: End, k: string, nk: string) => {
       const r = S.rules[which];
@@ -204,14 +271,39 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 /** Keep the address bar in step with the state once a value changes (replacing the entry: undo is the way back,
     not the back button). Opening the page writes nothing: a plain address stays plain, a link stays as it was typed. */
 export function startUrlSync() {
-  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.rules, S.link?.expr, S.linkTo, S.zones, S.dur, S.durSample, S.hidden, S.calMode, S.map], () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      const q = buildQuery();
-      const next = location.pathname + (q ? '?' + q : '') + location.hash;
-      if (next !== location.pathname + location.search + location.hash) {
-        try { history.replaceState(history.state, '', next); } catch { /* some sandboxes refuse; the app still works */ }
-      }
-    }, 250);
-  }, { deep: true });
+  return watch(
+    () => [
+      S.startTz,
+      S.endTz,
+      S.live,
+      S.live ? null : S.start,
+      S.end,
+      S.endLive,
+      S.endSample,
+      S.rules,
+      S.link?.expr,
+      S.linkTo,
+      S.zones,
+      S.dur,
+      S.durSample,
+      S.hidden,
+      S.calMode,
+      S.map,
+    ],
+    () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const q = buildQuery();
+        const next = location.pathname + (q ? '?' + q : '') + location.hash;
+        if (next !== location.pathname + location.search + location.hash) {
+          try {
+            history.replaceState(history.state, '', next);
+          } catch {
+            /* some sandboxes refuse; the app still works */
+          }
+        }
+      }, 250);
+    },
+    { deep: true },
+  );
 }
