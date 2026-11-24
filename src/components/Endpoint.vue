@@ -10,7 +10,7 @@ import CopyBtn from './CopyBtn.vue';
 import ChipRow from './ChipRow.vue';
 import {
   S, type End, now, wallOf, msOf, tzOf, hasEnd, startNote, endNote, commit, setLive, setTz, clearEnd, freezeLink, linkFromMeasured,
-  pulse, bump, isLive, isDerived, isLinked, linkTarget, linkSentence, followText, other, setFollow,
+  pulse, bump, isLive, isDerived, isLinked, linkTarget, linkSentence, followText, other, setFollow, shown,
 } from '../state/store';
 import { offsetAt, fmtOffset, fmtDT, fmtDate, fmtTime, isoOffset, clamp } from '../core/time';
 import { zoneName } from '../core/zones';
@@ -19,7 +19,8 @@ import { nfMax } from '../core/format';
 import { useSize, remPx } from '../composables/size';
 import { textToEnd } from '../state/command';
 
-const props = defineProps<{ which: End; compact?: boolean }>();
+/** big: the equation has the screen's height to itself, so the date and time grow to fill it. */
+const props = defineProps<{ which: End; compact?: boolean; big?: boolean }>();
 const isStart = computed(() => props.which === 'start');
 const SUBJ = computed(() => (isStart.value ? '開始' : '結束'));
 const OTHER = computed(() => (isStart.value ? '結束' : '開始'));
@@ -75,12 +76,14 @@ const ruleTip = computed(() => {
 });
 
 const root = ref<HTMLElement | null>(null);
-const { w: rootW } = useSize(root);
-/** As large as the panel allows: two lines (date, time) on big screens, one line when compact. */
+const { w: rootW, h: rootH } = useSize(root);
+/** As large as the panel allows: two lines (date, time) on big screens, one line when compact.
+    With the whole height to itself, as large as the width and the height both allow. */
 const sdtSize = computed(() => {
   const w = rootW.value, r = remPx.value;
   if (!w) return undefined;
-  const px = props.compact ? Math.min(1.6 * r, Math.max(1.1 * r, w / 13.9)) : Math.min(2.25 * r, Math.max(1.2 * r, w / 8.1));
+  let px = props.compact ? Math.min(1.6 * r, Math.max(1.1 * r, w / 13.9)) : Math.min(2.25 * r, Math.max(1.2 * r, w / 8.1));
+  if (props.big && !props.compact && rootH.value) px = Math.max(px, Math.min(w / 8.1, (rootH.value - 10 * r) / 2.4));
   return `${px.toFixed(1)}px`;
 });
 const flashing = ref(false);
@@ -110,7 +113,7 @@ void clamp; void nfMax; void now; void derived; void isDerived; void msOf;
 </script>
 
 <template>
-  <section ref="root" class="panel ep" :class="[which, { compact, flash: flashing, active: S.active === which, none: !has, dropping }]" :aria-label="label" :data-drop-end="which"
+  <section ref="root" class="panel ep" :class="[which, { compact, big, flash: flashing, active: S.active === which, none: !has, dropping }]" :aria-label="label" :data-drop-end="which"
     @focusin="S.active = which" @pointerdown="S.active = which" @animationend="flashing = false"
     @dragover="dragOver" @dragleave="dropping = false" @drop="drop">
     <header class="ep-head">
@@ -131,7 +134,7 @@ void clamp; void nfMax; void now; void derived; void isDerived; void msOf;
       </button>
       <span v-if="compact && noteText" class="tag warn" v-tip="noteText">夏令</span>
       <span class="ep-tools">
-        <button v-if="compact" ref="preBtn" type="button" class="icon-btn sm" :aria-expanded="preOpen" v-tip="'快捷'" aria-label="快捷" @click="preOpen = !preOpen"><Icon name="bolt" /></button>
+        <button v-if="compact && shown('chips')" ref="preBtn" type="button" class="icon-btn sm" :aria-expanded="preOpen" v-tip="'快捷'" aria-label="快捷" @click="preOpen = !preOpen"><Icon name="bolt" /></button>
         <CopyBtn v-if="has && iso" class="ep-copy" :text="iso" :k="`ep-${which}`" :label="label" :tip="`複製 ${iso}`"><span class="sr-only">複製</span></CopyBtn>
         <button v-if="!isStart && hasEnd" type="button" class="icon-btn sm" v-tip="'清除結束'" aria-label="清除結束" @click="clear"><Icon name="x" /></button>
       </span>
@@ -148,12 +151,12 @@ void clamp; void nfMax; void now; void derived; void isDerived; void msOf;
       <span v-if="noteText" class="tag warn" v-tip="noteText">夏令時間</span>
     </div>
 
-    <ChipRow v-if="!compact" class="ep-pre" :row="which" :fill="!isStart" :aria-label="isStart ? '開始的快捷' : '結束的快捷'" />
+    <ChipRow v-if="!compact && shown('chips')" class="ep-pre" :row="which" :fill="!isStart" :aria-label="isStart ? '開始的快捷' : '結束的快捷'" />
 
     <TzPicker :open="tzOpen" :anchor="tzBtn" :title="isStart ? '開始的時區' : '結束的時區'" :current="tz" @close="tzOpen = false" @pick="pickTz" />
     <Popover v-if="compact" :open="preOpen" :anchor="preBtn" :label="isStart ? '開始的快捷' : '結束的快捷'" width="20rem" align="end" @close="preOpen = false">
       <div class="pre-pop" @click="($event.target as HTMLElement).closest('[data-ci]') && (preOpen = false)">
-        <ChipRow :row="which" size="lg" :fill="!isStart" />
+        <ChipRow :row="which" size="lg" wrap :fill="!isStart" />
       </div>
     </Popover>
   </section>
@@ -218,6 +221,10 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
 .rel.hint { white-space: normal; line-height: 1.35; font-size: max(var(--floor), .84rem); }
 .ep-pre { margin-top: auto; padding-top: .15rem; }
 .pre-pop { padding: .8rem; }
+/* the whole height: the time and its zone sit together in the middle, the shortcuts stay at the bottom */
+.ep.big .ep-time { margin-top: auto; }
+.ep.big .ep-meta { margin-bottom: auto; }
+.ep.big .ep-pre { margin-top: 0; }
 .ep.none .ep-time { opacity: .9; }
 
 /* compact: phones and short screens */

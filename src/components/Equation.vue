@@ -10,12 +10,48 @@
 import Endpoint from './Endpoint.vue';
 import SpanCenter from './SpanCenter.vue';
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { S, now, hasEnd, railProgress, commit, freezeLink, linkFromMeasured, wallOf, linkSentence, followText, linkTarget, startMs, endMs, setInstant, type End, other, bump, tzOf, isLinked } from '../state/store';
+import { S, now, hasEnd, railProgress, commit, freezeLink, linkFromMeasured, wallOf, linkSentence, followText, linkTarget, startMs, endMs, setInstant, type End, other, bump, tzOf, isLinked, shown } from '../state/store';
 import { fmtDT, addDuration, partsInTz, WD, wdOf, pad, type Span } from '../core/time';
 import { editSpan } from '../state/ui';
 import { remPx, fontsTick } from '../composables/size';
-/** autoTight: the band sits in a cell of fixed height (short screens). It shows the quick chips only when they fit. */
-const props = defineProps<{ compact?: boolean; stack?: boolean; autoTight?: boolean }>();
+/** autoTight: the band sits in a cell of fixed height (short screens). It shows the quick chips only when they fit.
+    big: nothing else below it, so it takes the whole height and its readings grow to fill it. */
+const props = defineProps<{ compact?: boolean; stack?: boolean; autoTight?: boolean; big?: boolean }>();
+
+/* ---------- the pieces shown: start, span and end can each be put away, and so can the rail ----------
+   The grid is built from what is left; a joint (+ or =) stands only between the span and an end. */
+type Slot = 's' | 'j1' | 'm' | 'j2' | 'e';
+const parts = computed(() => {
+  const s = shown('start'), m = shown('span'), e = shown('end'), rail = shown('rail');
+  const sizes: string[] = [];
+  const at: Partial<Record<Slot, number>> = {};
+  const put = (k: Slot, size: string) => { sizes.push(size); at[k] = sizes.length; };
+  if (props.stack) {
+    if (s) put('s', 'auto');
+    if (s && m) put('j1', '.5rem');
+    if (m) put('m', props.big ? 'minmax(0, 1fr)' : 'auto');
+    if (m && e) put('j2', '.5rem');
+    if (e) put('e', 'auto');
+    return { s, m, e, rail, at, style: { gridTemplateRows: sizes.join(' ') } };
+  }
+  if (s) put('s', 'minmax(0, 1fr)');
+  if (s && (m || e)) put('j1', '2.3rem');
+  if (m) put('m', 'minmax(0, 1.38fr)');
+  if (m && e) put('j2', '2.3rem');
+  if (e) put('e', 'minmax(0, 1fr)');
+  return { s, m, e, rail, at, style: { gridTemplateColumns: sizes.join(' '), gridTemplateRows: rail ? 'minmax(0, 1fr) 2rem' : 'minmax(0, 1fr)' } };
+});
+/** Where a piece goes: its column in a row (the joints on the rail's line), its row when stacked. */
+function place(k: Slot, onRail = false) {
+  const i = parts.value.at[k];
+  if (props.stack) return { gridRow: String(i) };
+  return { gridRow: onRail && parts.value.rail ? '2' : '1', gridColumn: String(i) };
+}
+const showOp1 = computed(() => parts.value.s && parts.value.m);
+const showOp2 = computed(() => parts.value.m && parts.value.e);
+/** The ruler runs under the span; with the span put away, along the whole rail. Next to an edge it leaves room for the rail's caption. */
+const rulerStyle = computed(() => ({ gridRow: '2', gridColumn: parts.value.m ? String(parts.value.at.m) : '1 / -1' }));
+const rulerEdge = computed(() => ({ 'edge-l': !parts.value.m || !parts.value.s, 'edge-r': !parts.value.m || !parts.value.e }));
 
 const root = ref<HTMLElement | null>(null);
 const tight = ref(!!props.autoTight);
@@ -173,7 +209,7 @@ void isLinked;
 const v = reactive({ x: 0, top: 0, h: 0, a: 0, b: 0, ok: false });
 function placeRail() {
   const el = root.value;
-  if (!el || !props.stack) { v.ok = false; return; }
+  if (!el || !props.stack || !parts.value.rail) { v.ok = false; return; }
   const q = (s: string) => el.querySelector(s)?.getBoundingClientRect();
   const r0 = el.getBoundingClientRect(), ra = q('.eq-s .ep-head .node'), rb = q('.eq-e .ep-head .node'), p1 = q('.op1'), p2 = q('.op2');
   if (!ra || !rb || !p1 || !p2) { v.ok = false; return; }
@@ -187,34 +223,41 @@ function placeRail() {
 const relayout = () => requestAnimationFrame(() => { measure(); placeRail(); });
 
 let ro: ResizeObserver | null = null;
+function observe() {
+  if (!ro || !root.value) return;
+  ro.disconnect();
+  ro.observe(root.value);
+  [...root.value.children].forEach((c) => ro!.observe(c));
+}
 onMounted(() => {
   ro = new ResizeObserver(relayout);
-  if (root.value) { ro.observe(root.value); [...root.value.children].forEach((c) => ro!.observe(c)); }
+  observe();
   measure();
   placeRail();
 });
+watch(() => [parts.value.s, parts.value.m, parts.value.e, parts.value.rail, props.big], () => nextTick(() => { observe(); relayout(); }));
 onBeforeUnmount(() => ro?.disconnect());
 watch(() => props.autoTight, (val) => { tight.value = !!val; requestAnimationFrame(measure); });
 watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
 </script>
 
 <template>
-  <div ref="root" class="eq" :class="stack ? 'stack' : 'row'" :style="v.ok ? { '--rail-x': v.x + 'px' } : undefined">
-    <Endpoint which="start" class="eq-s" :compact="compact" />
-    <SpanCenter class="eq-m" :compact="compact" :tight="tight" />
-    <Endpoint which="end" class="eq-e" :compact="compact" />
+  <div ref="root" class="eq" :class="[stack ? 'stack' : 'row', { big }]" :style="{ ...parts.style, ...(v.ok ? { '--rail-x': v.x + 'px' } : {}) }">
+    <Endpoint v-if="parts.s" which="start" class="eq-s" :style="place('s')" :compact="compact" :big="big" />
+    <SpanCenter v-if="parts.m" class="eq-m" :style="place('m')" :compact="compact" :tight="tight" :big="big" />
+    <Endpoint v-if="parts.e" which="end" class="eq-e" :style="place('e')" :compact="compact" :big="big" />
 
     <template v-if="!stack">
-      <span class="div div1" aria-hidden="true" />
-      <span class="div div2" aria-hidden="true" />
-      <div class="track">
+      <span v-if="parts.at.j1" class="div div1" :style="place('j1')" aria-hidden="true" />
+      <span v-if="parts.at.j2" class="div div2" :style="place('j2')" aria-hidden="true" />
+      <div v-if="parts.rail" class="track">
         <button type="button" class="hnd s" :class="{ on: slide?.grip === 'start' }" aria-label="移動開始：拖曳、滾輪或左右鍵" v-tip="gripTip('start')"
           @pointerdown="gripDown('start', $event)" @pointermove="gripMove" @pointerup="gripUp" @pointercancel="gripUp" @wheel="gripWheel('start', $event)" @keydown="gripKey('start', $event)"><i class="node" /></button>
         <span class="cap s" aria-hidden="true">開始</span><span class="cap e" aria-hidden="true">結束</span>
         <button type="button" class="hnd e" :class="{ on: slide?.grip === 'end' }" aria-label="移動結束：拖曳、滾輪或左右鍵" v-tip="hasEnd ? gripTip('end') : '從這裡拖出去就有結束'"
           @pointerdown="gripDown('end', $event)" @pointermove="gripMove" @pointerup="gripUp" @pointercancel="gripUp" @wheel="gripWheel('end', $event)" @keydown="gripKey('end', $event)"><i class="node end" :class="{ off: !hasEnd }" /></button>
       </div>
-      <div ref="ruler" class="ruler" :class="{ live: hasEnd, on: slide?.grip === 'both' }" aria-hidden="true"
+      <div v-if="parts.rail" ref="ruler" class="ruler" :class="{ live: hasEnd, on: slide?.grip === 'both', ...rulerEdge }" :style="rulerStyle" aria-hidden="true"
         @pointerdown="hasEnd && gripDown('both', $event)" @pointermove="gripMove" @pointerup="gripUp" @pointercancel="gripUp" @pointerleave="!slide && (readout = null)" @wheel="gripWheel('both', $event)">
         <svg class="ticks" viewBox="0 0 600 10" preserveAspectRatio="none">
           <line v-for="i in 61" :key="i" :x1="(i - 1) * 10" :x2="(i - 1) * 10" :y1="(i - 1) % 5 ? 4.5 : 0" y2="10" :class="{ five: (i - 1) % 5 === 0, past: i - 1 <= sec }" />
@@ -229,8 +272,8 @@ watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
       <span v-if="rail.now != null" class="vhand" :style="{ top: v.a + (v.b - v.a) * rail.now + 'px' }" />
     </div>
 
-    <button type="button" class="op op1" v-tip="plusTip" aria-label="開始加上間隔：輸入間隔" @click="plus">+</button>
-    <button type="button" class="op op2" :class="{ linked: !!S.link, lean: !!eqLean, [`lean-${eqLean}`]: !!eqLean }" :disabled="!hasEnd" :aria-pressed="!!S.link" v-tip="eqTip"
+    <button v-if="showOp1" type="button" class="op op1" :style="place('j1', true)" v-tip="plusTip" aria-label="開始加上間隔：輸入間隔" @click="plus">+</button>
+    <button v-if="showOp2" type="button" class="op op2" :style="place('j2', true)" :class="{ linked: !!S.link, lean: !!eqLean, [`lean-${eqLean}`]: !!eqLean }" :disabled="!hasEnd" :aria-pressed="!!S.link" v-tip="eqTip"
       :aria-label="S.link ? `連動：${linkSentence()}，點一下改成固定` : '兩端固定，點一下改成連動'" @click="equals"
       @pointerdown="eqDown" @pointermove="eqMove" @pointerup="eqUp" @pointercancel="eqUp">=</button>
     <span v-if="eqLean" class="eq-lean" :class="eqLean" aria-hidden="true">{{ eqLean === 'start' ? '← 算開始：開始 = 結束 − 間隔' : '算結束：結束 = 開始 + 間隔 →' }}</span>
@@ -241,13 +284,8 @@ watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
 <style scoped>
 /* no plate: the band is printed on the face like everything else; the rail is its horizon */
 .eq { display: grid; min-width: 0; min-height: 0; position: relative; }
-.eq.row { grid-template-columns: minmax(0, 1fr) 2.3rem minmax(0, 1.38fr) 2.3rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 2rem; padding-bottom: .3rem; }
-.row .eq-s { grid-area: 1 / 1; }
-.row .eq-m { grid-area: 1 / 3; }
-.row .eq-e { grid-area: 1 / 5; }
-.div { grid-row: 1; align-self: stretch; background: linear-gradient(to bottom, transparent 14%, var(--hair) 32%, var(--hair) 72%, transparent 92%) center / 1px 100% no-repeat; }
-.div1 { grid-column: 2; }
-.div2 { grid-column: 4; }
+.eq.row { padding-bottom: .3rem; }
+.div { align-self: stretch; background: linear-gradient(to bottom, transparent 14%, var(--hair) 32%, var(--hair) 72%, transparent 92%) center / 1px 100% no-repeat; }
 
 /* the rail along the bottom of the band */
 .track { grid-area: 2 / 1 / 3 / -1; position: relative; margin: 0 1.1rem; }
@@ -271,7 +309,9 @@ watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
 .eq-lean { left: 50%; }
 .op.lean-start { transform: translateX(-.35rem) scale(1.08); }
 .op.lean-end { transform: translateX(.35rem) scale(1.08); }
-.ruler { grid-area: 2 / 3; position: relative; margin: 0 .35rem; }
+.ruler { position: relative; margin: 0 .35rem; }
+.ruler.edge-l { margin-left: 5rem; }
+.ruler.edge-r { margin-right: 5rem; }
 .ticks { position: absolute; left: 0; right: 0; bottom: 50%; width: 100%; height: .6rem; overflow: visible; }
 .ticks line { stroke: var(--hair-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .ticks line.five { stroke: var(--ink-4); opacity: .6; }
@@ -293,16 +333,10 @@ watch([() => props.stack, fontsTick, hasEnd], () => nextTick(relayout));
 .op.linked { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .op.linked:hover { background: var(--accent-2); }
 .op:disabled { cursor: default; color: var(--ink-4); border-color: var(--hair-2); }
-.row .op1 { grid-area: 2 / 2; }
-.row .op2 { grid-area: 2 / 4; }
 
 /* stacked: rows, with the rail down the left lane and the joints on it */
-.eq.stack { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto .5rem auto .5rem auto; align-content: start; }
-.stack .eq-s { grid-row: 1; }
-.stack .op1 { grid-row: 2; }
-.stack .eq-m { grid-row: 3; }
-.stack .op2 { grid-row: 4; }
-.stack .eq-e { grid-row: 5; }
+.eq.stack { grid-template-columns: minmax(0, 1fr); align-content: start; }
+.eq.stack.big { align-content: stretch; }
 .stack .op { justify-self: start; width: 1.7rem; height: 1.7rem; font-size: .98rem; margin-left: calc(var(--rail-x, 1.1rem) - .85rem); }
 .vrail { position: absolute; z-index: 1; width: 0; pointer-events: none; }
 .vrail::before { content: ''; position: absolute; left: -.5px; top: 0; bottom: 0; width: 1px; background: var(--hair-2); }

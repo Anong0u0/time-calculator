@@ -13,7 +13,8 @@ const groups = computed(() => {
   void ruleTick.value;
   const g = new Map<WordKind, ReturnType<typeof vocab>>();
   for (const w of vocab()) { if (!g.has(w.kind)) g.set(w.kind, []); g.get(w.kind)!.push(w); }
-  return [...g.entries()];
+  // 農曆節日 and 節氣 follow the display setting (typing them still works)
+  return [...g.entries()].filter(([k]) => S.prefs.lunar || (k !== 'lunar' && k !== 'term'));
 });
 const removed = computed(() => S.wordsOff.filter((n) => builtinOf(n)));
 
@@ -82,7 +83,6 @@ const autoName = computed(() => ruleName(draft.value, S.prefs));
       <div class="vp-set"><span>期間裡沒有那一天<small>例如 2 月 31 號、小月的三十</small></span><div class="seg-ctl"><button type="button" :aria-pressed="S.prefs.missing === 'clamp'" @click="S.prefs.missing = 'clamp'">取最接近的一天</button><button type="button" :aria-pressed="S.prefs.missing === 'error'" @click="S.prefs.missing = 'error'">算是錯誤</button></div></div>
       <div class="vp-set"><span>挑到一天時</span><div class="seg-ctl"><button type="button" :aria-pressed="S.prefs.dayResets" @click="S.prefs.dayResets = true">從 0:00 開始</button><button type="button" :aria-pressed="!S.prefs.dayResets" @click="S.prefs.dayResets = false">保留原本的時刻</button></div></div>
       <div class="vp-set"><span>從現在算的規則<small>套用之後</small></span><div class="seg-ctl"><button type="button" :aria-pressed="!S.prefs.followNow" @click="S.prefs.followNow = false">固定在算出的時刻</button><button type="button" :aria-pressed="S.prefs.followNow" @click="S.prefs.followNow = true">一直跟著重新算</button></div></div>
-      <div class="vp-set"><span>月曆上的農曆與節氣</span><div class="seg-ctl"><button type="button" :aria-pressed="S.prefs.lunar" @click="S.prefs.lunar = true">顯示</button><button type="button" :aria-pressed="!S.prefs.lunar" @click="S.prefs.lunar = false">隱藏</button></div></div>
     </section>
 
     <section class="vp-sec">
@@ -94,6 +94,7 @@ const autoName = computed(() => ruleName(draft.value, S.prefs));
           <button v-for="w in list" :key="w.name" type="button" class="chip sm" :class="{ mod: w.custom && w.builtin }" :aria-pressed="edit?.name === w.name" v-tip="`${w.note ? w.note + '。' : ''}現在是 ${when(w.name)}${w.alias?.length ? `。也可以寫成：${w.alias.join('、')}` : ''}`" @click="open(w.name)">{{ w.name }}</button>
         </div>
       </div>
+      <p v-if="!S.prefs.lunar" class="vp-note">農曆節日與節氣已隱藏（在「顯示」打開「農曆與節氣」）。打字仍然認得它們。</p>
       <div v-if="removed.length" class="vp-g">
         <span class="vp-k">已移除</span>
         <div class="vp-words"><button v-for="n in removed" :key="n" type="button" class="chip sm off" v-tip="'點一下恢復'" @click="restore(n)"><Icon name="undo" />{{ n }}</button></div>

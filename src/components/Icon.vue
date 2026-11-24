@@ -36,6 +36,9 @@ const P: Record<string, string> = {
   edit: 'M4 20h4L18.6 9.4a2.1 2.1 0 0 0-3-3L5 17Z M13.6 7.4l3 3',
   sliders: 'M4 7h9 M17 7h3 M4 17h3 M11 17h9 M15 4.5v5 M9 14.5v5',
   map: 'M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6Z M9 4v14 M15 6v14',
+  panels: 'M4.5 4h15A1.5 1.5 0 0 1 21 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-13A1.5 1.5 0 0 1 4.5 4Z M3 9.5h18 M10 9.5V20',
+  full: 'M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5',
+  shrink: 'M9 4v5H4 M15 4v5h5 M9 20v-5H4 M15 20v-5h5',
 };
 defineProps<{ name: string }>();
 </script>

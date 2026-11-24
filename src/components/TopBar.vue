@@ -4,6 +4,7 @@ import Icon from './Icon.vue';
 import CommandBar from './CommandBar.vue';
 import Popover from './Popover.vue';
 import VocabPanel from './VocabPanel.vue';
+import PanelMenu from './PanelMenu.vue';
 import { S, history, undo, redo, now, startWall, DENSITY, type Theme } from '../state/store';
 import { shareUrl } from '../state/url';
 import { copiedKey, copyText } from '../composables/copy';
@@ -41,7 +42,10 @@ const help = ref(false);
 /* ---------- display settings ---------- */
 const setBtn = ref<HTMLElement | null>(null);
 const settings = ref(false);
-const setTab = ref<'show' | 'rules'>('show');
+const setTab = ref<'show' | 'panels' | 'rules'>('show');
+/* ---------- the panels menu: what is on the face ---------- */
+const panBtn = ref<HTMLElement | null>(null);
+const panels = ref(false);
 const THEMES: Theme[] = ['system', 'light', 'dark'];
 const dIdx = computed({
   get: () => Math.max(0, DENSITY.findIndex((d) => d.v === S.density)),
@@ -80,14 +84,18 @@ const hands = computed(() => {
       <button type="button" class="icon-btn" :disabled="!history.redo.length && !history.undo.length" v-tip="redoTip" aria-label="重做（右鍵看全部步驟）" :class="{ off: !history.redo.length }"
         @click="clickRedo" @contextmenu.prevent="openHist" @pointerdown="holdDown" @pointerup="holdUp" @pointercancel="holdUp" @pointerleave="holdUp"><Icon name="redo" /></button>
       <button ref="helpBtn" type="button" class="icon-btn" v-tip="'怎麼用'" aria-label="怎麼用" :aria-expanded="help" @click="help = !help"><span class="q">?</span></button>
+      <button v-if="!compact" ref="panBtn" type="button" class="icon-btn" v-tip="'面板：顯示或隱藏每一塊，或放到滿版（數字鍵、P、F）'" aria-label="面板" :aria-expanded="panels" @click="panels = !panels"><Icon name="panels" /></button>
       <button ref="setBtn" type="button" class="icon-btn" v-tip="setTip" aria-label="顯示設定" :aria-expanded="settings" @click="settings = !settings"><Icon name="sliders" /></button>
     </div>
-    <Popover :open="settings" :anchor="setBtn" label="設定" :width="setTab === 'rules' ? '34rem' : '21rem'" align="end" :tall="setTab === 'rules'" @close="settings = false">
+    <Popover :open="panels" :anchor="panBtn" label="面板" width="24rem" align="end" @close="panels = false"><PanelMenu /></Popover>
+    <Popover :open="settings" :anchor="setBtn" label="設定" :width="setTab === 'rules' ? '34rem' : setTab === 'panels' ? '24rem' : '21rem'" align="end" :tall="setTab === 'rules'" @close="settings = false">
       <div class="set-tabs seg-ctl" role="tablist">
         <button type="button" role="tab" :aria-selected="setTab === 'show'" :aria-pressed="setTab === 'show'" @click="setTab = 'show'">顯示</button>
+        <button type="button" role="tab" :aria-selected="setTab === 'panels'" :aria-pressed="setTab === 'panels'" @click="setTab = 'panels'">面板</button>
         <button type="button" role="tab" :aria-selected="setTab === 'rules'" :aria-pressed="setTab === 'rules'" @click="setTab = 'rules'">規則與詞彙</button>
       </div>
       <div v-if="setTab === 'rules'" class="sets"><VocabPanel /></div>
+      <PanelMenu v-else-if="setTab === 'panels'" />
       <div v-else class="sets">
         <div class="set">
           <span class="set-k">外觀</span>
@@ -102,6 +110,14 @@ const hands = computed(() => {
             <span class="set-v"><b>{{ dNow.name }}</b> {{ dNow.v }}%</span>
           </div>
           <p class="set-note">越緊湊，一個畫面放得越多。最小的字約 {{ floorPx.toFixed(1) }}px<template v-if="floorPx < 11">（比預設的 11px 小）</template>。</p>
+        </div>
+        <div class="set">
+          <span class="set-k">農曆與節氣</span>
+          <div class="seg-ctl" role="group" aria-label="農曆與節氣">
+            <button type="button" :aria-pressed="S.prefs.lunar" @click="S.prefs.lunar = true">顯示</button>
+            <button type="button" :aria-pressed="!S.prefs.lunar" @click="S.prefs.lunar = false">隱藏</button>
+          </div>
+          <p class="set-note">月曆每天下面的農曆、節氣與節日，讀法的農曆與節氣，以及積木和詞彙裡的農曆、節氣選項。隱藏後打字仍然讀得懂「中秋」「冬至」。</p>
         </div>
         <div class="set">
           <span class="set-k">世界地圖</span>
@@ -129,7 +145,7 @@ const hands = computed(() => {
         <ul>
           <li><span class="hk hk-dash">虛線底</span>的字可以直接改。數字欄可以打字、按 <span class="kbd">↑</span><span class="kbd">↓</span> 或滾輪。</li>
           <li><span class="hk"><Icon name="copy" /></span>旁邊有複製圖示的，點一下就複製；<span class="hk"><Icon name="edit" /></span>可以改寫。</li>
-          <li>月曆標題可以直接<b>打年份</b>跳過去；在月曆上捲動滾輪換月，在週條上換年；點週次選整週。</li>
+          <li>月曆標題可以直接<b>打年份</b>跳過去；在月曆上捲動滾輪換月，在週條上換年；點週次選整週。標題旁的「月／年」切換成<b>整年 12 個月</b>，點月份名稱回到那個月。</li>
           <li>網址會跟著開始、結束、時區更新，可以直接<b>加入書籤或分享</b>（右上 <span class="hk"><Icon name="link" /></span> 複製連結）。</li>
           <li>中間的間隔可以<b>左右拖曳</b>數字，或點一下輸入 <code>+30天</code>、<code>47m × 16</code>。</li>
           <li>時區條和月曆上的 <i class="node" /> <i class="node end" /> 可以拖曳，只移動那一端；點一下會移動比較近的那一端。手機上月曆滑動換月。</li>
@@ -138,6 +154,7 @@ const hands = computed(() => {
           <li>讀法、時區列可以<b>拖曳把手</b>排順序；讀法的每個值都可以點筆在原地改寫。</li>
           <li>所有快捷都能<b>自訂</b>：按 <span class="hk"><Icon name="plus" /></span>，用積木組合（從哪裡開始 → 往後幾天 → 對齊月底 → 挑週五 → 晚上 8 點），不用打字；右鍵或長按快捷可以修改，用滑鼠可以拖曳排序、拖到另一排、拖出去移除。</li>
           <li>詞可以自由組合：<code>明晚</code>、<code>本週三 3點</code>、<code>下個月底</code>、<code>明年中秋晚上8點</code>、<code>開始那個月的月底</code>、<code>冬至那一刻</code>；也能把規則<b>存成自己的詞</b>（<code>下班</code>、<code>發薪日</code>），在設定的「規則與詞彙」管理。</li>
+          <li>每一塊都能<b>隱藏</b>（右上 <span class="hk"><Icon name="panels" /></span>，或數字鍵 <span class="kbd">1</span>–<span class="kbd">9</span>、<span class="kbd">R</span>、<span class="kbd">M</span>）；只剩一塊時放到滿版。<span class="kbd">P</span> 換預設組合（滿版倒數、滿版月曆、滿版年曆…），<span class="kbd">0</span> 全部顯示，<span class="kbd">Y</span> 月曆／年曆，<span class="kbd">F</span> 全螢幕。</li>
           <li><span class="kbd">{{ mod }}K</span> 或 <span class="kbd">/</span> 輸入，<span class="kbd">{{ mod }}Z</span> 復原，<span class="kbd">{{ isMac ? '⇧⌘Z' : 'Ctrl Y' }}</span> 重做。</li>
         </ul>
       </div>

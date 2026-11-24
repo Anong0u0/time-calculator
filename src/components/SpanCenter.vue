@@ -10,7 +10,7 @@ import DurationCalc from './DurationCalc.vue';
 import ChipRow from './ChipRow.vue';
 import {
   S, now, startMs, endMs, hasEnd, calGap, gapSec, linkErr, commit, setLink, checkSpan, swapEnds, historyMark, rollback, toast, undo,
-  pulse, bump, wallOf, presetProgress, linkTarget, linkSentence, followText, negExpr, setWall, setInstant, tzOf, type Chip, chipRule,
+  pulse, bump, wallOf, presetProgress, linkTarget, linkSentence, followText, negExpr, setWall, setInstant, tzOf, type Chip, chipRule, shown,
 } from '../state/store';
 import { spanOfRule } from '../core/rule';
 import { parseDateTimeText } from '../core/parse';
@@ -19,9 +19,10 @@ import { type Span, type SpanInput, interpretSpanText, parseSpan, fmtSpan, pad, 
 import { spanTokens, nfMax, durWords } from '../core/format';
 import { ui, openDuration } from '../state/ui';
 import { fitText } from '../composables/fit';
-import { useSize, fontsTick } from '../composables/size';
+import { useSize, fontsTick, remPx } from '../composables/size';
 
-const props = defineProps<{ compact?: boolean; tight?: boolean }>();
+/** big: the equation has the screen to itself (a full-screen countdown): the hero grows to the room it has. */
+const props = defineProps<{ compact?: boolean; tight?: boolean; big?: boolean }>();
 const mode = computed(() => (S.link ? 'link' : hasEnd.value ? 'fixed' : 'empty'));
 const N = { start: '開始', end: '結束' } as const;
 /** The one end that is now, when exactly one is. */
@@ -54,9 +55,15 @@ const shape = computed(() => toks.value.map((t) => (t.t === 'num' ? `${t.k}${t.v
 /* ---------- fit the hero to its width ---------- */
 const box = ref<HTMLElement | null>(null);
 const line = ref<HTMLElement | null>(null);
-const { w: boxW } = useSize(box);
-const refit = () => nextTick(() => { fitText(line.value, 0.42); requestAnimationFrame(() => fitText(line.value, 0.42)); });
-watch([() => toks.value.map((t) => ('v' in t ? t.v : ':')).join(''), boxW, () => props.compact, fontsTick], refit);
+const { w: boxW, h: boxH } = useSize(box);
+/** In big mode the hero's size comes from its height; fitting to the width then takes it down where needed. */
+const heroFs = computed(() => {
+  if (!props.big || !boxH.value) return null;
+  const base = (props.compact ? 2.35 : 3.15) * remPx.value;
+  return Math.max(base, Math.min(boxH.value * 0.78, boxW.value * 0.32));
+});
+const refit = () => nextTick(() => { const m = props.big ? 0.05 : 0.42; fitText(line.value, m); requestAnimationFrame(() => fitText(line.value, m)); });
+watch([() => toks.value.map((t) => ('v' in t ? t.v : ':')).join(''), boxW, boxH, heroFs, () => props.compact, fontsTick], refit);
 onMounted(refit);
 
 /* ---------- typing ---------- */
@@ -364,7 +371,7 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 </script>
 
 <template>
-  <section class="panel sc" :class="[`m-${mode}`, { compact, flash: flashing, neg: (heroSpan?.sign ?? 1) < 0, dropping }]" aria-label="間隔" @animationend="flashing = false"
+  <section class="panel sc" :class="[`m-${mode}`, { compact, big, flash: flashing, neg: (heroSpan?.sign ?? 1) < 0, dropping }]" aria-label="間隔" @animationend="flashing = false"
     @dragover="dragOver" @dragleave="dropping = false" @drop="dropText">
     <header v-if="!compact" class="sc-head">
       <h2 v-tip="titleTip" tabindex="-1">{{ title }}</h2>
@@ -376,7 +383,7 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
     </header>
 
     <div class="hero-row">
-    <div ref="box" class="hero" :class="{ editing, scrubbing: !!hotK }">
+    <div ref="box" class="hero" :class="{ editing, scrubbing: !!hotK }" :style="heroFs ? { '--hero-fs': heroFs + 'px' } : undefined">
       <input v-if="editing" ref="input" v-model="text" class="hero-in mono" type="text" autocomplete="off" spellcheck="false" enterkeyhint="done"
         aria-label="間隔：例如 +30天、1年6個月、47m × 16" @input="onInput" @keydown="onKey" @blur="finish" />
       <div v-else ref="line" class="hero-line" role="button" tabindex="0" :aria-label="mode === 'empty' ? '輸入間隔' : `間隔 ${toks.map((t) => ('v' in t ? t.v : ':')).join('')}，點一下修改`"
@@ -404,7 +411,7 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
     </p>
     <p v-if="!editing && exprNote && S.link && exprNote.expr === S.link.expr" class="tape mono" v-tip="'剛才輸入的算式'">{{ exprNote.src }} <span>{{ exprNote.text }}</span></p>
 
-    <div v-if="!tight" class="sc-quick" aria-label="快速間隔" @pointerdown="editing && $event.preventDefault()">
+    <div v-if="!tight && shown('chips')" class="sc-quick" aria-label="快速間隔" @pointerdown="editing && $event.preventDefault()">
       <ChipRow row="span" :pick="pickQuick" @preview="(t) => (preview = t)" />
       <button v-if="bizShown" type="button" class="chip biz" :aria-pressed="!!S.link?.span.biz" v-tip="'只算週一到週五：僅扣週末，不含國定假日與補班'" @click="toggleBiz"><Icon name="brief" />工作日</button>
     </div>
@@ -438,7 +445,7 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 .hero { position: relative; flex: 1; min-width: 0; height: 4.1rem; display: flex; align-items: center; }
 .hero-line {
   display: block; width: 100%; white-space: nowrap; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
-  font-family: var(--f-mono); font-stretch: 75%; font-variant-numeric: tabular-nums; font-size: 3.15rem; font-weight: 500; letter-spacing: -.035em; line-height: 1.1;
+  font-family: var(--f-mono); font-stretch: 75%; font-variant-numeric: tabular-nums; font-size: var(--hero-fs, 3.15rem); font-weight: 500; letter-spacing: -.035em; line-height: 1.1;
   padding: .1rem .15rem; margin: 0 -.15rem; border-radius: .7rem;
   background-image: linear-gradient(to right, var(--accent-line) 45%, transparent 45%); background-size: .36rem 1px; background-repeat: repeat-x; background-position: 0 100%;
   transition: background-color .15s;
@@ -469,7 +476,9 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 .tape { font-size: max(var(--floor), .82rem); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -.2rem; }
 .tape span { color: var(--ink-2); }
 
-.sc-quick { display: flex; flex-wrap: wrap; gap: .35rem; }
+.sc-quick { display: flex; align-items: center; gap: .35rem; min-width: 0; }
+.sc-quick :deep(.cr) { flex: 1 1 0; }
+.sc-quick > .chip.biz { flex: none; }
 .sc-quick > .chip, .sc-quick :deep(.chip) { height: 1.95rem; padding: 0 .65rem; font-size: max(var(--floor), .84rem); font-family: var(--f-sans); }
 .sc-quick :deep(.chip.add) { padding: 0 .5rem; }
 .chip.biz .ic { width: 1em; height: 1em; }
@@ -477,11 +486,12 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 .sc.compact { padding: .6rem .8rem .7rem; gap: .35rem; border-radius: var(--r-md); }
 .st-k { font-family: var(--f-sans) !important; font-stretch: 100% !important; font-size: 1em !important; color: var(--accent) !important; margin-right: .45rem; cursor: help; }
 .compact .hero { height: 3rem; }
-.compact .hero-line { font-size: 2.35rem; }
+.compact .hero-line { font-size: var(--hero-fs, 2.35rem); }
+/* big: the hero takes the height the band has; the line under it grows a little with it */
+.sc.big .hero-row { flex: 1; min-height: 0; }
+.sc.big .hero { height: 100%; }
+.sc.big .status { font-size: clamp(.9rem, 1.35vw, 1.6rem); }
 .compact .hero-in { height: 2.8rem; font-size: 1.35rem; }
 .compact .status { font-size: .86rem; min-height: 1.2rem; }
-.compact .sc-quick { flex-wrap: nowrap; overflow: hidden; }
-.compact .sc-quick :deep(.cr) { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-.compact .sc-quick :deep(.cr)::-webkit-scrollbar { display: none; }
 .compact .sc-quick :deep(.chip) { height: 1.85rem; padding: 0 .55rem; font-size: var(--fs-s); flex: none; }
 </style>

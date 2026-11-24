@@ -17,7 +17,7 @@ import {
 import { setVocab, setRulePrefs, wordRule, type MyWord } from '../core/vocab';
 
 export type End = 'start' | 'end';
-export type Lens = 'zones' | 'cal' | 'read';
+export type Lens = 'zones' | 'cal' | 'read' | 'dur';
 export type Theme = 'system' | 'light' | 'dark';
 /** Display density in percent of the normal size; the smallest text follows it (never below 9px). */
 export const DENSITY: { v: number; name: string }[] = [
@@ -43,6 +43,38 @@ export const DEFAULT_CHIPS: Record<ChipRow, Chip[]> = {
   end: [{ code: 'n' }, { code: 'n/ad.end' }, { code: 'n/aw.end' }, { code: 'n/amo.end' }, { code: 'n/ay.end' }, { code: 'n/w%E6%98%A5%E7%AF%80', name: '春節' }],
   span: ['+1d', '+7d', '+30d', '+3mo', '+6mo', '+1y'].map((c) => ({ code: 'o/' + c })),
 };
+/** The most shortcuts one row keeps. */
+export const CHIP_MAX = 40;
+
+/* ---------- what is on the face: every part can be put away, like the boxes of a system monitor ---------- */
+export type Panel = 'top' | 'start' | 'span' | 'end' | 'rail' | 'chips' | 'zones' | 'map' | 'cal' | 'read' | 'dur';
+export interface PanelDef { k: Panel; name: string; key: string; tip: string; part?: boolean }
+/** In menu order; key is its keyboard toggle. part: a part of another panel (it is not a panel of its own). */
+export const PANELS: PanelDef[] = [
+  { k: 'start', name: '開始', key: '1', tip: '開始的時刻、時區與快捷' },
+  { k: 'span', name: '間隔', key: '2', tip: '中間的間隔或倒數' },
+  { k: 'end', name: '結束', key: '3', tip: '結束的時刻、時區與快捷' },
+  { k: 'zones', name: '時區', key: '4', tip: '各地時刻與 24 小時條' },
+  { k: 'cal', name: '月曆', key: '5', tip: '月曆或年曆' },
+  { k: 'read', name: '讀法', key: '6', tip: 'ISO、Unix、民國等各種寫法' },
+  { k: 'dur', name: '時長', key: '7', tip: '時長計算機（隱藏時從間隔的計算機按鈕打開）' },
+  { k: 'top', name: '頂列', key: '8', tip: '輸入框與右上的按鈕（隱藏時角落有一個小按鈕）', part: true },
+  { k: 'chips', name: '快捷', key: '9', tip: '開始、間隔、結束下面的快捷列', part: true },
+  { k: 'rail', name: '刻度軌', key: 'r', tip: '方程式下方的進度軌與拖曳把手', part: true },
+  { k: 'map', name: '世界地圖', key: 'm', tip: '時區裡的晝夜地圖（有空間才顯示）', part: true },
+];
+/** The panels that hold something by themselves; at least one of them stays. */
+export const MAIN_PANELS: Panel[] = ['start', 'span', 'end', 'zones', 'cal', 'read', 'dur'];
+export type CalMode = 'month' | 'year';
+export interface ViewPreset { k: string; name: string; show: Panel[]; cal?: CalMode; tip: string }
+export const VIEW_PRESETS: ViewPreset[] = [
+  { k: 'all', name: '全部', show: PANELS.map((p) => p.k), tip: '每個面板都顯示' },
+  { k: 'countdown', name: '滿版倒數', show: ['span', 'rail'], tip: '只留間隔：整個畫面就是倒數或已過的時間' },
+  { k: 'eq', name: '方程式', show: ['top', 'start', 'span', 'end', 'rail', 'chips'], tip: '只留開始 + 間隔 = 結束，放到最大' },
+  { k: 'month', name: '滿版月曆', show: ['cal'], cal: 'month', tip: '只留月曆' },
+  { k: 'year', name: '滿版年曆', show: ['cal'], cal: 'year', tip: '只留年曆：整年 12 個月' },
+  { k: 'zones', name: '時區看板', show: ['zones', 'map'], tip: '只留時區與世界地圖' },
+];
 
 export const ZMAX = 8;
 const STORE_KEY = 'time-calculator:v2';
@@ -74,6 +106,10 @@ export const S = reactive({
   readOrder: [] as string[],
   density: 100,
   map: true,
+  /** The panels put away (the world map is S.map). */
+  hidden: [] as Panel[],
+  /** The calendar shows a month, or the whole year. */
+  calMode: 'month' as CalMode,
   dur: DUR_SAMPLE,
   durSample: true,
   /** The shortcut rows, each a list of rules. */
@@ -280,6 +316,57 @@ export function redo() {
   restoreSnap(e.s);
   coalesceKey = '';
   toast(e.label ? `已重做：${e.label}` : '已重做');
+}
+
+/* ---------- panels: shown or put away (a display setting, so outside the undo history; the toast takes it back) ---------- */
+export const shown = (k: Panel) => (k === 'map' ? S.map : !S.hidden.includes(k));
+export interface ViewSnap { hidden: Panel[]; map: boolean; cal: CalMode }
+export const viewSnap = (): ViewSnap => ({ hidden: [...S.hidden], map: S.map, cal: S.calMode });
+export function restoreView(v: ViewSnap) { S.hidden = [...v.hidden]; S.map = v.map; S.calMode = v.cal; }
+const panelDef = (k: Panel) => PANELS.find((p) => p.k === k)!;
+/** Show or put away one panel. The last panel that holds something stays. */
+export function setShown(k: Panel, on: boolean): boolean {
+  if (shown(k) === on) return true;
+  if (!on && MAIN_PANELS.includes(k) && !MAIN_PANELS.some((p) => p !== k && shown(p))) { toast('至少要留一個面板'); return false; }
+  if (k === 'map') S.map = on;
+  else S.hidden = on ? S.hidden.filter((x) => x !== k) : [...S.hidden, k];
+  return true;
+}
+export function togglePanel(k: Panel) {
+  const before = viewSnap();
+  const on = !shown(k);
+  if (!setShown(k, on)) return;
+  const d = panelDef(k);
+  toast(on ? `顯示「${d.name}」` : `已隱藏「${d.name}」，按 ${d.key.toUpperCase()} 再顯示`, () => restoreView(before));
+}
+/** The panels a preset puts away. The world map is only touched when the preset shows the zones. */
+function presetHidden(p: ViewPreset): Panel[] { return PANELS.map((x) => x.k).filter((k) => k !== 'map' && !p.show.includes(k)); }
+export function presetNow(): ViewPreset | null {
+  const h = [...S.hidden].sort().join();
+  return VIEW_PRESETS.find((p) => presetHidden(p).sort().join() === h && (!p.cal || p.cal === S.calMode) && (!p.show.includes('zones') || S.map === p.show.includes('map'))) || null;
+}
+export function applyPreset(p: ViewPreset, quiet = false) {
+  const before = viewSnap();
+  S.hidden = presetHidden(p);
+  if (p.show.includes('zones')) S.map = p.show.includes('map');
+  if (p.cal) S.calMode = p.cal;
+  if (!quiet) toast(p.k === 'all' ? '全部顯示' : `${p.name}：按 0 全部顯示，P 換下一種`, () => restoreView(before));
+}
+/** Show exactly these panels (a link's v=). The world map is only touched when the zones are among them.
+    Nothing changes when none of them holds anything. */
+export function showOnly(list: Panel[]): boolean {
+  if (!MAIN_PANELS.some((k) => list.includes(k))) return false;
+  S.hidden = PANELS.map((p) => p.k).filter((k) => k !== 'map' && !list.includes(k));
+  if (list.includes('zones')) S.map = list.includes('map');
+  return true;
+}
+/** The panels shown, as a link writes them: the world map counts only with the zones. */
+export const shownList = (): Panel[] => PANELS.map((p) => p.k).filter((k) => (k === 'map' ? S.map && shown('zones') : shown(k)));
+/** P: the next preset (Shift+P the one before). */
+export function cyclePreset(dir = 1) {
+  const cur = presetNow();
+  const i = cur ? VIEW_PRESETS.indexOf(cur) : dir > 0 ? -1 : 0;
+  applyPreset(VIEW_PRESETS[(i + dir + VIEW_PRESETS.length) % VIEW_PRESETS.length]);
 }
 
 /* ---------- attention: a panel glows briefly where a change landed ---------- */
@@ -567,7 +654,7 @@ export function loadState(): boolean {
   if (o.chips && typeof o.chips === 'object') {
     for (const row of ['start', 'end', 'span'] as ChipRow[]) {
       const list = (o.chips as Record<string, unknown>)[row];
-      if (Array.isArray(list)) S.chips[row] = list.filter((c): c is Chip => !!c && typeof c.code === 'string' && !!decodeRule(c.code)).slice(0, 40)
+      if (Array.isArray(list)) S.chips[row] = list.filter((c): c is Chip => !!c && typeof c.code === 'string' && !!decodeRule(c.code)).slice(0, CHIP_MAX)
         .map((c) => ({ code: c.code, ...(typeof c.name === 'string' && c.name ? { name: c.name.slice(0, 40) } : {}) }));
     }
   }
@@ -585,19 +672,25 @@ export function loadState(): boolean {
   if (S.link && S.linkTo === 'end') S.endLive = false;
   if (Array.isArray(o.zones)) S.zones = (o.zones as unknown[]).filter((z): z is string => isValidTzSafe(z)).slice(0, ZMAX);
   if (o.theme === 'light' || o.theme === 'dark' || o.theme === 'system') S.theme = o.theme;
-  if (o.lens === 'zones' || o.lens === 'cal' || o.lens === 'read') S.lens = o.lens;
+  if (o.lens === 'zones' || o.lens === 'cal' || o.lens === 'read' || o.lens === 'dur') S.lens = o.lens;
   if (o.readEnd === 'end') S.readEnd = 'end';
   const order = Array.isArray(o.readOrder) ? o.readOrder : o.readPins; // readPins: the pinned formats of the first version
   if (Array.isArray(order)) S.readOrder = (order as unknown[]).filter((k): k is string => typeof k === 'string').slice(0, 40);
   if (typeof o.density === 'number' && DENSITY.some((d) => d.v === o.density)) S.density = o.density;
   if (typeof o.map === 'boolean') S.map = o.map;
+  if (Array.isArray(o.hidden)) {
+    const keys = PANELS.map((p) => p.k);
+    S.hidden = [...new Set((o.hidden as unknown[]).filter((k): k is Panel => keys.includes(k as Panel) && k !== 'map'))];
+    if (!MAIN_PANELS.some((k) => !S.hidden.includes(k))) S.hidden = [];
+  }
+  if (o.calMode === 'year') S.calMode = 'year';
   if (typeof o.dur === 'string' && o.dur.length <= 400) { S.dur = o.dur; S.durSample = !!o.durSample; }
   return true;
 }
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 export function startPersisting() {
   watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.rules, S.link?.expr, S.linkTo, S.zones, S.theme, S.lens, S.readEnd, S.readOrder,
-    S.density, S.map, S.dur, S.durSample, S.chips, S.words, S.wordsOff, S.prefs], () => {
+    S.density, S.map, S.hidden, S.calMode, S.dur, S.durSample, S.chips, S.words, S.wordsOff, S.prefs], () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
@@ -605,7 +698,7 @@ export function startPersisting() {
           v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end, endLive: S.endLive,
           endSample: S.endSample, rules: S.rules, link: S.link ? S.link.expr : null, linkTo: S.linkTo, zones: S.zones,
           theme: S.theme, lens: S.lens, readEnd: S.readEnd, readOrder: S.readOrder,
-          density: S.density, map: S.map, dur: S.dur, durSample: S.durSample,
+          density: S.density, map: S.map, hidden: S.hidden, calMode: S.calMode, dur: S.dur, durSample: S.durSample,
           chips: S.chips, words: S.words, wordsOff: S.wordsOff, prefs: S.prefs,
         }));
       } catch { /* storage unavailable: everything still works for this visit */ }

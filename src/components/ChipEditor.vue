@@ -6,7 +6,7 @@ import Icon from './Icon.vue';
 import RuleBuilder from './RuleBuilder.vue';
 import { type Rule, decodeRule, encodeRule, ruleName } from '../core/rule';
 import {
-  S, type ChipRow, DEFAULT_CHIPS, chipTarget, chipName, chipRule, runRule, tzOf, commit, applyRule, bump, toast, undo, ruleTick,
+  S, type ChipRow, DEFAULT_CHIPS, CHIP_MAX, chipTarget, chipName, chipRule, runRule, tzOf, commit, applyRule, bump, toast, undo, ruleTick,
 } from '../state/store';
 import { useDragSort, moved } from '../composables/dragSort';
 import { partsInTz, WD, wdOf, pad } from '../core/time';
@@ -66,6 +66,7 @@ function reset() {
 function save() {
   const c = { code: encodeRule(draft.value), ...(draftName.value.trim() ? { name: draftName.value.trim().slice(0, 40) } : {}) };
   if (sel.value == null) {
+    if (list.value.length >= CHIP_MAX) { toast(`一排最多 ${CHIP_MAX} 個快捷，先移除幾個`); return; }
     commit(() => { S.chips[props.row].push(c); }, { label: `新增快捷：${nameOf()}`, say: `已加到${ROW_NAME[props.row]}的快捷：${nameOf()}` });
     sel.value = list.value.length - 1;
   } else {

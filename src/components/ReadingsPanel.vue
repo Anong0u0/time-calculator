@@ -50,16 +50,20 @@ const DEFS: Def[] = [
   { k: 'http', label: 'HTTP', tip: 'HTTP 標頭的 GMT 格式', f: (ms) => { const u = partsInTz(ms, 'UTC'); return `${EN_WD[wdOf(u)]}, ${pad(u.d)} ${EN_MO[u.mo - 1]} ${u.y} ${fmtTime(u)} GMT`; } },
 ];
 /** Every format, in the order set here; formats not in the saved order keep their usual place after it. */
+/** 農曆 and 節氣 go with the display setting for them. */
+const LUNAR_KEYS = ['lunar', 'term'];
+const defs = computed(() => (S.prefs.lunar ? DEFS : DEFS.filter((d) => !LUNAR_KEYS.includes(d.k))));
 const ordered = computed(() => {
-  const first = S.readOrder.map((k) => DEFS.find((d) => d.k === k)).filter((d): d is Def => !!d);
-  return [...first, ...DEFS.filter((d) => !first.includes(d))];
+  const all = defs.value;
+  const first = S.readOrder.map((k) => all.find((d) => d.k === k)).filter((d): d is Def => !!d);
+  return [...first, ...all.filter((d) => !first.includes(d))];
 });
 const vals = computed(() => {
   const sMs = startMs.value, eMs = endMs.value;
   const sW = partsInTz(sMs, S.startTz), eW = eMs != null ? partsInTz(eMs, S.endTz) : null;
   return ordered.value.map((d) => ({ ...d, s: d.f(sMs, S.startTz, sW), e: eW && eMs != null ? d.f(eMs, S.endTz, eW) : '' }));
 });
-const isDefault = computed(() => ordered.value.every((d, i) => d === DEFS[i]));
+const isDefault = computed(() => ordered.value.every((d, i) => d === defs.value[i]));
 
 /* ---------- order: drag by the grip ---------- */
 let sortSession = 0;
@@ -99,7 +103,7 @@ const lenH = computed(() => (hasEnd.value ? 2.15 * remPx.value : 0));
 const fit = computed(() => {
   // the foot (全部寫法 · 複製表格) is always there
   const room = bodyH.value - unitsH.value - lenH.value - 2.3 * remPx.value;
-  if (DEFS.length * rowH.value <= room) return DEFS.length;
+  if (defs.value.length * rowH.value <= room) return defs.value.length;
   return Math.max(0, Math.floor(room / rowH.value));
 });
 const shown = computed(() => (bodyH.value ? vals.value.slice(0, fit.value) : vals.value.slice(0, 6)));

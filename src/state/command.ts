@@ -10,7 +10,7 @@ import { nfMax, durWords } from '../core/format';
 import { zoneInText, searchZones, zoneName, sameZone } from '../core/zones';
 import {
   S, type End, other, wallOf, tzOf, startWall, commit, setWall, setInstant, setLink, checkSpan, setLive, isLive, linkTarget, linkSentence,
-  setStartTz, setEndTz, addZoneRow, zoneRows, applyRule, runRule, toast, type ChipRow,
+  setStartTz, setEndTz, addZoneRow, zoneRows, applyRule, runRule, toast, type ChipRow, CHIP_MAX,
 } from './store';
 import { type Rule, encodeRule, ruleReads, ruleUsesNow } from '../core/rule';
 import { wordRule } from '../core/vocab';
@@ -120,7 +120,7 @@ function ruleSuggestions(rule: Rule, name: string, out: Suggestion[]) {
   }
   const row: ChipRow = which;
   const code = encodeRule(rule);
-  if (!S.chips[row].some((c) => c.code === code)) {
+  if (!S.chips[row].some((c) => c.code === code) && S.chips[row].length < CHIP_MAX) {
     out.push({
       id: 'rule-chip', kind: 'chip', title: `把「${name}」加到${SUBJ[which]}的快捷`, detail: '之後點一下就能套用',
       apply: () => commit(() => { S.chips[row].push({ code, ...(name ? { name } : {}) }); }, { label: `新增快捷：${name}`, say: `已加到${SUBJ[which]}的快捷：${name}` }),

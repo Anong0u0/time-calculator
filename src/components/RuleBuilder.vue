@@ -72,6 +72,14 @@ function setDate(v: string) {
 /* ---------- a step's settings ---------- */
 const U_SHORT: Record<Unit, string> = { s: '秒', mi: '分', h: '時', d: '天', bd: '工作日', w: '週', mo: '月', q: '季', y: '年', lmo: '農曆月', ly: '農曆年', term: '節氣' };
 const SCOPES: [Scope, string][] = [['next', '下一個'], ['prev', '上一個'], ['w', '這週'], ['mo', '這個月'], ['q', '這一季'], ['y', '這一年'], ['lmo', '這個農曆月'], ['ly', '這個農曆年']];
+/* 農曆 and 節氣 are offered only while the display setting for them is on; a block already using one keeps showing it. */
+const LUNAR_KINDS: WordKind[] = ['lunar', 'term'];
+const LUNAR_UNITS: string[] = ['lmo', 'ly', 'term'];
+const units = computed(() => UNITS.filter((u) => S.prefs.lunar || !LUNAR_UNITS.includes(u) || (cur.value?.t === 'move' && cur.value.u === u)));
+const periods = computed(() => PERIODS.filter((p) => S.prefs.lunar || !LUNAR_UNITS.includes(p) || (cur.value?.t === 'align' && cur.value.p === p)));
+const scopes = computed(() => SCOPES.filter(([sc]) => S.prefs.lunar || !LUNAR_UNITS.includes(sc) || ((cur.value?.t === 'pick' || cur.value?.t === 'word') && cur.value.in === sc)));
+const ctabs = computed(() => CTABS.filter(([k]) => S.prefs.lunar || !['lmo', 'ld', 'term'].includes(k) || (cur.value?.t === 'pick' && cur.value.c[k] != null)));
+const common = computed(() => (S.prefs.lunar ? COMMON : COMMON.filter(([, st]) => !st.some((x) => x.t === 'pick' && x.c.term != null))));
 const toward = (n: number, sgn: number) => sgn * Math.max(1, Math.abs(n));
 function setCond(k: keyof Cond, v: number | boolean | undefined) {
   setStep((s) => {
@@ -123,7 +131,8 @@ const words = computed(() => {
   void ruleTick.value;
   const g = new Map<WordKind, string[]>();
   for (const w of vocab()) { if (!g.has(w.kind)) g.set(w.kind, []); g.get(w.kind)!.push(w.name); }
-  return [...g.entries()];
+  const curW = cur.value?.t === 'word' ? cur.value.w : null;
+  return [...g.entries()].filter(([k, list]) => S.prefs.lunar || !LUNAR_KINDS.includes(k) || (curW != null && list.includes(curW)));
 });
 function add(steps: Step[]) {
   set((r) => { const at = sel.value != null && sel.value >= 0 ? sel.value + 1 : r.steps.length; r.steps.splice(at, 0, ...JSON.parse(JSON.stringify(steps))); });
@@ -206,7 +215,7 @@ defineExpose({ name });
     <p v-if="drag && drag.off" class="rb-hint">放開就移除這一步</p>
 
     <div v-if="addOpen" class="rb-pal">
-      <div class="rb-pal-g"><span class="rb-pal-k">常用</span><button v-for="[n, st] in COMMON" :key="n" type="button" class="chip sm" @click="add(st)">{{ n }}</button></div>
+      <div class="rb-pal-g"><span class="rb-pal-k">常用</span><button v-for="[n, st] in common" :key="n" type="button" class="chip sm" @click="add(st)">{{ n }}</button></div>
       <div class="rb-pal-g"><span class="rb-pal-k">空白積木</span><button v-for="[n, st] in BLANK" :key="n" type="button" class="chip sm blank" @click="add(st)">{{ n }}</button></div>
       <div v-for="[k, list] in words" :key="k" class="rb-pal-g"><span class="rb-pal-k">{{ KIND_NAME[k] }}</span><button v-for="w in list" :key="w" type="button" class="chip sm" @click="addWord(w)">{{ w }}</button></div>
     </div>
@@ -225,14 +234,14 @@ defineExpose({ name });
           <button type="button" :aria-pressed="cur.n >= 0" @click="setStep((s) => (s.t === 'move' ? { ...s, n: toward(s.n, 1) } : s))">往後</button>
           <button type="button" :aria-pressed="cur.n < 0" @click="setStep((s) => (s.t === 'move' ? { ...s, n: toward(s.n, -1) } : s))">往前</button>
         </div><NumDial :model-value="Math.abs(cur.n)" :min="0" :max="99999" label="多少" @update:model-value="(v) => setStep((s) => (s.t === 'move' ? { ...s, n: (s.n < 0 ? -1 : 1) * v } : s))" /></div>
-        <div class="rb-row wrap"><span class="rb-l">單位</span><button v-for="u in UNITS" :key="u" type="button" class="chip sm" :aria-pressed="cur.u === u" @click="setStep((s) => (s.t === 'move' ? { ...s, u } : s))">{{ U_SHORT[u] }}</button></div>
+        <div class="rb-row wrap"><span class="rb-l">單位</span><button v-for="u in units" :key="u" type="button" class="chip sm" :aria-pressed="cur.u === u" @click="setStep((s) => (s.t === 'move' ? { ...s, u } : s))">{{ U_SHORT[u] }}</button></div>
       </template>
       <template v-else-if="cur.t === 'align'">
-        <div class="rb-row wrap"><span class="rb-l">期間</span><button v-for="p in PERIODS" :key="p" type="button" class="chip sm" :aria-pressed="cur.p === p" @click="setStep((s) => (s.t === 'align' ? { ...s, p: p as Period } : s))">{{ PERIOD_NAME[p] }}</button></div>
+        <div class="rb-row wrap"><span class="rb-l">期間</span><button v-for="p in periods" :key="p" type="button" class="chip sm" :aria-pressed="cur.p === p" @click="setStep((s) => (s.t === 'align' ? { ...s, p: p as Period } : s))">{{ PERIOD_NAME[p] }}</button></div>
         <div class="rb-row wrap"><span class="rb-l">位置</span><button v-for="p in POS" :key="p" type="button" class="chip sm" :aria-pressed="cur.pos === p" @click="setStep((s) => (s.t === 'align' ? { ...s, pos: p as Pos } : s))">{{ POS_NAME[p] }}</button></div>
       </template>
       <template v-else-if="cur.t === 'pick'">
-        <div class="rb-row wrap"><span class="rb-l">在哪裡找</span><button v-for="[sc, n] in SCOPES" :key="sc" type="button" class="chip sm" :aria-pressed="cur.in === sc" @click="setStep((s) => (s.t === 'pick' ? { ...s, in: sc } : s))">{{ n }}</button></div>
+        <div class="rb-row wrap"><span class="rb-l">在哪裡找</span><button v-for="[sc, n] in scopes" :key="sc" type="button" class="chip sm" :aria-pressed="cur.in === sc" @click="setStep((s) => (s.t === 'pick' ? { ...s, in: sc } : s))">{{ n }}</button></div>
         <div class="rb-row">
           <span class="rb-l">第幾個</span>
           <NumDial :model-value="Math.abs(cur.k ?? 1)" :min="1" :max="60" label="第幾個" @update:model-value="(v) => setStep((s) => (s.t === 'pick' ? { ...s, k: (s.k ?? 1) < 0 ? -v : v } : s))" />
@@ -240,7 +249,7 @@ defineExpose({ name });
           <button v-else type="button" class="chip sm" :aria-pressed="!!cur.incl" @click="setStep((s) => (s.t === 'pick' ? { ...s, incl: !s.incl } : s))">今天也算</button>
           <button v-if="cur.c.term != null" type="button" class="chip sm" :aria-pressed="!!cur.exact" @click="setStep((s) => (s.t === 'pick' ? { ...s, exact: !s.exact } : s))">節氣那一刻</button>
         </div>
-        <div class="rb-tabs" role="tablist"><button v-for="[k, n] in CTABS" :key="k" type="button" role="tab" :aria-selected="condTab === k" :class="{ set: cur.c[k] != null }" @click="condTab = k"><span>{{ n }}</span><b>{{ condVal(k) }}</b></button></div>
+        <div class="rb-tabs" role="tablist"><button v-for="[k, n] in ctabs" :key="k" type="button" role="tab" :aria-selected="condTab === k" :class="{ set: cur.c[k] != null }" @click="condTab = k"><span>{{ n }}</span><b>{{ condVal(k) }}</b></button></div>
         <div class="rb-grid" :class="`g-${condTab}`">
           <button type="button" class="chip sm" :aria-pressed="cur.c[condTab] == null" @click="setCond(condTab, undefined)">不限</button>
           <template v-if="condTab === 'mo'"><button v-for="m in 12" :key="m" type="button" class="chip sm" :aria-pressed="cur.c.mo === m" @click="setCond('mo', m)">{{ m }}月</button></template>
@@ -265,7 +274,7 @@ defineExpose({ name });
       <template v-else-if="cur.t === 'word'">
         <div class="rb-row wrap"><span class="rb-l">在哪裡</span>
           <button type="button" class="chip sm" :aria-pressed="!cur.in" @click="setStep((s) => (s.t === 'word' ? { t: 'word', w: s.w } : s))">照詞本身</button>
-          <button v-for="[sc, n] in SCOPES" :key="sc" type="button" class="chip sm" :aria-pressed="cur.in === sc" @click="setStep((s) => (s.t === 'word' ? { ...s, in: sc } : s))">{{ n }}</button>
+          <button v-for="[sc, n] in scopes" :key="sc" type="button" class="chip sm" :aria-pressed="cur.in === sc" @click="setStep((s) => (s.t === 'word' ? { ...s, in: sc } : s))">{{ n }}</button>
         </div>
         <div v-if="cur.in === 'next' || cur.in === 'prev'" class="rb-row"><span class="rb-l">第幾個</span><NumDial :model-value="cur.k ?? 1" :min="1" :max="60" label="第幾個" @update:model-value="(v) => setStep((s) => (s.t === 'word' ? { ...s, k: v } : s))" /></div>
         <div v-for="[k, list] in words" :key="k" class="rb-row wrap"><span class="rb-l">{{ KIND_NAME[k] }}</span><button v-for="w in list" :key="w" type="button" class="chip sm" :aria-pressed="cur.w === w" @click="setStep((s) => (s.t === 'word' ? { ...s, w } : s))">{{ w }}</button></div>

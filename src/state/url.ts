@@ -14,16 +14,20 @@
    p     (older links) the end of a period: day, week, month, newyear, lny.
    z     the zone list, only when it differs from the default.
    calc  the duration calculator's expression, only when it is not the sample.
+   v     the panels shown, when some are put away (span.rail is a full-screen countdown).  cm=year: the calendar shows the year.
 
    When the link carries any of s, e, d, ds, p, tz, the time comes from the link alone: no end in it means no end.
-   z and calc replace yours only when they are there.
+   z, calc, v and cm replace yours only when they are there.
    The address is written only after something is changed here; opening the page leaves it as it is.
    ============================================================ */
 import { watch } from 'vue';
 import { type Wall, type Span, validWall, partsInTz, pad, interpretSpanText, fmtSpan, isValidTz } from '../core/time';
 import { LOCAL_TZ, sameZone } from '../core/zones';
 import { decodeRule, ruleName } from '../core/rule';
-import { S, ZMAX, type Link, type End, commit, applyRule, defaultZones, isLinked, OLD_PRESETS } from './store';
+import {
+  S, ZMAX, type Link, type End, type Panel, type CalMode, commit, applyRule, defaultZones, isLinked, OLD_PRESETS, PANELS, showOnly, shownList,
+  shown, viewSnap, restoreView, toast, undo,
+} from './store';
 
 const TIME_KEYS = ['s', 'e', 'd', 'ds', 'p', 'tz', 'etz', 'er', 'sr'] as const;
 interface UrlRule { code: string; name: string; follow: boolean }
@@ -72,6 +76,7 @@ export interface UrlState {
   tz?: string; etz?: string;
   s?: Wall; e?: Wall; eLive?: boolean; d?: Link; ds?: Link; er?: UrlRule; sr?: UrlRule;
   z?: string[]; calc?: string;
+  v?: Panel[]; cm?: CalMode;
 }
 export function parseQuery(search: string): UrlState | null {
   const q = new URLSearchParams(search);
@@ -104,13 +109,26 @@ export function parseQuery(search: string): UrlState | null {
   if (z != null) out.z = z.split(',').map((x) => x.trim()).filter((x) => x && isValidTz(x)).slice(0, ZMAX);
   const calc = get('calc');
   if (calc != null && calc.length <= 400) out.calc = calc;
-  return out.time || out.z || out.calc != null ? out : null;
+  const v = get('v');
+  if (v) {
+    const keys = PANELS.map((p) => p.k);
+    const list = v.split(/[.,\s]+/).filter((k): k is Panel => keys.includes(k as Panel));
+    if (list.length) out.v = list;
+  }
+  const cm = get('cm');
+  if (cm === 'year' || cm === 'month') out.cm = cm;
+  return out.time || out.z || out.calc != null || out.v || out.cm ? out : null;
 }
 
 /** Bring a link's state in as one undoable step. When it replaces what was saved here, the toast offers the way back. */
 export function applyUrl(search = location.search, hadSaved = true): UrlState | null {
   const u = parseQuery(search);
   if (!u) return null;
+  // the panels are a display setting, outside the undo history: the toast takes them back with the rest
+  const view = viewSnap();
+  if (u.v) showOnly(u.v);
+  if (u.cm) S.calMode = u.cm;
+  const viewChanged = JSON.stringify(view) !== JSON.stringify(viewSnap());
   commit(() => {
     if (u.time) {
       S.startTz = u.tz || LOCAL_TZ;
@@ -134,7 +152,8 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
     }
     if (u.z) S.zones = u.z;
     if (u.calc != null) { S.dur = u.calc; S.durSample = false; }
-  }, { label: '套用連結', say: hadSaved ? '已套用連結裡的時間' : undefined });
+  }, { label: '套用連結', say: hadSaved && !viewChanged ? '已套用連結裡的時間' : undefined });
+  if (hadSaved && viewChanged) toast(u.time ? '已套用連結裡的時間與版面' : '已套用連結裡的版面', () => { if (u.time) undo(); restoreView(view); });
   return u;
 }
 
@@ -169,6 +188,8 @@ export function buildQuery(): string {
   const dz = defaultZones();
   if (S.zones.length !== dz.length || S.zones.some((z, i) => z !== dz[i])) out.push(['z', S.zones.join(',')]);
   if (!S.durSample) out.push(['calc', S.dur]);
+  if (S.hidden.length) out.push(['v', shownList().join('.')]);
+  if (S.calMode === 'year' && shown('cal')) out.push(['cm', 'year']);
   return out.map(([k, v]) => `${k}=${enc(v)}`).join('&');
 }
 /** Readable: : / , stay as they are. */
@@ -183,7 +204,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 /** Keep the address bar in step with the state once a value changes (replacing the entry: undo is the way back,
     not the back button). Opening the page writes nothing: a plain address stays plain, a link stays as it was typed. */
 export function startUrlSync() {
-  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.rules, S.link?.expr, S.linkTo, S.zones, S.dur, S.durSample], () => {
+  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.rules, S.link?.expr, S.linkTo, S.zones, S.dur, S.durSample, S.hidden, S.calMode, S.map], () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const q = buildQuery();

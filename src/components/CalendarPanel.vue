@@ -1,5 +1,6 @@
 <script setup lang="ts">
-/* Month and year scale: the range from ● to ○ on a month grid with ISO weeks, and the whole year as a week strip.
+/* Month and year scale: the range from ● to ○ on a month grid with ISO weeks, and the whole year as a week strip;
+   or, switched to 年, the whole year as twelve small months (the same days: click, drag ● ○, drag a range).
    Click a day to move the nearer end there; drag ● or ○ to move that end; drag from any other day to pick a range;
    click a week number (or a week on the year strip) to pick that week. S or E on a focused day puts the start or end there.
    On touch, a swipe turns the month and a long press starts a range.
@@ -7,7 +8,7 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
-import { S, type End, now, startWall, endWall, hasEnd, commit, setWall, toast, undo, bump } from '../state/store';
+import { S, type End, type CalMode, now, startWall, endWall, hasEnd, commit, setWall, toast, undo, bump } from '../state/store';
 import { type Wall, dayNum, fromDayNum, isoWeek, isoWeeksInYear, isoWeekStart, mod, WD, partsInTz, dayOfYear, fmtDT, daysInYear, usWeek } from '../core/time';
 import { lunarOfDay, lunarMonthName, lunarDayName, fmtLunar } from '../core/lunar';
 import { termOnDay, TERM_NAMES, CHINA_TZ } from '../core/terms';
@@ -30,6 +31,12 @@ function shift(m: number) {
   if (y < 1 || y > 9999) return;
   view.y = y; view.mo = mod(t, 12) + 1;
 }
+/** One step of the arrows, the wheel or a swipe: a month, or a year when the whole year is shown. */
+const yearMode = computed(() => S.calMode === 'year');
+function step(k: number) { if (yearMode.value) yearStep(k); else shift(k); }
+function setMode(m: CalMode) { S.calMode = m; }
+/** A small month's name opens that month. */
+function openMonth(mo: number) { view.mo = mo; S.calMode = 'month'; }
 const dim = (y: number, mo: number) => dayNum(mo === 12 ? y + 1 : y, mo === 12 ? 1 : mo + 1, 1) - dayNum(y, mo, 1);
 
 /* ---------- jumping: the title opens a picker; the wheel turns months (years over the week strip) ---------- */
@@ -55,7 +62,7 @@ const yearStep = (k: number) => gotoYear(Math.min(9999, Math.max(1, view.y + k))
 /** Typing a year moves the calendar as soon as it has four digits; Enter takes any length. */
 function yearLive() { const t = yearText.value.trim(); if (/^\d{4}$/.test(t)) gotoYear(+t, true); }
 function yearEnter() { const t = yearText.value.trim(); if (/^\d{1,4}$/.test(t)) gotoYear(+t); else toast('請輸入 1 到 9999 的年份'); }
-function pickMonth(m: number) { view.mo = m; jump.value = false; }
+function pickMonth(m: number) { view.mo = m; S.calMode = 'month'; jump.value = false; }
 function gotoWall(w: { y: number; mo: number } | null) { setView(w); yearText.value = String(view.y); jump.value = false; }
 const todayWall = computed(() => partsInTz(now.value, S.startTz));
 const monthMarks = computed(() => Array.from({ length: 12 }, (_, i) => {
@@ -75,7 +82,7 @@ function onWheel(e: WheelEvent, unit: 'mo' | 'y') {
   if (Math.abs(wheelAcc) >= 60) {
     const k = Math.sign(wheelAcc);
     wheelAcc = 0;
-    if (unit === 'y' || e.shiftKey) yearStep(k); else shift(k);
+    if (unit === 'y' || e.shiftKey || yearMode.value) yearStep(k); else shift(k);
   }
 }
 const todayN = computed(() => { const w = partsInTz(now.value, S.startTz); return dayNum(w.y, w.mo, w.d); });
@@ -104,8 +111,8 @@ const fests = computed(() => {
   }
   return out;
 });
-function lunarLabel(n: number): Lun | null {
-  if (!S.prefs.lunar || !lunRoom.value) return null;
+function lunarLabel(n: number, room = lunRoom.value): Lun | null {
+  if (!S.prefs.lunar || !room) return null;
   const L = lunarOfDay(n);
   if (!L) return null;
   const full = `農曆 ${fmtLunar(L)}`;
@@ -237,8 +244,8 @@ function gUp(e: PointerEvent) {
   if (e.type === 'pointercancel') return;
   if (d.mode === 'swipe') {
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) shift(dx < 0 ? 1 : -1);
-    else if (Math.abs(dy) > 40) shift(dy < 0 ? 1 : -1);
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) step(dx < 0 ? 1 : -1);
+    else if (Math.abs(dy) > 40) step(dy < 0 ? 1 : -1);
     return;
   }
   if (d.mode === 'move') { if (mv && mv.n !== d.n) putDay(mv.which, mv.n); return; }
@@ -266,7 +273,7 @@ function dayKey(e: KeyboardEvent, n: number) {
   if (t != null) {
     e.preventDefault();
     const d = fromDayNum(t);
-    if (d.mo !== view.mo || d.y !== view.y) { view.y = d.y; view.mo = d.mo; }
+    if (d.y !== view.y || (!yearMode.value && d.mo !== view.mo)) { view.y = d.y; view.mo = d.mo; }
     focusN.value = t;
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`.cal [data-n="${t}"]`)?.focus());
   } else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickDay(n); }
@@ -275,14 +282,22 @@ function dayKey(e: KeyboardEvent, n: number) {
 }
 const tabN = computed(() => {
   const cand = [focusN.value, sN.value, eN.value, dayNum(view.y, view.mo, 1)];
+  if (yearMode.value) return cand.find((n) => n != null && fromDayNum(n).y === view.y) ?? dayNum(view.y, 1, 1);
   return cand.find((n) => n != null && weeks.value.some((w) => w.days.some((d) => d.n === n && !d.out))) ?? dayNum(view.y, view.mo, 1);
 });
 
 /* ---------- the year as weeks ---------- */
 const body = ref<HTMLElement | null>(null);
 const { h: bodyH, w: bodyW } = useSize(body);
-const showYear = computed(() => bodyH.value === 0 || bodyH.value > 15.5 * remPx.value);
+const showYear = computed(() => !yearMode.value && (bodyH.value === 0 || bodyH.value > 15.5 * remPx.value));
 /** Room under the numbers for the lunar line: rows of at least about 2.3rem. */
+/** Days grow with the room they have (a calendar filling the screen): 1 is the usual size. */
+const mScale = computed(() => {
+  const r = remPx.value, W = bodyW.value, H = bodyH.value;
+  if (!W || !H) return 1;
+  const cw = (W - 1.9 * r) / 7, ch = (H - (showYear.value ? 3.4 : 0) * r - 3.5 * r) / 6;
+  return Math.max(1, Math.min(1.9, Math.min(cw, ch * 1.25) / (3.4 * r)));
+});
 const lunRoom = computed(() => bodyH.value === 0 || (bodyH.value - (showYear.value ? 3.4 : 0) * remPx.value - 3.5 * remPx.value) / 6 >= 2.25 * remPx.value);
 const yearWeeks = computed(() => {
   const count = isoWeeksInYear(view.y);
@@ -310,6 +325,48 @@ const monthTicks = computed(() => {
 });
 /** A week on the year strip is the same thing as a week number in the grid: clicking picks it (and shows its month). */
 function goWeek(w: { n0: number }) { const th = fromDayNum(w.n0 + 3); view.y = th.y; view.mo = th.mo; pickWeek(w.n0); }
+
+/* ---------- the whole year: twelve small months, laid out to the panel's shape ---------- */
+/** Columns of months, cell sizes and type size: the arrangement (2, 3, 4 or 6 across) whose days come out squarest. */
+const yl = computed(() => {
+  const r = remPx.value, W = bodyW.value || 24 * r, H = (bodyH.value || 24 * r) - 1.85 * r;
+  const gx = 1.1 * r, gy = .75 * r, titleH = 1.45 * r, headH = 1.05 * r;
+  let cols = 3, best = Infinity;
+  for (const c of [2, 3, 4, 6]) {
+    const rows = 12 / c, mw = (W - gx * (c - 1)) / c, mh = (H - gy * (rows - 1)) / rows;
+    const score = Math.abs(Math.log((mw / 7) / Math.max(1, (mh - titleH - headH) / 6)));
+    if (score < best) { best = score; cols = c; }
+  }
+  const rows = 12 / cols, mw = (W - gx * (cols - 1)) / cols, mh = (H - gy * (rows - 1)) / rows;
+  const cw = mw / 7, ch = Math.max(4, (mh - titleH - headH) / 6);
+  const lun = S.prefs.lunar && ch >= 2.1 * r && cw >= 1.9 * r;
+  const fs = Math.max(8, Math.min(cw * 0.46, (lun ? ch * 0.4 : ch * 0.58), 0.92 * r));
+  const dot = Math.max(8, Math.min(cw * 0.9, lun ? ch * 0.6 : ch * 0.94, 2.15 * r));
+  return { cols, rows, fs, dot, lun, head: Math.max(8, Math.min(fs * 0.85, 0.74 * r)) };
+});
+interface YDay { n: number; d: number; today: boolean; s: boolean; e: boolean; inR: boolean; rL: boolean; rR: boolean; wkend: boolean; label: string; lun: Lun | null }
+const yearMonths = computed(() => {
+  if (!yearMode.value) return [];
+  const sw = startWall.value, ew = endWall.value, tw = todayWall.value, room = yl.value.lun;
+  return Array.from({ length: 12 }, (_, i) => {
+    const mo = i + 1, n1 = dayNum(view.y, mo, 1), len = dim(view.y, mo), first = weekStartOf(n1);
+    const cells: (YDay | null)[] = Array.from({ length: 42 }, (_, k) => {
+      const n = first + k;
+      if (n < n1 || n >= n1 + len) return null;
+      const c = k % 7, d = n - n1 + 1, wd = mod(n + 4, 7);
+      const inR = lo.value != null && hi.value != null && n >= lo.value && n <= hi.value && lo.value !== hi.value;
+      const s = n === dS.value, e = n === dE.value, lun = lunarLabel(n, room);
+      return {
+        n, d, today: n === todayN.value, s, e, inR, lun, wkend: wd === 0 || wd === 6,
+        rL: inR && (n === lo.value || c === 0 || d === 1), rR: inR && (n === hi.value || c === 6 || d === len),
+        label: `${view.y} 年 ${mo} 月 ${d} 日 週${WD[wd]}${lun ? `，${lun.full}` : ''}${s ? '，開始' : ''}${e ? '，結束' : ''}${n === todayN.value ? '，今天' : ''}`,
+      };
+    });
+    return { mo, cells, s: sw.y === view.y && sw.mo === mo, e: !!ew && ew.y === view.y && ew.mo === mo, today: tw.y === view.y && tw.mo === mo };
+  });
+});
+const atStartY = computed(() => view.y === startWall.value.y);
+const atEndY = computed(() => !endWall.value || view.y === endWall.value.y);
 
 /* ---------- the line under it ---------- */
 const mondayOf = (n: number) => n - mod(n + 3, 7);
@@ -377,19 +434,45 @@ const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一
       <Icon name="cal" class="ph-ic" />
       <h2 class="cal-title mono" aria-live="off">
         <button ref="titleBtn" type="button" class="cal-tbtn" :aria-expanded="jump" aria-haspopup="dialog" :aria-label="`${view.y} 年 ${view.mo} 月，點一下跳到別的年月`"
-          v-tip="'跳到別的年月：可以直接打年份。也可以在月曆上捲動滾輪換月、在週條上捲動換年'" @click="jump = !jump">{{ view.y }} 年 {{ view.mo }} 月<Icon name="chevD" /></button>
+          v-tip="yearMode ? '跳到別的年份：可以直接打年份。也可以在年曆上捲動滾輪換年' : '跳到別的年月：可以直接打年份。也可以在月曆上捲動滾輪換月、在週條上捲動換年'" @click="jump = !jump">{{ yearMode ? `${view.y} 年` : `${view.y} 年 ${view.mo} 月` }}<Icon name="chevD" /></button>
       </h2>
       <span class="cal-nav">
-        <button type="button" class="icon-btn sm" aria-label="上個月" v-tip="'上個月'" @click="shift(-1)"><Icon name="chevL" /></button>
-        <button type="button" class="icon-btn sm" aria-label="下個月" v-tip="'下個月'" @click="shift(1)"><Icon name="chevR" /></button>
+        <button type="button" class="icon-btn sm" :aria-label="yearMode ? '前一年' : '上個月'" v-tip="yearMode ? '前一年' : '上個月'" @click="step(-1)"><Icon name="chevL" /></button>
+        <button type="button" class="icon-btn sm" :aria-label="yearMode ? '下一年' : '下個月'" v-tip="yearMode ? '下一年' : '下個月'" @click="step(1)"><Icon name="chevR" /></button>
       </span>
-      <span class="cal-jump">
+      <span class="seg-ctl cal-mode" role="group" aria-label="月曆或年曆">
+        <button type="button" :aria-pressed="!yearMode" v-tip="'一個月（Y 切換）'" @click="setMode('month')">月</button>
+        <button type="button" :aria-pressed="yearMode" v-tip="'整年 12 個月（Y 切換）'" @click="setMode('year')">年</button>
+      </span>
+      <span v-if="yearMode" class="cal-jump">
+        <button v-if="!atStartY" type="button" class="chip sm" v-tip="'看開始的那一年'" @click="setView(startWall)"><i class="node" />{{ startWall.y }}</button>
+        <button v-if="!atEndY && endWall" type="button" class="chip sm" v-tip="'看結束的那一年'" @click="setView(endWall)"><i class="node end" />{{ endWall.y }}</button>
+      </span>
+      <span v-else class="cal-jump">
         <button v-if="!atStart" type="button" class="chip sm" v-tip="'看開始的月份'" @click="setView(startWall)"><i class="node" />{{ startWall.y !== view.y ? `${startWall.y}/${startWall.mo}` : `${startWall.mo} 月` }}</button>
         <button v-if="!atEnd && endWall" type="button" class="chip sm" v-tip="'看結束的月份'" @click="setView(endWall)"><i class="node end" />{{ endWall.y !== view.y ? `${endWall.y}/${endWall.mo}` : `${endWall.mo} 月` }}</button>
       </span>
     </header>
     <div ref="body" class="cal-body">
-      <div class="grid" :class="{ lun: S.prefs.lunar && lunRoom }" role="grid" :aria-label="`${view.y} 年 ${view.mo} 月`" v-tip="tip" @pointerdown="gDown" @pointermove="gMove" @pointerup="gUp" @pointercancel="gUp">
+      <div v-if="yearMode" class="yg" :class="{ lun: yl.lun }" role="group" :aria-label="`${view.y} 年`" v-tip="tip"
+        :style="{ gridTemplateColumns: `repeat(${yl.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${yl.rows}, minmax(0, 1fr))`, '--yd': yl.fs + 'px', '--ydot': yl.dot + 'px', '--yh': yl.head + 'px' }"
+        @pointerdown="gDown" @pointermove="gMove" @pointerup="gUp" @pointercancel="gUp">
+        <div v-for="m in yearMonths" :key="m.mo" class="ym" role="group" :aria-label="`${m.mo} 月`">
+          <button type="button" class="ym-t" :class="{ today: m.today }" :aria-label="`打開 ${view.y} 年 ${m.mo} 月`" v-tip="'點一下打開這個月'" @click="openMonth(m.mo)">{{ m.mo }}月<i v-if="m.s" class="node" /><i v-if="m.e" class="node end" /></button>
+          <div class="ym-h" aria-hidden="true"><span v-for="h in heads" :key="h.t" :class="{ we: h.we }">{{ h.t }}</span></div>
+          <div class="ym-g">
+            <template v-for="(d, k) in m.cells" :key="k">
+              <span v-if="!d" />
+              <button v-else type="button" class="day" :data-n="d.n" :tabindex="d.n === tabN ? 0 : -1" :aria-label="d.label" :aria-pressed="d.s || d.e"
+                :class="{ today: d.today, s: d.s, e: d.e, inR: d.inR, rL: d.rL, rR: d.rR, we: d.wkend }" @keydown="dayKey($event, d.n)" @focus="focusN = d.n">
+                <span class="dn mono">{{ d.d }}</span>
+                <span v-if="d.lun" class="ln" :class="`ln-${d.lun.k}`" aria-hidden="true">{{ d.lun.t }}</span>
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+      <div v-else class="grid" :style="{ '--ms': mScale }" :class="{ lun: S.prefs.lunar && lunRoom }" role="grid" :aria-label="`${view.y} 年 ${view.mo} 月`" v-tip="tip" @pointerdown="gDown" @pointermove="gMove" @pointerup="gUp" @pointercancel="gUp">
         <div class="gh" role="row">
           <span class="wkc" role="columnheader" v-tip="ws ? 'ISO 週次：週一開始，含 1 月 4 日的那週是第 1 週' : '美式週次：週日開始，含 1 月 1 日的那週是第 1 週（設定裡可以改回週一開始）'">週</span>
           <span v-for="h in heads" :key="h.t" role="columnheader" :class="{ we: h.we }">{{ h.t }}</span>
@@ -468,6 +551,22 @@ const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一
 .jp-hint { font-size: var(--fs-xs); color: var(--ink-3); line-height: 1.5; }
 .cal-nav { display: flex; gap: 0; margin-left: -.2rem; }
 .cal-jump { display: flex; gap: .3rem; margin-left: auto; min-width: 0; }
+.cal-mode { padding: .12rem; border-radius: .65rem; }
+.cal-mode button { height: 1.5rem; padding: 0 .5rem; font-size: var(--fs-xs); border-radius: .5rem; }
+/* the whole year */
+.yg { flex: 1; min-height: 0; display: grid; gap: .75rem 1.1rem; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ym { min-width: 0; min-height: 0; display: grid; grid-template-rows: 1.45rem 1.05rem minmax(0, 1fr); }
+.ym-t { justify-self: start; display: inline-flex; align-items: center; gap: .3rem; padding: 0 .35rem; margin-left: -.35rem; border-radius: .45rem; font-size: .84rem; font-weight: 650; color: var(--ink-2); white-space: nowrap; }
+.ym-t:hover { background: var(--accent-wash); color: var(--accent); }
+.ym-t.today { color: var(--now); }
+.ym-t .node { font-size: .62rem; }
+.ym-h, .ym-g { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-height: 0; }
+.ym-h span { display: grid; place-items: center; font-size: var(--yh); color: var(--ink-4); line-height: 1; overflow: hidden; }
+.ym-g { grid-template-rows: repeat(6, minmax(0, 1fr)); }
+.yg .dn { width: var(--ydot); height: var(--ydot); max-height: none; aspect-ratio: auto; font-size: var(--yd); }
+.yg.lun .day { grid-template-rows: minmax(0, 1fr) auto; align-content: center; gap: 0; }
+.yg.lun .dn { align-self: end; }
+.yg .ln { font-size: max(8px, min(.6rem, calc(var(--yd) * .72))); }
 .icon-btn.sm { width: 2rem; height: 2rem; border-radius: .65rem; }
 .chip.sm { height: 1.7rem; padding: 0 .5rem; font-size: var(--fs-xs); gap: .3rem; }
 .chip.sm .node { font-size: var(--fs-xs); }
@@ -481,19 +580,19 @@ button.wkc { padding: 0; border-radius: .45rem; margin: 12% .15rem; cursor: poin
 button.wkc:hover { background: var(--accent-wash); color: var(--accent); }
 .wkc.hit { color: var(--accent); font-weight: 600; }
 .day { position: relative; display: grid; place-items: center; min-height: 0; padding: 0; color: var(--ink); cursor: pointer; }
-.day::before { content: ''; position: absolute; inset: 12% 0; background: transparent; }
+.day::before { content: ''; position: absolute; inset: max(12%, calc(50% - 1.45rem * var(--ms, 1))) 0; background: transparent; }
 .day.inR::before { background: var(--accent-wash-2); }
 .day.rL::before { border-top-left-radius: 99rem; border-bottom-left-radius: 99rem; left: 6%; }
 .day.rR::before { border-top-right-radius: 99rem; border-bottom-right-radius: 99rem; right: 6%; }
 .grid.lun .day { grid-template-rows: minmax(0, 1fr) auto; align-content: center; gap: 0; }
-.grid.lun .dn { width: min(1.85rem, 86%); max-height: 78%; align-self: end; }
-.ln { position: relative; z-index: 1; font-size: max(9px, .6rem); line-height: 1.1; color: var(--ink-3); white-space: nowrap; overflow: hidden; max-width: 100%; text-overflow: clip; letter-spacing: -.02em; align-self: start; padding-top: .05rem; }
+.grid.lun .dn { width: min(calc(1.85rem * var(--ms, 1)), 86%); max-height: 78%; align-self: end; }
+.ln { position: relative; z-index: 1; font-size: max(9px, calc(.6rem * var(--ms, 1))); line-height: 1.1; color: var(--ink-3); white-space: nowrap; overflow: hidden; max-width: 100%; text-overflow: clip; letter-spacing: -.02em; align-self: start; padding-top: .05rem; }
 .ln-mo { color: var(--ink-2); font-weight: 650; }
 .ln-term { color: var(--accent); font-weight: 600; }
 .ln-fest { color: var(--now); font-weight: 650; }
 .day.out .ln { opacity: .6; }
 .day.s .ln, .day.e .ln { font-weight: 650; }
-.dn { position: relative; z-index: 1; display: grid; place-items: center; width: min(2.15rem, 92%); aspect-ratio: 1; max-height: 92%; border-radius: 50%; font-size: .86rem; font-weight: 500; transition: background .12s, color .12s; }
+.dn { position: relative; z-index: 1; display: grid; place-items: center; width: min(calc(2.15rem * var(--ms, 1)), 92%); aspect-ratio: 1; max-height: 92%; border-radius: 50%; font-size: calc(.86rem * var(--ms, 1)); font-weight: 500; transition: background .12s, color .12s; }
 .day:hover .dn { background: var(--well-2); }
 .day.out { color: var(--ink-3); }
 .day.out .dn { font-weight: 400; }
