@@ -8,7 +8,12 @@ import { ref, reactive, computed, watch, nextTick } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
 import { S, type End, now, startWall, endWall, hasEnd, commit, setWall, toast, undo, bump } from '../state/store';
-import { type Wall, dayNum, fromDayNum, isoWeek, isoWeeksInYear, isoWeekStart, mod, WD, partsInTz, dayOfYear, fmtDT, daysInYear } from '../core/time';
+import { type Wall, dayNum, fromDayNum, isoWeek, isoWeeksInYear, isoWeekStart, mod, WD, partsInTz, dayOfYear, fmtDT, daysInYear, usWeek } from '../core/time';
+import { lunarOfDay, lunarMonthName, lunarDayName, fmtLunar } from '../core/lunar';
+import { termOnDay, TERM_NAMES, CHINA_TZ } from '../core/terms';
+import { decodeRule, dayMatches, type Cond } from '../core/rule';
+import { vocab } from '../core/vocab';
+import { ruleTick } from '../state/store';
 import { useSize, remPx } from '../composables/size';
 import { nf } from '../core/format';
 
@@ -85,25 +90,57 @@ const hi = computed(() => (drag.value ? Math.max(drag.value.a, drag.value.b) : p
 const dS = computed(() => (drag.value ? drag.value.a : pS.value));
 const dE = computed(() => (drag.value ? drag.value.b : pE.value));
 
-interface Day { n: number; d: number; out: boolean; today: boolean; s: boolean; e: boolean; inR: boolean; rL: boolean; rR: boolean; wkend: boolean; label: string }
+/* ---------- under each day: its lunar date, a 節氣 or a festival (from the vocabulary, so one's own changes show) ---------- */
+type Lun = { t: string; k: 'fest' | 'term' | 'mo' | 'd'; full: string };
+const fests = computed(() => {
+  void ruleTick.value;
+  const out: { name: string; ok: (n: number) => boolean }[] = [];
+  for (const w of vocab()) {
+    if (w.kind !== 'lunar' && w.kind !== 'holiday') continue;
+    const r = decodeRule(w.code);
+    const st = r?.steps;
+    if (!r || st?.length !== 1 || st[0].t !== 'pick' || (st[0].in !== 'next' && st[0].in !== 'prev')) continue;
+    out.push({ name: w.name, ok: dayMatches(st[0].c as Cond, S.startTz, S.prefs) });
+  }
+  return out;
+});
+function lunarLabel(n: number): Lun | null {
+  if (!S.prefs.lunar || !lunRoom.value) return null;
+  const L = lunarOfDay(n);
+  if (!L) return null;
+  const full = `農曆 ${fmtLunar(L)}`;
+  const f = fests.value.find((x) => x.ok(n));
+  if (f) return { t: f.name, k: 'fest', full: `${full} · ${f.name}` };
+  const tk = termOnDay(n, S.prefs.termTz === 'china' ? CHINA_TZ : S.startTz);
+  if (tk != null) return { t: TERM_NAMES[tk], k: 'term', full: `${full} · ${TERM_NAMES[tk]}` };
+  if (L.d === 1) return { t: lunarMonthName(L.m, L.leap), k: 'mo', full };
+  return { t: lunarDayName(L.d), k: 'd', full };
+}
+
+/** The first column is the week's first day (Monday, or Sunday when the settings say so). */
+const ws = computed(() => S.prefs.weekStart);
+const heads = computed(() => Array.from({ length: 7 }, (_, i) => ({ t: WD[(i + ws.value) % 7], we: (i + ws.value) % 7 === 0 || (i + ws.value) % 7 === 6 })));
+const weekStartOf = (n: number) => n - mod(n + 4 - ws.value, 7);
+interface Day { n: number; d: number; out: boolean; today: boolean; s: boolean; e: boolean; inR: boolean; rL: boolean; rR: boolean; wkend: boolean; label: string; lun: Lun | null }
 const weeks = computed(() => {
   const n1 = dayNum(view.y, view.mo, 1);
-  const first = n1 - mod(n1 + 3, 7);
+  const first = weekStartOf(n1);
   return Array.from({ length: 6 }, (_, r) => {
     const n0 = first + r * 7;
-    const th = fromDayNum(n0 + 3);
-    const iw = isoWeek(th.y, th.mo, th.d);
+    const th = fromDayNum(n0 + (ws.value ? 3 : 6));
+    const wk = ws.value ? isoWeek(th.y, th.mo, th.d).week : usWeek(th.y, th.mo, th.d);
     const days: Day[] = Array.from({ length: 7 }, (_, c) => {
-      const n = n0 + c, ymd = fromDayNum(n);
+      const n = n0 + c, ymd = fromDayNum(n), wd = mod(n + 4, 7);
       const inR = lo.value != null && hi.value != null && n >= lo.value && n <= hi.value && lo.value !== hi.value;
       const s = n === dS.value, e = n === dE.value;
+      const lun = lunarLabel(n);
       return {
-        n, d: ymd.d, out: ymd.mo !== view.mo, today: n === todayN.value, s, e, inR,
-        rL: inR && (n === lo.value || c === 0), rR: inR && (n === hi.value || c === 6), wkend: c >= 5,
-        label: `${ymd.y} 年 ${ymd.mo} 月 ${ymd.d} 日 週${WD[mod(n + 4, 7)]}${s ? '，開始' : ''}${e ? '，結束' : ''}${n === todayN.value ? '，今天' : ''}`,
+        n, d: ymd.d, out: ymd.mo !== view.mo, today: n === todayN.value, s, e, inR, lun,
+        rL: inR && (n === lo.value || c === 0), rR: inR && (n === hi.value || c === 6), wkend: wd === 0 || wd === 6,
+        label: `${ymd.y} 年 ${ymd.mo} 月 ${ymd.d} 日 週${WD[wd]}${lun ? `，${lun.full}` : ''}${s ? '，開始' : ''}${e ? '，結束' : ''}${n === todayN.value ? '，今天' : ''}`,
       };
     });
-    return { n0, wk: iw.week, wy: iw.weekYear, days };
+    return { n0, wk, days };
   });
 });
 
@@ -134,9 +171,17 @@ function pickRange(a: number, b: number) {
   bump('start'); bump('end');
 }
 function pickWeek(n0: number) {
-  const a = fromDayNum(n0), b = fromDayNum(n0 + 6), wk = isoWeek(a.y, a.mo, a.d);
+  const a = fromDayNum(n0), b = fromDayNum(n0 + 6), th = fromDayNum(n0 + (ws.value ? 3 : 6));
+  const k = ws.value ? isoWeek(th.y, th.mo, th.d).week : usWeek(th.y, th.mo, th.d);
   const s = withDate(startWall.value, n0), e = withDate(endWall.value || startWall.value, n0 + 6);
-  here(() => commit(() => setWall('start', s) && setWall('end', e), { label: `選取 W${wk.week}`, say: `W${wk.week}：${a.mo}/${a.d}（一）→ ${b.mo}/${b.d}（日）` }));
+  here(() => commit(() => setWall('start', s) && setWall('end', e), { label: `選取 W${k}`, say: `W${k}：${a.mo}/${a.d}（${WD[mod(n0 + 4, 7)]}）→ ${b.mo}/${b.d}（${WD[mod(n0 + 10, 7)]}）` }));
+  bump('start'); bump('end');
+}
+/** A double click: that whole day, from 00:00 to the next 00:00. */
+function pickWholeDay(n: number) {
+  const a = fromDayNum(n), b = fromDayNum(n + 1);
+  const s = { ...a, h: 0, mi: 0, s: 0 }, e = { ...b, h: 0, mi: 0, s: 0 };
+  here(() => commit(() => setWall('start', s) && setWall('end', e), { label: `選取 ${a.mo}/${a.d} 整天`, say: `${a.mo}/${a.d} 整天：00:00 → 隔天 00:00` }));
   bump('start'); bump('end');
 }
 /* A press on ● or ○ drags that end. Elsewhere: a mouse drag picks a range; a finger swipes months, or picks a range after a long press. */
@@ -198,15 +243,19 @@ function gUp(e: PointerEvent) {
   }
   if (d.mode === 'move') { if (mv && mv.n !== d.n) putDay(mv.which, mv.n); return; }
   if (d.mode === 'range') { if (r && r.a !== r.b) pickRange(r.a, r.b); return; }
+  const t = Date.now();
+  if (lastTap && lastTap.n === d.n && t - lastTap.t < 380) { lastTap = null; pickWholeDay(d.n); return; }
+  lastTap = { n: d.n, t };
   pickDay(d.n);
 }
+let lastTap: { n: number; t: number } | null = null;
 const focusN = ref<number | null>(null);
 function dayKey(e: KeyboardEvent, n: number) {
   const mv: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
   let t: number | null = null;
   if (e.key in mv) t = n + mv[e.key];
-  else if (e.key === 'Home') t = n - mod(n + 3, 7);
-  else if (e.key === 'End') t = n - mod(n + 3, 7) + 6;
+  else if (e.key === 'Home') t = weekStartOf(n);
+  else if (e.key === 'End') t = weekStartOf(n) + 6;
   else if (e.key === 'PageUp' || e.key === 'PageDown') {
     // a month (a year with Shift) back or forward, on the same day where the month has it
     const cur = fromDayNum(n), k = (e.key === 'PageUp' ? -1 : 1) * (e.shiftKey ? 12 : 1);
@@ -233,6 +282,8 @@ const tabN = computed(() => {
 const body = ref<HTMLElement | null>(null);
 const { h: bodyH, w: bodyW } = useSize(body);
 const showYear = computed(() => bodyH.value === 0 || bodyH.value > 15.5 * remPx.value);
+/** Room under the numbers for the lunar line: rows of at least about 2.3rem. */
+const lunRoom = computed(() => bodyH.value === 0 || (bodyH.value - (showYear.value ? 3.4 : 0) * remPx.value - 3.5 * remPx.value) / 6 >= 2.25 * remPx.value);
 const yearWeeks = computed(() => {
   const count = isoWeeksInYear(view.y);
   return Array.from({ length: count }, (_, i) => {
@@ -338,17 +389,18 @@ const tip = computed(() => (hasEnd.value ? '點一下：移動比較近的那一
       </span>
     </header>
     <div ref="body" class="cal-body">
-      <div class="grid" role="grid" :aria-label="`${view.y} 年 ${view.mo} 月`" v-tip="tip" @pointerdown="gDown" @pointermove="gMove" @pointerup="gUp" @pointercancel="gUp">
+      <div class="grid" :class="{ lun: S.prefs.lunar && lunRoom }" role="grid" :aria-label="`${view.y} 年 ${view.mo} 月`" v-tip="tip" @pointerdown="gDown" @pointermove="gMove" @pointerup="gUp" @pointercancel="gUp">
         <div class="gh" role="row">
-          <span class="wkc" role="columnheader" v-tip="'ISO 週次：週一開始，含 1 月 4 日的那週是第 1 週'">週</span>
-          <span v-for="(d, i) in ['一', '二', '三', '四', '五', '六', '日']" :key="d" role="columnheader" :class="{ we: i >= 5 }">{{ d }}</span>
+          <span class="wkc" role="columnheader" v-tip="ws ? 'ISO 週次：週一開始，含 1 月 4 日的那週是第 1 週' : '美式週次：週日開始，含 1 月 1 日的那週是第 1 週（設定裡可以改回週一開始）'">週</span>
+          <span v-for="h in heads" :key="h.t" role="columnheader" :class="{ we: h.we }">{{ h.t }}</span>
         </div>
         <div v-for="wk in weeks" :key="wk.n0" class="gr" role="row">
-          <button type="button" class="wkc mono" role="rowheader" :class="{ hit: wk.days.some((d) => d.s || d.e) }" :aria-label="`選取第 ${wk.wk} 週`" v-tip="`選取 W${wk.wk} 整週（週一到週日）`" @click="pickWeek(wk.n0)">{{ wk.wk }}</button>
+          <button type="button" class="wkc mono" role="rowheader" :class="{ hit: wk.days.some((d) => d.s || d.e) }" :aria-label="`選取第 ${wk.wk} 週`" v-tip="`選取 W${wk.wk} 整週（${ws ? '週一到週日' : '週日到週六'}）`" @click="pickWeek(wk.n0)">{{ wk.wk }}</button>
           <button v-for="d in wk.days" :key="d.n" type="button" role="gridcell" class="day" :data-n="d.n" :tabindex="d.n === tabN ? 0 : -1" :aria-label="d.label"
             :aria-selected="d.s || d.e" :class="{ out: d.out, today: d.today, s: d.s, e: d.e, inR: d.inR, rL: d.rL, rR: d.rR, we: d.wkend }"
             @keydown="dayKey($event, d.n)" @focus="focusN = d.n">
             <span class="dn mono">{{ d.d }}</span>
+            <span v-if="d.lun" class="ln" :class="`ln-${d.lun.k}`" aria-hidden="true">{{ d.lun.t }}</span>
           </button>
         </div>
       </div>
@@ -433,6 +485,14 @@ button.wkc:hover { background: var(--accent-wash); color: var(--accent); }
 .day.inR::before { background: var(--accent-wash-2); }
 .day.rL::before { border-top-left-radius: 99rem; border-bottom-left-radius: 99rem; left: 6%; }
 .day.rR::before { border-top-right-radius: 99rem; border-bottom-right-radius: 99rem; right: 6%; }
+.grid.lun .day { grid-template-rows: minmax(0, 1fr) auto; align-content: center; gap: 0; }
+.grid.lun .dn { width: min(1.85rem, 86%); max-height: 78%; align-self: end; }
+.ln { position: relative; z-index: 1; font-size: max(9px, .6rem); line-height: 1.1; color: var(--ink-3); white-space: nowrap; overflow: hidden; max-width: 100%; text-overflow: clip; letter-spacing: -.02em; align-self: start; padding-top: .05rem; }
+.ln-mo { color: var(--ink-2); font-weight: 650; }
+.ln-term { color: var(--accent); font-weight: 600; }
+.ln-fest { color: var(--now); font-weight: 650; }
+.day.out .ln { opacity: .6; }
+.day.s .ln, .day.e .ln { font-weight: 650; }
 .dn { position: relative; z-index: 1; display: grid; place-items: center; width: min(2.15rem, 92%); aspect-ratio: 1; max-height: 92%; border-radius: 50%; font-size: .86rem; font-weight: 500; transition: background .12s, color .12s; }
 .day:hover .dn { background: var(--well-2); }
 .day.out { color: var(--ink-3); }

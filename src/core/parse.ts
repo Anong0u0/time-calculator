@@ -9,6 +9,9 @@
 
    When the order of day and month cannot be told (1/2/2026), the other reading comes back as `alt`.
    ============================================================ */
+import { parseRuleText, evalReading, readingName } from './ruletext';
+import { lunarOf, ganzhi } from './lunar';
+import { termMoment, TERM_NAMES } from './terms';
 import { type Wall, type YMD, validWall, normalizeWide, parseOffset, parseTimestamp, addDaysWall, addMonthsWall, wdOf, isoWeekStart, isoWeeksInYear, fromDayNum, dayNum, daysInYear, utcMs, wallOfKey, partsInTz, DAY, type TsUnit } from './time';
 
 export interface ParseOpts {
@@ -16,11 +19,18 @@ export interface ParseOpts {
   year?: number;
   /** Today on the clock the text is read on: for 明天, 下週五, 15號 and the like. */
   today?: YMD;
+  /** Now, and the clock the text is read on (rules with 3小時後, 下個月底 … are read from here). Without them: today at 00:00 UTC. */
+  now?: number;
+  tz?: string;
+  /** A lone part (15號, 3月) is a date here: the words around it said so. */
+  lone?: boolean;
 }
 export interface Reading { wall: Wall; how: string }
+/** Which parts of the date were written (the rest came from today). */
+export interface Given { y: boolean; mo: boolean; d: boolean }
 export type ParsedText =
-  | { kind: 'wall'; wall: Wall; offset: number | null; hasTime: boolean; how: string; alt?: Reading }
-  | { kind: 'time'; h: number; mi: number; s: number }
+  | { kind: 'wall'; wall: Wall; offset: number | null; hasTime: boolean; how: string; alt?: Reading; given?: Given; rule?: import('./rule').Rule; relative?: boolean }
+  | { kind: 'time'; h: number; mi: number; s: number; roll?: number }
   | { kind: 'instant'; ms: number; unit: TsUnit | 'text' };
 
 /* ---------- words ---------- */
@@ -95,10 +105,12 @@ export function excelSerial(v: number): Wall | null {
 }
 
 /* ---------- the general reader ---------- */
+const ALL: Given = { y: true, mo: true, d: true };
 interface Num { v: number; len: number; mark: '' | 'y' | 'mo' | 'd' | 'dd' }
 const KEEP = /[^\s,.\/\-_'’()（）、，:：;；t@]/i;
 
-export function parseDateTimeText(input: string, ref?: number | ParseOpts): ParsedText | null {
+/** A date written out (any order, any separators, 民國, Chinese numerals …), without words that count from today. */
+export function parseAbsoluteText(input: string, ref?: number | ParseOpts): ParsedText | null {
   const opts: ParseOpts = typeof ref === 'number' ? { year: ref } : ref || {};
   let s = normalizeWide(input).replace(/[–—−]/g, '-').replace(/\s+/g, ' ').trim();
   if (!s) return null;
@@ -109,16 +121,16 @@ export function parseDateTimeText(input: string, ref?: number | ParseOpts): Pars
   let m = /^(\d{4})(\d{2})(\d{2})(?:T?(\d{2})(\d{2})(\d{2})?)?\s*(Z|[+-]\d{2}:?\d{2})?$/i.exec(s);
   if (m) {
     const w = { y: +m[1], mo: +m[2], d: +m[3], h: +(m[4] || 0), mi: +(m[5] || 0), s: +(m[6] || 0) };
-    if (validWall(w)) return { kind: 'wall', wall: w, offset: parseOffset(m[7]), hasTime: !!m[4], how: m[4] ? '日期與時刻' : '日期' };
+    if (validWall(w)) return { kind: 'wall', wall: w, offset: parseOffset(m[7]), hasTime: !!m[4], how: m[4] ? '日期與時刻' : '日期', given: ALL };
   }
   if (/^[+-]?\d[\d,_]*(\.\d+)?$/.test(s)) {
     const ts = parseTimestamp(s);
     return ts ? { kind: 'instant', ms: ts.ms, unit: ts.unit } : null;
   }
   const wk = parseIsoWeek(s);
-  if (wk) return { kind: 'wall', wall: { ...wk, h: 0, mi: 0, s: 0 }, offset: null, hasTime: false, how: 'ISO 週' };
+  if (wk) return { kind: 'wall', wall: { ...wk, h: 0, mi: 0, s: 0 }, offset: null, hasTime: false, how: 'ISO 週', given: ALL };
   const od = parseOrdinal(s, opts.year ?? opts.today?.y);
-  if (od) return { kind: 'wall', wall: { ...od, h: 0, mi: 0, s: 0 }, offset: null, hasTime: false, how: '一年的第幾天' };
+  if (od) return { kind: 'wall', wall: { ...od, h: 0, mi: 0, s: 0 }, offset: null, hasTime: false, how: '一年的第幾天', given: ALL };
 
   s = s.toLowerCase();
   const take = (re: RegExp): RegExpExecArray | null => { const r = re.exec(s); if (r) s = s.slice(0, r.index) + ' ' + s.slice(r.index + r[0].length); return r; };
@@ -156,7 +168,7 @@ export function parseDateTimeText(input: string, ref?: number | ParseOpts): Pars
   s = s.replace(/[〇零一二兩两三四五六七八九十百千]+/g, (x) => String(cnNumber(x)));
   if (/第/.test(s)) {
     const o = parseOrdinal(s.replace(/\s+/g, ' ').trim(), opts.year ?? opts.today?.y);
-    if (o) return { kind: 'wall', wall: { ...o, h: 0, mi: 0, s: 0 }, offset: null, hasTime: false, how: '一年的第幾天' };
+    if (o) return { kind: 'wall', wall: { ...o, h: 0, mi: 0, s: 0 }, offset: null, hasTime: false, how: '一年的第幾天', given: ALL };
   }
 
   /* the time of day, wherever it is */
@@ -267,7 +279,7 @@ export function parseDateTimeText(input: string, ref?: number | ParseOpts): Pars
   // one lone part is a date only with a word that says so: 15號, 3月 下週 … (3月 alone is a span of 3 months)
   const parts = +(D.y != null) + +(D.mo != null) + +(D.d != null);
   const loneYear = parts === 1 && D.y != null && (D.yLen ?? 0) >= 3;
-  if (hasDate && parts < 2 && !relative && !loneYear && !(D.d != null && nums.some((n) => n.mark === 'dd'))) return null;
+  if (hasDate && parts < 2 && !relative && !loneYear && !opts.lone && !(D.d != null && nums.some((n) => n.mark === 'dd'))) return null;
 
   /* the time, with its part of day */
   let hm: { h: number; mi: number; s: number } | null = null, roll = 0;
@@ -279,13 +291,8 @@ export function parseDateTimeText(input: string, ref?: number | ParseOpts): Pars
 
   if (!hasDate && !relative) {
     if (!hm) return null;
-    // 晚上 12 點 on its own: the midnight that ends today
-    if (roll) {
-      if (!opts.today) return null;
-      const w = addDaysWall({ ...opts.today, ...hm }, roll);
-      return validWall(w) ? { kind: 'wall', wall: w, offset, hasTime: true, how: '日期與時刻' } : null;
-    }
-    return { kind: 'time', ...hm };
+    // 晚上 12 點 is the midnight that ends the day: roll says so
+    return { kind: 'time', ...hm, ...(roll ? { roll } : {}) };
   }
 
   /* the date: what was written, then what the words add */
@@ -347,12 +354,30 @@ export function parseDateTimeText(input: string, ref?: number | ParseOpts): Pars
   const wall = mk(base);
   if (!validWall(wall)) return null;
   const desc = [yHow, how].filter(Boolean).join(' · ') || (hm ? '日期與時刻' : '日期');
-  const out: ParsedText = { kind: 'wall', wall, offset, hasTime: !!hm, how: desc };
+  const out: ParsedText = { kind: 'wall', wall, offset, hasTime: !!hm, how: desc, given: { y: D.y != null, mo: D.mo != null || monthName != null, d: D.d != null } };
   let altW: Wall | null = null, altHow = '';
   if (alt) { altW = mk({ y: base.y, mo: alt.mo!, d: alt.d! }); altHow = [yHow, alt.how].filter(Boolean).join(' · '); }
   else if (yAlt != null) { altW = mk({ ...base, y: yAlt }); altHow = yAlt > 1911 ? '民國' : '西元'; }
   if (altW && validWall(altW) && JSON.stringify(altW) !== JSON.stringify(wall)) out.alt = { wall: altW, how: altHow };
   return out;
+}
+
+/* ---------- any text: written out, or counted with words (rules) ---------- */
+/** A moment in any writing. Words that count (明晚, 下個月底, 中秋, 3天後 …) are read as a rule from today or `now`; the rule comes back too. */
+export function parseDateTimeText(input: string, ref?: number | ParseOpts): ParsedText | null {
+  const opts: ParseOpts = typeof ref === 'number' ? { year: ref } : ref || {};
+  const r = parseRuleText(input, opts);
+  if (!r) return parseAbsoluteText(input, opts);
+  const a = r.main.abs;
+  if (a && !(a.kind === 'time' && a.roll)) return a;
+  const w = evalReading(r.main, opts);
+  if (!w) return null;
+  const altR = r.alts[0];
+  const alt = altR ? evalReading(altR, opts) : null;
+  return {
+    kind: 'wall', wall: w, offset: r.main.offset, hasTime: r.main.hasTime, how: r.main.how || readingName(r.main), rule: r.main.rule, relative: r.relative,
+    ...(alt && JSON.stringify(alt) !== JSON.stringify(w) ? { alt: { wall: alt, how: altR.how || readingName(altR) } } : {}),
+  };
 }
 
 /* ---------- two moments, or a moment and a length ---------- */
@@ -420,7 +445,33 @@ export function parseReading(k: string, text: string, ctx: ReadCtx): ReadBack {
     const d = parseOrdinal(head, ctx.cur.y) || parseOrdinal(`第${head.replace(/\D/g, '')}天`, ctx.cur.y);
     if (d && /\d/.test(head)) return wallOrNull(keep(d));
   }
-  const p = parseDateTimeText(t, { year: ctx.cur.y, today: partsTodayOf(ctx) });
+  if (k === 'lunar') {
+    // 丙午年 十月十七, 丙午年（馬）十月十七, 十月十七, 農曆十月十七: in the lunar year written, or the one the moment is in
+    let rest = t.replace(/^(農曆|农历|陰曆)\s*/, '');
+    const cur = lunarOf(ctx.cur);
+    let y = cur?.y ?? ctx.cur.y;
+    const g = /^([甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥])\s*年?\s*(?:[（(][^)）]*[)）])?\s*/.exec(rest);
+    if (g) {
+      rest = rest.slice(g[0].length);
+      for (let d = 0; d < 60; d++) { const a = y + (d % 2 ? -Math.ceil(d / 2) : d / 2); if (ganzhi(a) === g[1]) { y = a; break; } }
+    } else { const m = /^(\d{3,4})\s*年\s*/.exec(rest); if (m) { y = +m[1]; rest = rest.slice(m[0].length); } }
+    const r = parseDateTimeText(`農曆${y}年${rest}`, { year: ctx.cur.y, today: partsTodayOf(ctx) });
+    return r && r.kind === 'wall' ? wallOrNull(keep(r.wall)) : null;
+  }
+  if (k === 'term') {
+    // 冬至, 冬至 第 3 天: the nearest such term to the moment, and that many days into it
+    const head = t.split(/\s*[·•|]\s*/)[0];
+    const m = new RegExp(`^(${TERM_NAMES.join('|')})\\s*(?:第\\s*(\\d+)\\s*天)?$`).exec(head);
+    if (m) {
+      const kk = TERM_NAMES.indexOf(m[1]);
+      const at = utcMs(ctx.cur.y, ctx.cur.mo, ctx.cur.d);
+      let best: number | null = null;
+      for (const yy of [ctx.cur.y - 1, ctx.cur.y, ctx.cur.y + 1]) { const ms = termMoment(yy, kk); if (best == null || Math.abs(ms - at) < Math.abs(best - at)) best = ms; }
+      const w = partsInTz(best!, ctx.tz);
+      return wallOrNull(keep(addDaysWall({ y: w.y, mo: w.mo, d: w.d }, (m[2] ? +m[2] : 1) - 1)));
+    }
+  }
+  const p = parseDateTimeText(t, { year: ctx.cur.y, today: partsTodayOf(ctx), now: ctx.now, tz: ctx.tz });
   if (!p) return null;
   if (p.kind === 'instant') return { ms: p.ms };
   if (p.kind === 'time') return wallOrNull(validWall({ ...ctx.cur, h: p.h, mi: p.mi, s: p.s }) ? { ...ctx.cur, h: p.h, mi: p.mi, s: p.s } : null);

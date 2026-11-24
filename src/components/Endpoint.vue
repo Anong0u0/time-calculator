@@ -7,16 +7,17 @@ import SegmentedDateTime from './SegmentedDateTime.vue';
 import TzPicker from './TzPicker.vue';
 import Popover from './Popover.vue';
 import CopyBtn from './CopyBtn.vue';
+import ChipRow from './ChipRow.vue';
 import {
   S, type End, now, wallOf, msOf, tzOf, hasEnd, startNote, endNote, commit, setLive, setTz, clearEnd, freezeLink, linkFromMeasured,
-  START_PRESETS, startPresetWall, startPresetActive, setWall, PERIOD_NAMES, periodBounds, periodLabel, applyEndPreset, pulse, bump, type PeriodKey,
-  isLive, isDerived, linkTarget, linkSentence, followText, other,
+  pulse, bump, isLive, isDerived, isLinked, linkTarget, linkSentence, followText, other, setFollow,
 } from '../state/store';
 import { offsetAt, fmtOffset, fmtDT, fmtDate, fmtTime, isoOffset, clamp } from '../core/time';
 import { zoneName } from '../core/zones';
 import { relative } from '../core/format';
 import { nfMax } from '../core/format';
 import { useSize, remPx } from '../composables/size';
+import { textToEnd } from '../state/command';
 
 const props = defineProps<{ which: End; compact?: boolean }>();
 const isStart = computed(() => props.which === 'start');
@@ -24,13 +25,15 @@ const SUBJ = computed(() => (isStart.value ? '開始' : '結束'));
 const OTHER = computed(() => (isStart.value ? '結束' : '開始'));
 const live = computed(() => isLive(props.which));
 const derived = computed(() => isDerived(props.which));
+/** The rule this end was set by (下個月底, 中秋 …), if any. */
+const rule = computed(() => S.rules[props.which]);
 /** The link tag sits on the end the span computes, or would compute. */
-const linkTag = computed(() => hasEnd.value && (derived.value || (!S.link && linkTarget() === props.which)));
+const linkTag = computed(() => !rule.value && hasEnd.value && (isLinked(props.which) || (!S.link && linkTarget() === props.which)));
 const w = computed(() => wallOf(props.which));
 const ms = computed(() => msOf(props.which));
 const tz = computed(() => tzOf(props.which));
 const has = computed(() => isStart.value || hasEnd.value);
-const label = computed(() => (isStart.value ? '開始' : S.endPreset ? PERIOD_NAMES[S.endPreset] : '結束'));
+const label = computed(() => rule.value?.name || SUBJ.value);
 const note = computed(() => (isStart.value ? startNote.value : endNote.value));
 const offTxt = computed(() => fmtOffset(offsetAt(ms.value ?? now.value, tz.value), { compact: true }));
 const rel = computed(() => (ms.value == null ? '' : live.value ? '就是現在' : relative(ms.value, now.value)));
@@ -56,32 +59,20 @@ function toggleLink() {
   else commit(linkFromMeasured, { label: '連動', say: () => `${linkSentence()}，${followText()}` });
 }
 function clear() { commit(() => clearEnd(), { label: '清除結束', say: '已清除結束' }); }
-function startPreset(k: (typeof START_PRESETS)[number][0], name: string) {
-  commit(() => setWall('start', startPresetWall(k)), { label: `開始：${name}`, say: `開始：${name}` });
-  bump('start'); preOpen.value = false;
+/** Keep following the rule, or stay at the moment it gave. */
+function toggleFollow() {
+  const r = rule.value;
+  if (!r) return;
+  const n = SUBJ.value;
+  if (r.follow) commit(() => setFollow(props.which, false), { label: `${n}固定`, say: () => `${n}固定在 ${fmtDT(wallOf(props.which)!)}，不再跟著「${r.name}」` });
+  else commit(() => setFollow(props.which, true), { label: `${n}跟著${r.name}`, say: () => `${n}跟著「${r.name}」，時間過去或另一端改了會重新算` });
+  bump(props.which);
 }
-function nowPreset() {
-  if (!live.value) commit(() => setLive(props.which, true), { label: `${SUBJ.value}設為現在`, say: `${SUBJ.value}跟著現在走` });
-  bump(props.which); preOpen.value = false;
-}
-const END_KEYS: PeriodKey[] = ['day', 'week', 'month', 'newyear', 'lny'];
-function endPreset(k: PeriodKey) {
-  commit(() => applyEndPreset(k), { label: `結束：${PERIOD_NAMES[k]}`, say: () => `結束：${periodLabel(k)} ${fmtDT(wallOf('end')!)}` });
-  bump('end'); preOpen.value = false;
-}
-/** How far the start is through each period: the chip fills like a progress bar. */
-function progress(k: PeriodKey): number | null {
-  const b = periodBounds(k);
-  if (!b || b[0] == null) return null;
-  const f = (now.value - b[0]) / (b[1] - b[0]);
-  return f >= 0 && f <= 1 ? f : null;
-}
-function endChipLabel(k: PeriodKey) { return k === 'day' || k === 'week' || k === 'month' ? `${periodLabel(k)}結束` : PERIOD_NAMES[k]; }
-function endChipTip(k: PeriodKey) {
-  const b = periodBounds(k); const p = progress(k);
-  if (!b) return '這個範圍目前無法計算';
-  return `結束設為${endChipLabel(k)}${p != null ? `。${k === 'lny' ? '距上次春節' : '這段期間'}已過 ${nfMax(p * 100, 1)}%` : ''}`;
-}
+const ruleTip = computed(() => {
+  const r = rule.value;
+  if (!r) return '';
+  return r.follow ? `${SUBJ.value}跟著「${r.name}」：時間過去、另一端改了都會重新算。點一下固定在目前的時刻` : `${SUBJ.value}用「${r.name}」設定，固定在那時算出的時刻。點一下改成一直跟著這個規則`;
+});
 
 const root = ref<HTMLElement | null>(null);
 const { w: rootW } = useSize(root);
@@ -100,12 +91,28 @@ const linkTip = computed(() => (S.link
   : `${SUBJ.value}固定在這個時刻。點一下改成連動：保持目前的間隔，${SUBJ.value}跟著${OTHER.value}移動`));
 const linkLabel = computed(() => (S.link ? linkSentence().replace(/^(開始|結束) /, '') : '固定'));
 const liveTip = computed(() => (live.value ? `${SUBJ.value}跟著現在走。點一下固定在這一秒` : `點一下讓${SUBJ.value}變成現在，並跟著時間走`));
-void clamp;
+/* ---------- drop a date (text from anywhere) onto this end ---------- */
+const dropping = ref(false);
+function dragOver(e: DragEvent) {
+  if (!e.dataTransfer || ![...e.dataTransfer.types].includes('text/plain')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  dropping.value = true;
+}
+function drop(e: DragEvent) {
+  dropping.value = false;
+  const t = e.dataTransfer?.getData('text/plain');
+  if (!t) return;
+  e.preventDefault();
+  if (textToEnd(props.which, t)) bump(props.which);
+}
+void clamp; void nfMax; void now; void derived; void isDerived; void msOf;
 </script>
 
 <template>
-  <section ref="root" class="panel ep" :class="[which, { compact, flash: flashing, active: S.active === which, none: !has }]" :aria-label="label"
-    @focusin="S.active = which" @pointerdown="S.active = which" @animationend="flashing = false">
+  <section ref="root" class="panel ep" :class="[which, { compact, flash: flashing, active: S.active === which, none: !has, dropping }]" :aria-label="label" :data-drop-end="which"
+    @focusin="S.active = which" @pointerdown="S.active = which" @animationend="flashing = false"
+    @dragover="dragOver" @dragleave="dropping = false" @drop="drop">
     <header class="ep-head">
       <i class="node" :class="{ end: !isStart }" aria-hidden="true" />
       <h2>{{ label }}</h2>
@@ -113,6 +120,9 @@ void clamp;
         <i class="dot" aria-hidden="true" /><span>{{ live ? '即時' : '現在' }}</span>
       </button>
       <span v-if="!isStart && S.endSample" class="tag sample" v-tip="'第一次開啟時放的範例：距離跨年。改掉它或按 × 清除就會消失'">範例</span>
+      <button v-if="rule" type="button" class="tag link" :aria-pressed="rule.follow" :aria-label="rule.follow ? `${SUBJ}跟著規則：${rule.name}` : `${SUBJ}固定，點一下改成跟著規則`" v-tip="ruleTip" @click="toggleFollow">
+        <Icon :name="rule.follow ? 'link' : 'pin'" /><span>{{ rule.follow ? '跟著' : '固定' }}</span>
+      </button>
       <button v-if="linkTag" type="button" class="tag link" :aria-pressed="derived" :aria-label="derived ? `連動：${linkSentence()}` : `${SUBJ}固定，點一下改成連動`" v-tip="linkTip" @click="toggleLink">
         <Icon :name="derived ? 'link' : 'pin'" /><span>{{ linkLabel }}</span>
       </button>
@@ -138,26 +148,12 @@ void clamp;
       <span v-if="noteText" class="tag warn" v-tip="noteText">夏令時間</span>
     </div>
 
-    <div v-if="!compact" class="ep-pre" role="group" :aria-label="isStart ? '開始的快捷' : '結束的快捷'">
-      <button type="button" class="chip" :aria-pressed="live" v-tip="`${SUBJ}設為現在，跟著時間走`" @click="nowPreset">現在</button>
-      <template v-if="isStart">
-        <button v-for="[k, name, tip] in START_PRESETS" :key="k" type="button" class="chip" :aria-pressed="startPresetActive(k)" v-tip="`開始設為${tip}`" @click="startPreset(k, name)">{{ name }}</button>
-      </template>
-      <template v-else>
-        <button v-for="k in END_KEYS" :key="k" type="button" class="chip fillchip" :aria-pressed="S.endPreset === k" :style="{ '--p': progress(k) ?? 0 }" v-tip="endChipTip(k)" @click="endPreset(k)">{{ endChipLabel(k) }}</button>
-      </template>
-    </div>
+    <ChipRow v-if="!compact" class="ep-pre" :row="which" :fill="!isStart" :aria-label="isStart ? '開始的快捷' : '結束的快捷'" />
 
     <TzPicker :open="tzOpen" :anchor="tzBtn" :title="isStart ? '開始的時區' : '結束的時區'" :current="tz" @close="tzOpen = false" @pick="pickTz" />
     <Popover v-if="compact" :open="preOpen" :anchor="preBtn" :label="isStart ? '開始的快捷' : '結束的快捷'" width="20rem" align="end" @close="preOpen = false">
-      <div class="pre-pop">
-        <button type="button" class="chip" :aria-pressed="live" @click="nowPreset">現在</button>
-        <template v-if="isStart">
-          <button v-for="[k, name] in START_PRESETS" :key="k" type="button" class="chip" :aria-pressed="startPresetActive(k)" @click="startPreset(k, name)">{{ name }}</button>
-        </template>
-        <template v-else>
-          <button v-for="k in END_KEYS" :key="k" type="button" class="chip fillchip" :aria-pressed="S.endPreset === k" :style="{ '--p': progress(k) ?? 0 }" @click="endPreset(k)">{{ endChipLabel(k) }}</button>
-        </template>
+      <div class="pre-pop" @click="($event.target as HTMLElement).closest('[data-ci]') && (preOpen = false)">
+        <ChipRow :row="which" size="lg" :fill="!isStart" />
       </div>
     </Popover>
   </section>
@@ -166,6 +162,7 @@ void clamp;
 <style scoped>
 .ep { padding: .9rem 1.1rem 1rem; gap: .55rem; justify-content: flex-start; transition: border-color .2s, box-shadow .2s; }
 .ep.active { border-color: var(--accent-line); }
+.ep.dropping { outline: 2px dashed var(--accent); outline-offset: -4px; border-radius: var(--r-md); background: var(--accent-wash); }
 .ep-head { display: flex; align-items: center; gap: .5rem; min-height: 2.1rem; min-width: 0; container-type: inline-size; }
 .ep-head .node { font-size: 1.05rem; }
 .ep-head h2 { font-size: 1.02rem; font-weight: 650; white-space: nowrap; }
@@ -219,11 +216,8 @@ button.tag:hover { color: var(--accent); border-color: var(--accent-line); backg
 .tzb-c { width: .85em !important; height: .85em !important; }
 .rel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rel.hint { white-space: normal; line-height: 1.35; font-size: max(var(--floor), .84rem); }
-.ep-pre { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: auto; padding-top: .15rem; }
-.ep-pre .chip, .pre-pop .chip { height: 1.95rem; padding: 0 .65rem; font-size: max(var(--floor), .84rem); }
-.fillchip { background-image: linear-gradient(to right, var(--accent-wash-2) calc(var(--p) * 100%), transparent calc(var(--p) * 100%)); }
-.pre-pop { display: flex; flex-wrap: wrap; gap: .4rem; padding: .8rem; }
-.pre-pop .chip { height: 2.4rem; padding: 0 .9rem; font-size: .9rem; }
+.ep-pre { margin-top: auto; padding-top: .15rem; }
+.pre-pop { padding: .8rem; }
 .ep.none .ep-time { opacity: .9; }
 
 /* compact: phones and short screens */

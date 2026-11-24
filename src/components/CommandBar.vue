@@ -22,9 +22,9 @@ const EXAMPLES: [string, string][] = [
   ['3天前', '從現在往前或往後算'],
   ['2000/1/1 到 現在', '一次設定開始和結束'],
   ['東京 15:00', '某個城市的時間'],
-  ['W12', '移到第 12 週的同一天'],
   ['47m × 16', '時長加減乘除'],
-  ['跨年', '快捷：跨年、春節、月底、週末'],
+  ['明年中秋晚上8點', '詞可以自由組合：明晚、下個月底、冬至那一刻…'],
+  ['開始那個月的月底', '從另一端算：結束前最後一個週五'],
 ];
 const items = computed<Suggestion[]>(() => (text.value.trim() ? interpret(text.value) : []));
 const actionable = computed(() => items.value.filter((s) => s.apply));
@@ -62,7 +62,7 @@ watch(() => ui.commandReq, () => {
   nextTick(() => { input.value?.focus(); if (!ui.commandText || ui.commandSelect) input.value?.select(); });
 });
 
-const KIND_ICON: Record<Suggestion['kind'], string> = { start: '', end: '', span: 'span', zone: 'globe', info: 'info', calc: 'calc', range: 'span' };
+const KIND_ICON: Record<Suggestion['kind'], string> = { start: '', end: '', span: 'span', zone: 'globe', info: 'info', calc: 'calc', range: 'span', chip: 'bolt' };
 const placeholder = computed(() => (props.compact ? '輸入日期、+30天、東京 15:00…' : '輸入任何東西：日期、時間戳、+30天、東京 15:00、W12、47m × 16'));
 </script>
 

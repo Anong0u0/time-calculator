@@ -1,9 +1,11 @@
 <script setup lang="ts">
-/* The same gap in every unit. Each value copies on click. */
-import { computed } from 'vue';
+/* The same gap in every unit. Each value copies on click; the pen (or a double click) types a new value right there,
+   and the span becomes that many of the unit (90 天, 20 工作日, 1.5 小時). */
+import { computed, ref, nextTick } from 'vue';
 import CopyBtn from './CopyBtn.vue';
-import { S, startMs, endMs, gapSec } from '../state/store';
-import { partsInTz, dayNum, countWeekdays } from '../core/time';
+import Icon from './Icon.vue';
+import { S, startMs, endMs, gapSec, commit, setLink, checkSpan, linkTarget, linkSentence, followText, bump, toast, undo } from '../state/store';
+import { partsInTz, dayNum, countWeekdays, interpretSpanText, fmtSpan } from '../core/time';
 import { nf, nfMax, plainNum } from '../core/format';
 
 defineProps<{ cols?: number }>();
@@ -26,13 +28,50 @@ const cells = computed(() => {
     { k: KEYS[5], v: (wk && neg ? '−' : '') + nf(wk), copy: (wk && neg ? '-' : '') + String(wk), tip: `週一到週五（僅扣週末，不含國定假日）。週末 ${nf(n1 - n0 - wk)} 天` },
   ];
 });
+const UNIT_WORD: Record<string, string> = { 週: '週', 天: '天', 小時: '小時', 分鐘: '分', 秒: '秒', 工作日: '工作日' };
+const editing = ref<string | null>(null);
+const text = ref('');
+const input = ref<HTMLInputElement | null>(null);
+const setInput = (el: unknown) => { if (el) input.value = el as HTMLInputElement; };
+function edit(k: string, v: string) {
+  if (endMs.value == null) return;
+  editing.value = k;
+  text.value = v.replace(/^-/, '−');
+  nextTick(() => { input.value?.focus(); input.value?.select(); });
+}
+let cancelled = false;
+function done() {
+  const k = editing.value;
+  editing.value = null;
+  if (!k || cancelled) { cancelled = false; return; }
+  let t = text.value.trim().replace(/^−/, '-');
+  if (!t) return;
+  // a bare number is that many of this unit
+  if (/^[+-]?\d+(\.\d+)?$/.test(t)) t = `${/^-/.test(t) ? '-' : '+'}${t.replace(/^[+-]/, '')}${UNIT_WORD[k]}`;
+  const r = interpretSpanText(t);
+  if (r.kind !== 'span') { toast('看不懂這個長度，試試 90、1.5 或 3天12小時'); return; }
+  const to = linkTarget();
+  const c = checkSpan(r.span, to);
+  if (!c.ok) { toast(c.err); return; }
+  const ok = commit(() => setLink(r.span, to), { label: `間隔 ${fmtSpan(r.span)}`, say: () => `${linkSentence()}，${followText()}` });
+  if (ok) bump(to);
+}
+function key(e: KeyboardEvent) {
+  if (e.key === 'Enter') { e.preventDefault(); input.value?.blur(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelled = true; input.value?.blur(); }
+}
+void undo;
 </script>
 
 <template>
   <dl class="units" :style="{ '--cols': cols || 6 }" aria-label="換算成各種單位">
     <div v-for="c in cells" :key="c.k" class="u">
       <dt>{{ c.k }}</dt>
-      <dd><CopyBtn class="u-v mono" :text="c.copy" :k="`u-${c.k}`" :label="c.k" :tip="c.copy ? `${c.tip}。點一下複製 ${c.copy}` : c.tip" :disabled="!c.copy">{{ c.v }}</CopyBtn></dd>
+      <dd v-if="editing === c.k"><input :ref="setInput" v-model="text" class="u-in mono" :aria-label="`間隔改成多少${c.k}`" spellcheck="false" autocomplete="off" @keydown="key" @blur="done" /></dd>
+      <dd v-else @dblclick="c.copy && edit(c.k, c.copy)">
+        <CopyBtn class="u-v mono" :text="c.copy" :k="`u-${c.k}`" :label="c.k" :tip="c.copy ? `${c.tip}。點一下複製 ${c.copy}；雙擊或筆可以改寫` : c.tip" :disabled="!c.copy">{{ c.v }}</CopyBtn>
+        <button v-if="c.copy" type="button" class="u-ed" :aria-label="`改寫成多少${c.k}`" v-tip="`改寫：間隔變成這麼多${c.k}`" @click="edit(c.k, c.copy)"><Icon name="edit" /></button>
+      </dd>
     </div>
   </dl>
 </template>
@@ -42,5 +81,12 @@ const cells = computed(() => {
 .u { display: flex; flex-direction: column; justify-content: center; gap: .1rem; padding: .45rem .65rem .5rem; background: var(--surface); min-width: 0; }
 .u dt { font-size: var(--fs-xs); color: var(--ink-3); font-weight: 600; letter-spacing: .02em; }
 .u dd { min-width: 0; display: flex; }
-.u-v { font-size: max(var(--floor), .86rem); font-weight: 500; color: var(--ink); gap: .35rem; margin: -.12rem -.35rem; }
+.u-v { font-size: max(var(--floor), .86rem); font-weight: 500; color: var(--ink); gap: .35rem; margin: -.12rem -.35rem; min-width: 0; }
+.u dd { align-items: center; gap: .1rem; }
+.u-ed { flex: none; width: 1.4rem; height: 1.4rem; display: grid; place-items: center; border-radius: .4rem; color: var(--ink-4); opacity: 0; transition: opacity .15s; }
+.u:hover .u-ed, .u-ed:focus-visible { opacity: 1; }
+.u-ed:hover { color: var(--accent); background: var(--accent-wash); }
+.u-ed .ic { width: .85em; height: .85em; }
+.u-in { width: 100%; min-width: 0; height: 1.6rem; padding: 0 .35rem; margin: -.1rem -.3rem; border-radius: .4rem; border: 1.5px solid var(--accent); background: var(--surface-2); color: var(--ink); font-size: .86rem; }
+@media (pointer: coarse) { .u-ed { opacity: 1; width: 1.9rem; height: 1.9rem; } }
 </style>

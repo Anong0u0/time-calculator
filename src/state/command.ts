@@ -10,13 +10,15 @@ import { nfMax, durWords } from '../core/format';
 import { zoneInText, searchZones, zoneName, sameZone } from '../core/zones';
 import {
   S, type End, other, wallOf, tzOf, startWall, commit, setWall, setInstant, setLink, checkSpan, setLive, isLive, linkTarget, linkSentence,
-  setStartTz, setEndTz, addZoneRow, zoneRows, applyEndPreset, periodBounds, PERIOD_NAMES, type PeriodKey,
+  setStartTz, setEndTz, addZoneRow, zoneRows, applyRule, runRule, toast, type ChipRow,
 } from './store';
+import { type Rule, encodeRule, ruleReads, ruleUsesNow } from '../core/rule';
+import { wordRule } from '../core/vocab';
 import { openDuration } from './ui';
 
 export interface Suggestion {
   id: string;
-  kind: End | 'span' | 'zone' | 'info' | 'calc' | 'range';
+  kind: End | 'span' | 'zone' | 'info' | 'calc' | 'range' | 'chip';
   title: string;
   detail?: string;
   apply?: () => void;
@@ -27,8 +29,9 @@ const whenText = (w: Wall) => `${fmtDT(w)}（${WD[wdOf(w)]}）`;
 
 /** Today on this end's clock, and the year a date without one falls in: what 明天, 下週五 and 12/25 are read against. */
 export function parseOptsFor(which: End): ParseOpts {
-  const t = partsInTz(Date.now(), tzOf(which));
-  return { year: startWall.value.y, today: { y: t.y, mo: t.mo, d: t.d } };
+  const n = Date.now();
+  const t = partsInTz(n, tzOf(which));
+  return { year: startWall.value.y, today: { y: t.y, mo: t.mo, d: t.d }, now: n, tz: tzOf(which) };
 }
 /** A time typed into a row: 15:00, 下午3點, 3pm, or a whole date and time. `base` is that row's current moment. */
 function clockOf(raw: string, base: Wall): Wall | null {
@@ -93,8 +96,44 @@ function wallSuggestions(w: Wall, how: string, out: Suggestion[], idPre = 'set')
     });
   }
 }
+/** A rule read from words (下個月底, 明晚, 中秋 …): set either end by it, let an end keep following it, or keep it as a shortcut. */
+function ruleSuggestions(rule: Rule, name: string, out: Suggestion[]) {
+  // an end cannot be counted from itself: 開始那個月的月底 is for the end
+  const ends = endsOrder().filter((w) => !ruleReads(rule, w, wordRule).has(w));
+  if (!ends.length) return;
+  for (const which of ends) {
+    const r = runRule(rule, which);
+    if (!r.ok) continue;
+    const w = partsInTz(r.ms, tzOf(which));
+    out.push({
+      id: `rule-${which}`, kind: which, title: `設為${SUBJ[which]}`, detail: `${whenText(w)} · ${name}`,
+      apply: () => commit(() => applyRule(which, rule, { name, follow: false }), { label: `${SUBJ[which]}：${name}`, say: `${SUBJ[which]}：${fmtDT(w)}（${name}）` }),
+    });
+  }
+  const which = ends[0];
+  const keeps = ruleUsesNow(rule) || ruleReads(rule, which, wordRule).size > 0;
+  if (keeps && runRule(rule, which).ok) {
+    out.push({
+      id: 'rule-follow', kind: which, title: `${SUBJ[which]}跟著「${name}」`, detail: `隨時重新計算${ruleUsesNow(rule) ? '：時間過去了，' + SUBJ[which] + '也跟著往後' : ''}`,
+      apply: () => commit(() => applyRule(which, rule, { name, follow: true }), { label: `${SUBJ[which]}跟著${name}`, say: `${SUBJ[which]}跟著「${name}」` }),
+    });
+  }
+  const row: ChipRow = which;
+  const code = encodeRule(rule);
+  if (!S.chips[row].some((c) => c.code === code)) {
+    out.push({
+      id: 'rule-chip', kind: 'chip', title: `把「${name}」加到${SUBJ[which]}的快捷`, detail: '之後點一下就能套用',
+      apply: () => commit(() => { S.chips[row].push({ code, ...(name ? { name } : {}) }); }, { label: `新增快捷：${name}`, say: `已加到${SUBJ[which]}的快捷：${name}` }),
+    });
+  }
+}
 /** Suggestions for one reading of a date text (and its other reading, when day and month could swap). */
-function parsedSuggestions(p: ParsedText, out: Suggestion[]) {
+function parsedSuggestions(p: ParsedText, out: Suggestion[], text = '') {
+  if (p.kind === 'wall' && p.rule && p.relative) {
+    ruleSuggestions(p.rule, text.trim() || p.how, out);
+    if (p.alt) wallSuggestions(p.alt.wall, `另一種讀法：${p.alt.how}`, out, 'alt');
+    return;
+  }
   if (p.kind === 'instant') {
     const how = { s: '秒級時間戳', ms: '毫秒級時間戳', us: '微秒級時間戳', ns: '奈秒級時間戳', text: '含時區的時間' }[p.unit];
     instantSuggestions(p.ms, how, out);
@@ -133,15 +172,6 @@ export function interpret(input: string): Suggestion[] {
         apply: () => commit(() => setLive(which, true), { label: `${SUBJ[which]}設為現在`, say: `${SUBJ[which]}跟著現在走` }) });
     }
     return out;
-  }
-  const preset = ({ 跨年: 'newyear', 新年: 'newyear', 元旦: 'newyear', 春節: 'lny', 過年: 'lny', 農曆新年: 'lny', 月底: 'month', 本月底: 'month', 週末: 'week', 本週末: 'week', 今晚: 'day', 今天結束: 'day' } as Record<string, PeriodKey>)[text];
-  if (preset) {
-    const b = periodBounds(preset);
-    if (b) {
-      const w = partsInTz(b[1], S.endTz);
-      out.push({ id: 'preset', kind: 'end', title: `結束設為${PERIOD_NAMES[preset]}`, detail: whenText(w), apply: () => commit(() => applyEndPreset(preset), { label: `結束：${PERIOD_NAMES[preset]}`, say: `結束：${fmtDT(w)}` }) });
-      return out;
-    }
   }
 
   // week: W12, 2027-W02, 第12週
@@ -191,7 +221,7 @@ export function interpret(input: string): Suggestion[] {
   const opts = parseOptsFor(S.active);
   const smallNum = /^\d{1,6}(\.\d+)?$/.test(text);
   const p = signed || smallNum ? null : parseDateTimeText(text, opts);
-  if (p) { parsedSuggestions(p, out); return out; }
+  if (p) { parsedSuggestions(p, out, text); return out; }
 
   // two moments: "2000/1/1 到 2026/1/1", "9:00 ~ 17:30", "2000/1/1 到 現在"
   const rg = signed ? null : splitRange(text);
@@ -285,6 +315,22 @@ export function interpret(input: string): Suggestion[] {
   }
   if (r.kind === 'error') out.push({ id: 'err', kind: 'info', title: '看不懂這段文字', detail: '試試 2000/1/1 20:34、明天下午3點、1795380034、+30天、1/1 到 3/1、東京 15:00 或 47m × 16' });
   return out;
+}
+
+/** Text dropped (or handed) onto one end: read it for that end and put the end there. */
+export function textToEnd(which: End, raw: string): boolean {
+  const text = normalizeWide(raw).replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!text) return false;
+  const n = SUBJ[which];
+  if (NOW_RE.test(text)) return commit(() => setLive(which, true), { label: `${n}設為現在`, say: `${n}跟著現在走` });
+  const p = parseDateTimeText(text, parseOptsFor(which));
+  if (!p) { toast(`看不懂「${text.slice(0, 24)}」`); return false; }
+  const say = () => `${n}：${fmtDT(wallOf(which)!)}`;
+  if (p.kind === 'instant') return commit(() => setInstant(which, p.ms), { label: `設定${n}`, say });
+  if (p.kind === 'time') { const base = wallOf(which) || startWall.value; return commit(() => setWall(which, { ...base, h: p.h, mi: p.mi, s: p.s }), { label: `設定${n}`, say }); }
+  if (p.rule && p.relative) return commit(() => applyRule(which, p.rule!, { name: text, follow: false }), { label: `${n}：${text}`, say });
+  if (p.offset != null) return commit(() => setInstant(which, wallKey(p.wall) - p.offset!), { label: `設定${n}`, say });
+  return commit(() => setWall(which, p.wall), { label: `設定${n}`, say });
 }
 
 function zoneSuggestions(zid: string, out: Suggestion[]) {

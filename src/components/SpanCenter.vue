@@ -7,12 +7,14 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Icon from './Icon.vue';
 import Popover from './Popover.vue';
 import DurationCalc from './DurationCalc.vue';
+import ChipRow from './ChipRow.vue';
 import {
   S, now, startMs, endMs, hasEnd, calGap, gapSec, linkErr, commit, setLink, checkSpan, swapEnds, historyMark, rollback, toast, undo,
-  PERIOD_NAMES, pulse, bump, wallOf, presetProgress, linkTarget, linkSentence, followText, negExpr, setWall, setInstant, tzOf,
+  pulse, bump, wallOf, presetProgress, linkTarget, linkSentence, followText, negExpr, setWall, setInstant, tzOf, type Chip, chipRule,
 } from '../state/store';
+import { spanOfRule } from '../core/rule';
 import { parseDateTimeText } from '../core/parse';
-import { parseOptsFor } from '../state/command';
+import { parseOptsFor, textToEnd } from '../state/command';
 import { type Span, type SpanInput, interpretSpanText, parseSpan, fmtSpan, pad, partsInTz, WD, wdOf, fmtDT, fmtClock, clamp, wallKey, DAY, SEC } from '../core/time';
 import { spanTokens, nfMax, durWords } from '../core/format';
 import { ui, openDuration } from '../state/ui';
@@ -210,6 +212,23 @@ function onMove(e: PointerEvent) {
   const sp = bumpSpan(scrub.base, scrub.k, steps);
   if (checkSpan(sp).ok) commit(() => setLink(sp), { key: `scrub-${session}`, hold: true, label: `間隔 ${fmtSpan(sp)}` });
 }
+/** The wheel over a number steps it, like dragging it one notch. */
+let wheelAcc = 0, wheelSession = 0, wheelAt = 0;
+function onWheel(e: WheelEvent) {
+  const sp = heroSpan.value;
+  const el = sp ? numAt(e.clientX) : null;
+  if (!sp || !el?.dataset.k) return;
+  e.preventDefault();
+  const t = Date.now();
+  if (t - wheelAt > 1200) wheelSession++;
+  wheelAt = t;
+  wheelAcc += e.deltaY;
+  if (Math.abs(wheelAcc) < 40) return;
+  const n = (wheelAcc < 0 ? 1 : -1) * (e.shiftKey ? 10 : 1);
+  wheelAcc = 0;
+  const next = bumpSpan(sp, el.dataset.k, n);
+  if (checkSpan(next).ok) commit(() => setLink(next), { key: `wheel-${wheelSession}`, hold: true, label: `間隔 ${fmtSpan(next)}` });
+}
 function onUp(e: PointerEvent) {
   if (!scrub || e.pointerId !== scrub.id) return;
   const s = scrub;
@@ -218,25 +237,18 @@ function onUp(e: PointerEvent) {
   if (s.steps && S.link) { exprNote.value = null; toast(`${linkSentence()}，${followText()}`, undo); }
 }
 
-/* ---------- quick spans ---------- */
-const QUICK = computed(() => (props.compact ? ['+1天', '+7天', '+30天', '+3個月', '+1年'] : ['+1天', '+7天', '+30天', '+3個月', '+6個月', '+1年']).map((t) => ({ t, canon: fmtSpan(parseSpan(t)) })));
+/* ---------- quick spans: a row of shortcuts like the ends have ---------- */
 const preview = ref<string | null>(null);
-function quick(t: string) {
-  const sp = parseSpan(t)!;
-  if (editing.value) { text.value = fmtSpan(sp); onInput(); return; }
-  const c = checkSpan(sp);
-  if (!c.ok) { toast(c.err); return; }
+/** While typing, a span shortcut fills the box instead of applying. */
+function pickQuick(c: Chip): boolean {
   preview.value = null; exprNote.value = null;
-  const to = linkTarget();
-  commit(() => setLink(sp, to), { label: `間隔 ${fmtSpan(sp)}`, say: () => `${linkSentence(to, fmtSpan(sp))}：${fmtDT(wallOf(to)!)}` });
-  bump(to);
+  if (!editing.value) return false;
+  const r = chipRule(c);
+  const sp = r ? spanOfRule(r, 'end') : null;
+  if (sp) { text.value = fmtSpan(sp); onInput(); }
+  return true;
 }
-function hoverQuick(t: string | null, e?: PointerEvent) {
-  if (!t) { preview.value = null; return; }
-  if (e && e.pointerType !== 'mouse') return;
-  const c = checkSpan(parseSpan(t)!);
-  preview.value = c.ok ? `${fmtSpan(parseSpan(t))} → ${whenFull(c.w)}` : c.err;
-}
+void parseSpan; void setLink;
 const bizShown = computed(() => !!S.link && (S.link.span.d > 0 || S.link.span.biz) && !S.link.span.y && !S.link.span.mo && !S.link.span.w);
 function toggleBiz() {
   if (!S.link) return;
@@ -245,6 +257,23 @@ function toggleBiz() {
   if (!c.ok) { toast(c.err); return; }
   if (editing.value) { text.value = fmtSpan(sp); onInput(); return; }
   commit(() => setLink(sp), { label: sp.biz ? '只算工作日' : '改回日曆天', say: () => (sp.biz ? `只算週一到週五：${fmtDT(wallOf(S.linkTo)!)}` : `改回日曆天：${fmtDT(wallOf(S.linkTo)!)}`) });
+}
+/* a length or a date dropped on the span: the span (or the end it computes) goes there */
+const dropping = ref(false);
+function dragOver(e: DragEvent) {
+  if (!e.dataTransfer || ![...e.dataTransfer.types].includes('text/plain')) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; dropping.value = true;
+}
+function dropText(e: DragEvent) {
+  dropping.value = false;
+  const t = e.dataTransfer?.getData('text/plain')?.trim();
+  if (!t) return;
+  e.preventDefault();
+  const r = interpretSpanText(t);
+  if (r.kind === 'span') {
+    const to = linkTarget();
+    if (commit(() => setLink(r.span, to), { label: `間隔 ${fmtSpan(r.span)}`, say: () => `${linkSentence()}，${followText()}` })) bump(to);
+  } else if (textToEnd(linkTarget(), t)) bump(linkTarget());
 }
 function swap() { commit(swapEnds, { label: '交換開始與結束', say: '已交換開始與結束' }); bump('start'); bump('end'); }
 
@@ -262,7 +291,6 @@ function left(ms: number) {
   const d = Math.floor(t / 86400), r = t % 86400;
   return `${d ? `${d}天 ` : ''}${pad(Math.floor(r / 3600))}:${pad(Math.floor((r % 3600) / 60))}:${pad(r % 60)}`;
 }
-const PERIOD_PAST: Record<string, string> = { day: '今天', week: '本週', month: '本月', newyear: '今年', lny: '距上次春節' };
 const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() => {
   const p = parsed.value;
   if (editing.value && p) {
@@ -295,14 +323,14 @@ const status = computed<{ segs: Seg[]; tone: '' | 'err' | 'soft' | 'pre' }>(() =
     if (cal) return { segs: [{ t: `${linkSentence()} · 實際 ` }, { t: left(Math.abs(eMs - sMs)), b: true }], tone: '' };
     return { segs: [{ t: `${linkSentence()}，${followText()}` }], tone: '' };
   }
-  const endName = S.endPreset ? PERIOD_NAMES[S.endPreset] : '結束';
+  const endName = S.rules.end?.name || '結束';
   if (S.live && S.endLive) return { segs: [{ t: '開始和結束都是現在 · 把其中一端改成別的時刻' }], tone: 'soft' };
   if (S.endLive) {
     if (sMs > n) return { segs: [{ t: '結束是現在 · 開始還有 ' }, { t: left(sMs - n), b: true }], tone: '' };
     return { segs: [{ t: '從 ' }, { t: whenShort(sMs, S.startTz), b: true }, { t: ' 到現在' }], tone: '' };
   }
   if (S.live) {
-    if (presetProgress.value != null) return { segs: [{ t: `${PERIOD_PAST[S.endPreset!]}已過 ` }, { t: `${nfMax(presetProgress.value * 100, 1)}%`, b: true }, { t: ` · ${endName} ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
+    if (presetProgress.value != null) return { segs: [{ t: '已過 ' }, { t: `${nfMax(presetProgress.value * 100, 1)}%`, b: true }, { t: ` · ${endName} ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
     return { segs: [{ t: `${eMs < n ? '已過' : '距'}${endName} · ` }, { t: whenShort(eMs, S.endTz), b: true }], tone: '' };
   }
   if (eMs < sMs) return { segs: [{ t: '結束早於開始 · 按 ⇄ 可以交換' }], tone: 'soft' };
@@ -336,7 +364,8 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 </script>
 
 <template>
-  <section class="panel sc" :class="[`m-${mode}`, { compact, flash: flashing, neg: (heroSpan?.sign ?? 1) < 0 }]" aria-label="間隔" @animationend="flashing = false">
+  <section class="panel sc" :class="[`m-${mode}`, { compact, flash: flashing, neg: (heroSpan?.sign ?? 1) < 0, dropping }]" aria-label="間隔" @animationend="flashing = false"
+    @dragover="dragOver" @dragleave="dropping = false" @drop="dropText">
     <header v-if="!compact" class="sc-head">
       <h2 v-tip="titleTip" tabindex="-1">{{ title }}</h2>
       <span v-if="S.link?.span.biz" class="sc-sub">只算工作日</span>
@@ -351,8 +380,8 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
       <input v-if="editing" ref="input" v-model="text" class="hero-in mono" type="text" autocomplete="off" spellcheck="false" enterkeyhint="done"
         aria-label="間隔：例如 +30天、1年6個月、47m × 16" @input="onInput" @keydown="onKey" @blur="finish" />
       <div v-else ref="line" class="hero-line" role="button" tabindex="0" :aria-label="mode === 'empty' ? '輸入間隔' : `間隔 ${toks.map((t) => ('v' in t ? t.v : ':')).join('')}，點一下修改`"
-        :style="{ cursor: canHover ? 'ew-resize' : 'text' }" v-tip="mode === 'empty' ? '點一下輸入間隔，例如 +30天' : '點一下輸入；按住數字左右拖曳可以調整'"
-        @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @pointerleave="canHover = null"
+        :style="{ cursor: canHover ? 'ew-resize' : 'text' }" v-tip="mode === 'empty' ? '點一下輸入間隔，例如 +30天' : '點一下輸入；按住數字左右拖曳，或在數字上捲動滾輪調整'"
+        @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @pointerleave="canHover = null" @wheel="onWheel"
         @keydown.enter.prevent="startEdit()" @keydown.space.prevent="startEdit()" @keydown.up.prevent="arrowStep(1, $event)" @keydown.down.prevent="arrowStep(-1, $event)">
         <template v-if="toks.length">
           <template v-for="(t, i) in toks" :key="i">
@@ -375,9 +404,8 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
     </p>
     <p v-if="!editing && exprNote && S.link && exprNote.expr === S.link.expr" class="tape mono" v-tip="'剛才輸入的算式'">{{ exprNote.src }} <span>{{ exprNote.text }}</span></p>
 
-    <div v-if="!tight" class="sc-quick" role="group" aria-label="快速間隔" @pointerdown="editing && $event.preventDefault()">
-      <button v-for="q in QUICK" :key="q.t" type="button" class="chip" :aria-pressed="!!S.link && S.link.expr === q.canon && !S.link.span.biz"
-        @click="quick(q.t)" @pointerenter="hoverQuick(q.t, $event)" @pointerleave="hoverQuick(null)">{{ q.t }}</button>
+    <div v-if="!tight" class="sc-quick" aria-label="快速間隔" @pointerdown="editing && $event.preventDefault()">
+      <ChipRow row="span" :pick="pickQuick" @preview="(t) => (preview = t)" />
       <button v-if="bizShown" type="button" class="chip biz" :aria-pressed="!!S.link?.span.biz" v-tip="'只算週一到週五：僅扣週末，不含國定假日與補班'" @click="toggleBiz"><Icon name="brief" />工作日</button>
     </div>
 
@@ -392,6 +420,7 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 </template>
 
 <style scoped>
+.sc.dropping { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .calc-pop { padding: .85rem 1rem 1rem; display: flex; flex-direction: column; gap: .6rem; }
 .calc-pop-t { display: flex; align-items: center; gap: .45rem; font-size: .95rem; }
 .calc-pop-t .ic { color: var(--ink-3); }
@@ -441,7 +470,8 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 .tape span { color: var(--ink-2); }
 
 .sc-quick { display: flex; flex-wrap: wrap; gap: .35rem; }
-.sc-quick .chip { height: 1.95rem; padding: 0 .65rem; font-size: max(var(--floor), .84rem); font-family: var(--f-sans); }
+.sc-quick > .chip, .sc-quick :deep(.chip) { height: 1.95rem; padding: 0 .65rem; font-size: max(var(--floor), .84rem); font-family: var(--f-sans); }
+.sc-quick :deep(.chip.add) { padding: 0 .5rem; }
 .chip.biz .ic { width: 1em; height: 1em; }
 
 .sc.compact { padding: .6rem .8rem .7rem; gap: .35rem; border-radius: var(--r-md); }
@@ -451,5 +481,7 @@ watch(calcHere, (h) => { if (!h) calcOpen.value = false; });
 .compact .hero-in { height: 2.8rem; font-size: 1.35rem; }
 .compact .status { font-size: .86rem; min-height: 1.2rem; }
 .compact .sc-quick { flex-wrap: nowrap; overflow: hidden; }
-.compact .sc-quick .chip { height: 1.85rem; padding: 0 .55rem; font-size: var(--fs-s); }
+.compact .sc-quick :deep(.cr) { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.compact .sc-quick :deep(.cr)::-webkit-scrollbar { display: none; }
+.compact .sc-quick :deep(.chip) { height: 1.85rem; padding: 0 .55rem; font-size: var(--fs-s); flex: none; }
 </style>

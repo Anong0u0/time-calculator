@@ -182,7 +182,8 @@ describe('address bar', () => {
     // a period end without a fixed date, unknown keys ignored
     const p = parseQuery('?p=newyear&foo=1');
     expect(p?.time).toBe(true);
-    expect(p?.p).toBe('newyear');
+    expect(p?.er).toMatchObject({ code: 'n/ay.end', name: '跨年', follow: false });
+    expect(parseQuery('?er=!n/amo.end')?.er).toMatchObject({ code: 'n/amo.end', follow: true });
     expect(p?.tz).toBeUndefined();
     expect(parseQuery('?foo=1')).toBeNull();
     // only the zone list: the time is left alone
@@ -335,5 +336,100 @@ describe('the two ends are alike', () => {
     applyUrl('?' + q, false);
     expect(S.endLive).toBe(true);
     expect(isDerived('start')).toBe(true);
+  });
+});
+
+import { lunarOfDay, lunarYear, lunarNewYear, fmtLunar, fromLunar } from '../src/core/lunar';
+import { termMoment, TERM_NAMES } from '../src/core/terms';
+import { evalRule, encodeRule, decodeRule, ruleName, spanOfRule, type Rule } from '../src/core/rule';
+import { parseRuleText } from '../src/core/ruletext';
+import { wordRule, setVocab, rulePrefs } from '../src/core/vocab';
+
+describe('the lunar calendar and the solar terms', () => {
+  test('terms land within a minute of the published times', () => {
+    const near = (y: number, k: number, iso: string) => expect(Math.abs(termMoment(y, k) - Date.parse(iso))).toBeLessThan(90_000);
+    near(2024, 0, '2024-03-20T03:06Z'); near(2024, 6, '2024-06-20T20:51Z'); near(2025, 18, '2025-12-21T15:03Z'); near(2000, 0, '2000-03-20T07:35Z');
+    expect(TERM_NAMES[18]).toBe('冬至');
+  });
+  test('lunar dates, leap months and new years', () => {
+    const n = (y: number, mo: number, d: number) => dayNum(y, mo, d);
+    expect(fmtLunar(lunarOfDay(n(2026, 11, 24))!)).toBe('丙午年 十月十六');
+    expect(lunarOfDay(n(2025, 7, 25))).toMatchObject({ y: 2025, m: 6, leap: true, d: 1 });
+    expect(lunarNewYear(2027)).toEqual({ y: 2027, mo: 2, d: 6 });
+    expect(lunarNewYear(2030)).toEqual({ y: 2030, mo: 2, d: 3 });
+    // the almanac's leap months where the browser's calendar disagrees
+    for (const [y, m] of [[1917, 2], [1922, 5], [1987, 6], [2033, 11]]) expect(lunarYear(y)!.months.find((x) => x.leap)!.m).toBe(m);
+    expect(fromLunar(2026, 8, 15)).toBe(n(2026, 9, 25));
+  });
+});
+
+describe('rules', () => {
+  setVocab([], []);
+  const now = Date.UTC(2026, 10, 24, 6, 13, 5); // Tue 2026-11-24 14:13:05 in Taipei
+  const ends = { start: Date.UTC(2026, 2, 14, 1, 30), end: Date.UTC(2026, 11, 31, 16) };
+  const at = (text: string, self: 'start' | 'end' = 'end', alt = -1) => {
+    const r = parseRuleText(text, { year: 2026, today: { y: 2026, mo: 11, d: 24 } });
+    if (!r) return null;
+    const rd = alt < 0 ? r.main : r.alts[alt];
+    const e = evalRule(rd.rule, { now, tz: 'Asia/Taipei', self, ends, prefs: rulePrefs(), word: wordRule });
+    return e.ok ? new Date(e.ms + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : e.err;
+  };
+  test('words combine', () => {
+    expect(at('明晚')).toBe('2026-11-25 20:00');
+    expect(at('本周三 3點')).toBe('2026-11-25 03:00');
+    expect(at('本周三 3點', 'end', 0)).toBe('2026-11-25 15:00');
+    expect(at('下個月底')).toBe('2026-12-31 00:00');
+    expect(at('月底 18:00')).toBe('2026-11-30 18:00');
+    expect(at('下週末')).toBe('2026-12-05 00:00');
+    expect(at('明年中秋晚上8點')).toBe('2027-09-15 20:00');
+    expect(at('今年中秋')).toBe('2026-09-25 00:00');
+    expect(at('中秋')).toBe('2027-09-15 00:00');
+    expect(at('除夕')).toBe('2027-02-05 00:00');
+    expect(at('母親節')).toBe('2027-05-09 00:00');
+    expect(at('冬至那一刻')).toBe('2026-12-22 04:50');
+    expect(at('8pm tomorrow')).toBe('2026-11-25 20:00');
+    expect(at('2027年中秋')).toBe('2027-09-15 00:00');
+    expect(at('下下個中秋')).toBe('2028-10-03 00:00');
+  });
+  test('from either end', () => {
+    expect(at('開始那個月的月底')).toBe('2026-03-31 00:00');
+    expect(at('結束前最後一個週五', 'start')).toBe('2026-12-25 00:00');
+    expect(at('+30天')).toBe('2026-04-13 09:30');
+  });
+  test('stored as a short text and read back', () => {
+    for (const t of ['明晚', '下個月底', '冬至那一刻', '結束前最後一個週五', '下下個中秋', '第三個週三', '2000/1/1 20:34']) {
+      const r = parseRuleText(t)!.main.rule;
+      expect(encodeRule(decodeRule(encodeRule(r))!)).toBe(encodeRule(r));
+    }
+    expect(decodeRule('n/+1x')).toBeNull();
+    expect(ruleName(parseRuleText('明年春節')!.main.rule)).toBe('明年 春節');
+  });
+  test('a link is a rule', () => {
+    const r: Rule = { o: { t: 'other' }, steps: [{ t: 'move', n: 1, u: 'mo' }, { t: 'move', n: 7, u: 'd' }] };
+    expect(spanOfRule(r, 'end')).toMatchObject({ sign: 1, mo: 1, d: 7 });
+    expect(spanOfRule({ o: { t: 'now' }, steps: [] }, 'end')).toBeNull();
+  });
+  test('your own words', () => {
+    setVocab([{ name: '發薪日', code: 'n/pnext!:d5' }, { name: '下班', code: 'n/t1800' }], []);
+    expect(at('下個月發薪日')).toBe('2026-12-05 00:00');
+    expect(at('明天下班')).toBe('2026-11-25 18:00');
+    expect(at('發薪日')).toBe('2026-12-05 00:00');
+    setVocab([], ['中秋']);
+    expect(parseRuleText('中秋')).toBeNull();
+    setVocab([], []);
+  });
+});
+
+describe('lunar and term readings typed back', () => {
+  const cur = { y: 2026, mo: 11, d: 24, h: 16, mi: 13, s: 5 };
+  const ctx = { now: Date.UTC(2026, 10, 24, 8), tz: 'Asia/Taipei', cur, parseSpanText: () => null };
+  test('a lunar date keeps the time of day', () => {
+    expect(parseReading('lunar', '丙午年（馬）十月十七', ctx)).toEqual({ wall: { ...cur, d: 25 } });
+    expect(parseReading('lunar', '正月初一', ctx)).toEqual({ wall: { ...cur, mo: 2, d: 17 } });
+    expect(parseReading('lunar', '丁未年正月初一', ctx)).toEqual({ wall: { ...cur, y: 2027, mo: 2, d: 6 } });
+  });
+  test('a term, and days into it', () => {
+    expect(parseReading('term', '冬至', ctx)).toEqual({ wall: { ...cur, mo: 12, d: 22 } });
+    expect(parseReading('term', '小雪 第 3 天 · 下一個 大雪 12/7', ctx)).toEqual({ wall: { ...cur, mo: 11, d: 24 } });
   });
 });

@@ -34,7 +34,9 @@ const key = computed(() => `seg-${props.which}`);
 
 function put(w: Wall) {
   const cut = isDerived(props.which);
-  return commit(() => setWall(props.which, w), { label: `修改${SUBJ.value}`, key: key.value, say: cut ? `${SUBJ.value}改成固定，不再跟著${props.which === 'end' ? '開始' : '結束'}移動` : undefined });
+  const rule = S.rules[props.which];
+  const say = rule?.follow ? `${SUBJ.value}改成固定，不再跟著「${rule.name}」` : cut ? `${SUBJ.value}改成固定，不再跟著${props.which === 'end' ? '開始' : '結束'}移動` : undefined;
+  return commit(() => setWall(props.which, w), { label: `修改${SUBJ.value}`, key: key.value, say });
 }
 function applySeg(sg: Seg, n: number) {
   const w = { ...base.value, [sg.k]: n } as Wall;

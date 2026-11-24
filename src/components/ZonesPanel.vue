@@ -37,6 +37,19 @@ const win = computed<Win>(() => frozen.value || liveWin.value);
 // the end's own day changed elsewhere: show its day again
 watch(() => { const w = wallOf(winEnd.value); return w ? `${winEnd.value}|${dayKey(w)}` : ''; }, () => { if (!frozen.value) dayOff.value = 0; });
 function walk(k: number) { dayOff.value += k; }
+/** The wheel (or a sideways swipe) over a strip turns the days, like ‹ ›. */
+let zWheel = 0, zAt = 0;
+function stripWheel(e: WheelEvent) {
+  if (!(e.target as HTMLElement).closest('.strip')) return;
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+  if (!d) return;
+  e.preventDefault();
+  const t = Date.now();
+  if (t - zAt > 400) zWheel = 0;
+  zAt = t;
+  zWheel += e.deltaMode === 1 ? d * 33 : d;
+  if (Math.abs(zWheel) >= 60) { walk(Math.sign(zWheel)); zWheel = 0; }
+}
 const sameDay = computed(() => {
   if (endMs.value == null) return true;
   const e = partsInTz(endMs.value, S.endTz), s = partsInTz(startMs.value, S.startTz);
@@ -372,7 +385,7 @@ const awayText = (which: End) => {
 
     <div ref="body" class="zbody" :class="{ sec: withSec, side: !!side }" :style="{ '--rowh': rowH + 'px' }">
       <WorldMap v-if="side" class="zmap-side" :which="winEnd" :zones="zoneRows" :height="side.h" :width="side.w" @pin="pinMenu" @add="add" />
-      <div ref="listEl" class="zlist">
+      <div ref="listEl" class="zlist" @wheel="stripWheel">
       <WorldMap v-if="mapH" :which="winEnd" :zones="zoneRows" :height="mapH" :width="bodyW" @pin="pinMenu" @add="add" />
       <!-- the shared axis: ● and ○ live here -->
       <div class="zrow zaxis">

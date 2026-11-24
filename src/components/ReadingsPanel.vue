@@ -11,13 +11,23 @@ import Popover from './Popover.vue';
 import SpanUnits from './SpanUnits.vue';
 import { S, type End, now, startMs, endMs, hasEnd, calGap, toast, undo, commit, setInstant, setWall, setLive, wallOf, tzOf, bump } from '../state/store';
 import { copiedKey, copyText } from '../composables/copy';
-import { type Wall, partsInTz, offsetAt, isoOffset, fmtDate, fmtTime, fmtDT, pad, WD, wdOf, isoWeek, usWeek, dayOfYear, isLeap, nextLeap, wallKey, utcMs, isoDuration, interpretSpanText, addDuration, DAY } from '../core/time';
+import { type Wall, partsInTz, offsetAt, isoOffset, fmtDate, fmtTime, fmtDT, pad, WD, wdOf, isoWeek, usWeek, dayOfYear, isLeap, nextLeap, wallKey, utcMs, isoDuration, interpretSpanText, addDuration, DAY, dayNum } from '../core/time';
 import { parseReading } from '../core/parse';
+import { lunarOf, ganzhi, zodiac, lunarMonthName, lunarDayName } from '../core/lunar';
+import { termAround, TERM_NAMES, CHINA_TZ } from '../core/terms';
 import { rocYear, plainNum, relative } from '../core/format';
 import { useSize, remPx } from '../composables/size';
 import { useDragSort, moved } from '../composables/dragSort';
 
 const EN_WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** 小雪 第 3 天 · 下一個 大雪 12/7 */
+function termText(ms: number, tz: string): string {
+  const { prev, next } = termAround(ms);
+  const day = (t: number) => { const w = partsInTz(t, S.prefs.termTz === 'china' ? CHINA_TZ : tz); return dayNum(w.y, w.mo, w.d); };
+  const here = partsInTz(ms, tz), n = dayNum(here.y, here.mo, here.d);
+  const nw = partsInTz(next.ms, S.prefs.termTz === 'china' ? CHINA_TZ : tz);
+  return `${TERM_NAMES[prev.k]} 第 ${n - day(prev.ms) + 1} 天 · 下一個 ${TERM_NAMES[next.k]} ${nw.mo}/${nw.d}`;
+}
 const EN_MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 type Fmt = (ms: number, tz: string, w: Wall) => string;
 interface Def { k: string; label: string; f: Fmt; tip: string; sans?: boolean }
@@ -29,6 +39,8 @@ const DEFS: Def[] = [
   { k: 'rel', label: '相對時間', sans: true, tip: '離現在多久（可以改寫成「3 天後」「2 小時前」「現在」）', f: (ms) => relative(ms, now.value) },
   { k: 'zh', label: '中文', sans: true, tip: '中文日期', f: (_ms, _tz, w) => `${w.y}年${w.mo}月${w.d}日 星期${WD[wdOf(w)]} ${fmtTime(w)}` },
   { k: 'roc', label: '民國', sans: true, tip: '民國紀年', f: (_ms, _tz, w) => `${rocYear(w.y)} ${w.mo} 月 ${w.d} 日` },
+  { k: 'lunar', label: '農曆', sans: true, tip: '農曆日期（干支年與生肖）。可以改寫成「十月十七」「丙午年正月初一」', f: (_ms, _tz, w) => { const l = lunarOf(w); return l ? `${ganzhi(l.y)}年（${zodiac(l.y)}）${lunarMonthName(l.m, l.leap)}${lunarDayName(l.d)}` : '—'; } },
+  { k: 'term', label: '節氣', sans: true, tip: '這一刻在哪個節氣的第幾天，以及下一個節氣。可以改寫成「冬至」「清明 第 3 天」', f: (ms, tz) => termText(ms, tz) },
   { k: 'week', label: 'ISO 週', tip: '年-W週-星期幾（1 = 週一）', f: (_ms, _tz, w) => { const i = isoWeek(w.y, w.mo, w.d); return `${i.weekYear}-W${pad(i.week)}-${i.weekday}`; } },
   { k: 'usweek', label: '美式週次', tip: '週日開始、含 1 月 1 日的那週是第 1 週（美國、Excel WEEKNUM 的算法）', f: (_ms, _tz, w) => `${w.y} 年 W${pad(usWeek(w.y, w.mo, w.d))}` },
   { k: 'doy', label: '第幾天', sans: true, tip: '一年中的第幾天、季度與閏年', f: (_ms, _tz, w) => `第 ${dayOfYear(w.y, w.mo, w.d)} 天 · Q${Math.ceil(w.mo / 3)} · ${isLeap(w.y) ? '閏年' : `平年（下次閏年 ${nextLeap(w.y)}）`}` },

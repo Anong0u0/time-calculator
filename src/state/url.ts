@@ -8,8 +8,10 @@
    e     a fixed end, or now: the end follows the clock.  etz: the end's zone, only when it differs from the start's.
    d     the end follows the start by a span (1mo7d, -3h, 28bd for working days).
    ds    the start follows the end back by a span: ?e=now&ds=30d is always the last 30 days.
-   p     the end is the end of a period (day, week, month, newyear, lny). With a live start and no e,
-         it is worked out when the link is opened: a bookmark of "until New Year" always counts to the next one.
+   er    the rule the end was set by (下個月底, 中秋 …, as a short code; ! in front: the end keeps following it).
+         With a live start and no e, it is worked out when the link is opened: a bookmark of "until 中秋" always counts
+         to the next one.  sr: the same for the start.  en, sn: their names, when not the rule's own.
+   p     (older links) the end of a period: day, week, month, newyear, lny.
    z     the zone list, only when it differs from the default.
    calc  the duration calculator's expression, only when it is not the sample.
 
@@ -20,9 +22,11 @@
 import { watch } from 'vue';
 import { type Wall, type Span, validWall, partsInTz, pad, interpretSpanText, fmtSpan, isValidTz } from '../core/time';
 import { LOCAL_TZ, sameZone } from '../core/zones';
-import { S, ZMAX, PERIOD_NAMES, type PeriodKey, type Link, commit, applyEndPreset, defaultZones, isDerived } from './store';
+import { decodeRule, ruleName } from '../core/rule';
+import { S, ZMAX, type Link, type End, commit, applyRule, defaultZones, isLinked, OLD_PRESETS } from './store';
 
-const TIME_KEYS = ['s', 'e', 'd', 'ds', 'p', 'tz', 'etz'] as const;
+const TIME_KEYS = ['s', 'e', 'd', 'ds', 'p', 'tz', 'etz', 'er', 'sr'] as const;
+interface UrlRule { code: string; name: string; follow: boolean }
 
 /* ---------- values ---------- */
 /** 2026-11-24, 2026-11-24T16:13 or 2026-11-24T16:13:05: the shortest form that keeps the time. */
@@ -66,7 +70,7 @@ function linkParam(v: string): Link | null {
 export interface UrlState {
   time: boolean;
   tz?: string; etz?: string;
-  s?: Wall; e?: Wall; eLive?: boolean; d?: Link; ds?: Link; p?: PeriodKey;
+  s?: Wall; e?: Wall; eLive?: boolean; d?: Link; ds?: Link; er?: UrlRule; sr?: UrlRule;
   z?: string[]; calc?: string;
 }
 export function parseQuery(search: string): UrlState | null {
@@ -85,7 +89,16 @@ export function parseQuery(search: string): UrlState | null {
     else if (ds) out.ds = linkParam(ds) || undefined;
     if (e === 'now') out.eLive = true;
     else if (e) out.e = parseWallParam(e, eTz) || undefined;
-    if (p && p in PERIOD_NAMES) out.p = p as PeriodKey;
+    const rule = (code: string | undefined, name: string | undefined): UrlRule | undefined => {
+      if (!code) return undefined;
+      const follow = code.startsWith('!');
+      const c = follow ? code.slice(1) : code;
+      const r = decodeRule(c);
+      return r ? { code: c, name: (name || ruleName(r, S.prefs)).slice(0, 60), follow } : undefined;
+    };
+    out.er = rule(get('er'), get('en'));
+    out.sr = rule(get('sr'), get('sn'));
+    if (!out.er && p && OLD_PRESETS[p]) out.er = { ...OLD_PRESETS[p], follow: false };
   }
   const z = get('z');
   if (z != null) out.z = z.split(',').map((x) => x.trim()).filter((x) => x && isValidTz(x)).slice(0, ZMAX);
@@ -103,14 +116,21 @@ export function applyUrl(search = location.search, hadSaved = true): UrlState | 
       S.startTz = u.tz || LOCAL_TZ;
       S.endTz = u.etz || S.startTz;
       if (u.s) { S.start = u.s; S.live = false; } else S.live = true;
-      S.end = null; S.endLive = false; S.link = null; S.linkTo = 'end'; S.endSample = false; S.endPreset = null;
+      S.end = null; S.endLive = false; S.link = null; S.linkTo = 'end'; S.endSample = false; S.rules = { start: null, end: null };
+      const put = (which: End, r: UrlRule | undefined, held: boolean) => {
+        if (!r) return;
+        // held: the moment came with the link, the rule is its name; otherwise the rule is read now
+        if (held && !r.follow) S.rules[which] = { code: r.code, name: r.name, follow: false, from: null };
+        else applyRule(which, decodeRule(r.code)!, { name: r.name, follow: r.follow });
+      };
       if (u.d) S.link = u.d;
       else {
         if (u.eLive) S.endLive = true;
-        else if (u.e) { S.end = u.e; S.endPreset = u.p || null; }
-        else if (u.p) applyEndPreset(u.p);
+        else if (u.e) S.end = u.e;
         if (u.ds && (S.endLive || S.end)) { S.link = u.ds; S.linkTo = 'start'; S.live = false; }
       }
+      if (!u.d) put('end', u.er, !!u.e);
+      put('start', u.sr, !!u.s);
     }
     if (u.z) S.zones = u.z;
     if (u.calc != null) { S.dur = u.calc; S.durSample = false; }
@@ -124,18 +144,26 @@ export function buildQuery(): string {
   const out: [string, string][] = [];
   const untouched = S.live && S.endSample && !S.link && !S.endLive && S.startTz === LOCAL_TZ && sameZone(S.endTz, S.startTz);
   if (!untouched) {
-    if (!S.live && !isDerived('start')) out.push(['s', wallParam(S.start)]);
+    const rule = (which: End, k: string, nk: string) => {
+      const r = S.rules[which];
+      if (!r) return;
+      out.push([k, (r.follow ? '!' : '') + r.code]);
+      const d = decodeRule(r.code);
+      if (d && r.name && r.name !== ruleName(d, S.prefs)) out.push([nk, r.name]);
+    };
+    if (!S.live && !isLinked('start') && !S.rules.start?.follow) out.push(['s', wallParam(S.start)]);
+    rule('start', 'sr', 'sn');
     out.push(['tz', S.startTz]);
     if (!sameZone(S.endTz, S.startTz)) out.push(['etz', S.endTz]);
-    if (isDerived('end')) out.push(['d', spanParam(S.link!.span)]);
+    if (isLinked('end')) out.push(['d', spanParam(S.link!.span)]);
     else {
       if (S.link) out.push(['ds', spanParam(S.link.span)]);
       if (S.endLive) out.push(['e', 'now']);
-      else if (S.end) {
-        // a live start counting to a period end: keep the period, so the link stays right after it passes
-        if (!(S.live && S.endPreset)) out.push(['e', wallParam(S.end)]);
-        if (S.endPreset) out.push(['p', S.endPreset]);
+      else if (S.end && !S.rules.end?.follow) {
+        // a live start counting to a rule's moment (跨年, 中秋 …): keep the rule, so the link stays right after it passes
+        if (!(S.live && S.rules.end)) out.push(['e', wallParam(S.end)]);
       }
+      rule('end', 'er', 'en');
     }
   }
   const dz = defaultZones();
@@ -155,7 +183,7 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 /** Keep the address bar in step with the state once a value changes (replacing the entry: undo is the way back,
     not the back button). Opening the page writes nothing: a plain address stays plain, a link stays as it was typed. */
 export function startUrlSync() {
-  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.endPreset, S.link?.expr, S.linkTo, S.zones, S.dur, S.durSample], () => {
+  return watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.rules, S.link?.expr, S.linkTo, S.zones, S.dur, S.durSample], () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
       const q = buildQuery();

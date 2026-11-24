@@ -7,10 +7,14 @@
 import { reactive, computed, ref, watch } from 'vue';
 import {
   type Wall, type Span, type WallNote, DAY, partsInTz, wallToInstant, toInstant, addDuration, validWall, fmtSpan,
-  spanBetween, addDaysWall, addMonthsWall, mod, wdOf, LNY, dayNum, diffCalendar, fmtDT, wEq, interpretSpanText,
+  spanBetween, diffCalendar, fmtDT, interpretSpanText, fmtSpan as fmtSpanT,
   isValidTz as isValidTzSafe,
 } from '../core/time';
 import { LOCAL_TZ, sameZone, zoneName } from '../core/zones';
+import {
+  type Rule, type RulePrefs, type RuleResult, DEFAULT_PREFS, evalRule, decodeRule, encodeRule, ruleName, ruleReads, isNowRule, spanOfRule,
+} from '../core/rule';
+import { setVocab, setRulePrefs, wordRule, type MyWord } from '../core/vocab';
 
 export type End = 'start' | 'end';
 export type Lens = 'zones' | 'cal' | 'read';
@@ -21,6 +25,24 @@ export const DENSITY: { v: number; name: string }[] = [
 ];
 export const DUR_SAMPLE = '2h 45m + 1:30:20 − 15m';
 export interface Link { expr: string; span: Span }
+/** The rule an end was set by: its name, whether the end keeps following it (read again as time passes or the other end moves),
+    and where its period began (for how far through it now is). */
+export interface EndRule { code: string; name: string; follow: boolean; from: number | null }
+/** A shortcut: a rule, with a name of the user's choosing. */
+export interface Chip { code: string; name?: string }
+export type ChipRow = 'start' | 'end' | 'span';
+export interface AppPrefs extends RulePrefs {
+  /** A rule counted from now, once applied: the end keeps following it, or stays at the moment it gave. */
+  followNow: boolean;
+  /** The calendar shows lunar dates and 節氣 under the days. */
+  lunar: boolean;
+}
+export const DEFAULT_APP_PREFS: AppPrefs = { ...DEFAULT_PREFS, followNow: false, lunar: true };
+export const DEFAULT_CHIPS: Record<ChipRow, Chip[]> = {
+  start: [{ code: 'n' }, { code: 'n/ad.start' }, { code: 'n/aw.start' }, { code: 'n/amo.start' }, { code: 'n/ay.start' }],
+  end: [{ code: 'n' }, { code: 'n/ad.end' }, { code: 'n/aw.end' }, { code: 'n/amo.end' }, { code: 'n/ay.end' }, { code: 'n/w%E6%98%A5%E7%AF%80', name: '春節' }],
+  span: ['+1d', '+7d', '+30d', '+3mo', '+6mo', '+1y'].map((c) => ({ code: 'o/' + c })),
+};
 
 export const ZMAX = 8;
 const STORE_KEY = 'time-calculator:v2';
@@ -37,7 +59,8 @@ export const S = reactive({
   /** The end follows the clock. */
   endLive: false,
   endSample: false,
-  endPreset: null as null | PeriodKey,
+  /** The rules the ends were set by, if any. */
+  rules: { start: null as EndRule | null, end: null as EndRule | null },
   /** The span that ties the ends together, if any. */
   link: null as Link | null,
   /** Which end the span computes: 'end' = start + span, 'start' = end − span. */
@@ -53,23 +76,58 @@ export const S = reactive({
   map: true,
   dur: DUR_SAMPLE,
   durSample: true,
+  /** The shortcut rows, each a list of rules. */
+  chips: JSON.parse(JSON.stringify(DEFAULT_CHIPS)) as Record<ChipRow, Chip[]>,
+  /** The user's own words, and the built-in words they removed. */
+  words: [] as MyWord[],
+  wordsOff: [] as string[],
+  prefs: { ...DEFAULT_APP_PREFS } as AppPrefs,
 });
+
+/* ---------- the vocabulary and the general settings, for every rule ---------- */
+/** Changes when a word or a setting changes, so every rule is read again. */
+export const ruleTick = ref(0);
+watch(() => [S.words, S.wordsOff], () => { setVocab(S.words, S.wordsOff); ruleTick.value++; }, { deep: true, immediate: true });
+watch(() => S.prefs, () => { setRulePrefs(S.prefs); ruleTick.value++; }, { deep: true, immediate: true });
 
 /* ---------- derived ---------- */
 export const other = (which: End): End => (which === 'start' ? 'end' : 'start');
 /** This end follows the clock. */
 export const isLive = (which: End) => (which === 'start' ? S.live : S.endLive);
 /** This end is computed from the other one and the span. */
-export const isDerived = (which: End) => !!S.link && S.linkTo === which;
+export const isLinked = (which: End) => !!S.link && S.linkTo === which;
+/** This end keeps following a rule. */
+export const isFollowing = (which: End) => !!S.rules[which]?.follow;
+/** This end is computed (by the span, or by the rule it follows), not held by itself. */
+export const isDerived = (which: End) => isLinked(which) || isFollowing(which);
 /** The end a span would compute: the one not held at now (the start when only the end follows the clock). */
 export const linkTarget = (): End => (S.link ? S.linkTo : S.endLive && !S.live ? 'start' : 'end');
 
 interface Point { wall: Wall; ms: number; note: WallNote }
 const NONE = { wall: null, ms: null, note: null as WallNote };
+const followRule = (which: End): Rule | null => (S.rules[which]?.follow ? decodeRule(S.rules[which]!.code) : null);
+/** The end follows a rule that reads the other end. */
+const readsOther = (which: End) => { const r = followRule(which); return !!r && ruleReads(r, which, wordRule).has(other(which)); };
+/** Read a rule for this end, now. */
+export function runRule(rule: Rule, which: End, otherMs?: number | null): RuleResult {
+  void ruleTick.value;
+  const o = other(which);
+  const om = otherMs !== undefined ? otherMs : msOf(o);
+  return evalRule(rule, { now: now.value, tz: tzOf(which), self: which, ends: { [which]: msOf(which), [o]: om }, prefs: S.prefs, word: wordRule });
+}
+const fromRule = (which: End, otherMs: number | null): Point | null => {
+  const r = followRule(which);
+  if (!r) return null;
+  void ruleTick.value;
+  const o = other(which);
+  const res = evalRule(r, { now: Math.floor(now.value / 1000) * 1000, tz: tzOf(which), self: which, ends: { [o]: otherMs }, prefs: S.prefs, word: wordRule });
+  return res.ok ? { wall: partsInTz(res.ms, tzOf(which)), ms: res.ms, note: null } : null;
+};
 const own = (which: End): Point | null => {
   const tz = which === 'start' ? S.startTz : S.endTz;
   // whole seconds, like every other moment here, so a span from now never gains or loses a fraction of a second
   if (isLive(which)) { const ms = Math.floor(now.value / 1000) * 1000; return { wall: partsInTz(ms, tz), ms, note: null }; }
+  if (isFollowing(which) && !readsOther(which)) { const p = fromRule(which, null); if (p) return p; }
   const w = which === 'start' ? S.start : S.end;
   if (!w) return null;
   const r = wallToInstant(w, tz);
@@ -77,6 +135,25 @@ const own = (which: End): Point | null => {
 };
 const RANGE_ERR = '超出可計算範圍（西元 1–9999 年）';
 const ends = computed<{ s: Point; e: Point | typeof NONE; err: string | null }>(() => {
+  // an end that follows a rule reading the other end comes after it
+  if (isFollowing('start') && readsOther('start') && !isLinked('start')) {
+    const e = own('end');
+    const st = fromRule('start', e ? e.ms : null) || own('start')!;
+    if (S.link && S.linkTo === 'end') {
+      const sp = S.link.span;
+      const r = addDuration(st.ms, S.startTz, sp, sp.sign, sp.biz);
+      const w = Number.isFinite(r.ms) ? partsInTz(r.ms, S.endTz) : null;
+      return { s: st, e: w && validWall(w) ? { wall: w, ms: r.ms, note: null } : NONE, err: w ? null : RANGE_ERR };
+    }
+    return { s: st, e: e || NONE, err: null };
+  }
+  if (isFollowing('end') && readsOther('end') && !isLinked('end')) {
+    const st = own('start')!;
+    let s0 = st;
+    if (S.link && S.linkTo === 'start') s0 = st; // cannot happen: a link to the start needs a held end
+    const e = fromRule('end', s0.ms) || own('end');
+    return { s: s0, e: e || NONE, err: null };
+  }
   const ownS = own('start')!;
   if (S.link) {
     const sp = S.link.span;
@@ -129,21 +206,29 @@ export function toastClose() { clearTimeout(toastTimer); toastState.cur = null; 
 /* ---------- history: many levels of undo and redo ---------- */
 interface Snap {
   start: Wall; live: boolean; startTz: string; end: Wall | null; endLive: boolean; endTz: string; link: string | null; linkTo: End;
-  endPreset: PeriodKey | null; endSample: boolean; zones: string[]; readOrder: string[];
+  rules: { start: EndRule | null; end: EndRule | null }; endSample: boolean; zones: string[]; readOrder: string[];
+  chips: Record<ChipRow, Chip[]>; words: MyWord[]; wordsOff: string[];
 }
+const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 const snap = (): Snap => ({
   start: { ...startWall.value }, live: S.live, startTz: S.startTz, end: S.end ? { ...S.end } : null, endLive: S.endLive, endTz: S.endTz,
-  link: S.link ? S.link.expr : null, linkTo: S.linkTo, endPreset: S.endPreset, endSample: S.endSample, zones: [...S.zones], readOrder: [...S.readOrder],
+  link: S.link ? S.link.expr : null, linkTo: S.linkTo, rules: clone(S.rules), endSample: S.endSample, zones: [...S.zones], readOrder: [...S.readOrder],
+  chips: clone(S.chips), words: clone(S.words), wordsOff: [...S.wordsOff],
 });
 /** What a snapshot means: a moment that follows the clock or is computed is not part of it. */
 const meaning = (a: Snap) => JSON.stringify({
-  ...a, start: a.live || (a.link && a.linkTo === 'start') ? null : a.start, end: a.endLive || (a.link && a.linkTo === 'end') ? null : a.end, linkTo: a.link ? a.linkTo : null,
+  ...a,
+  start: a.live || (a.link && a.linkTo === 'start') || a.rules.start?.follow ? null : a.start,
+  end: a.endLive || (a.link && a.linkTo === 'end') || a.rules.end?.follow ? null : a.end,
+  linkTo: a.link ? a.linkTo : null,
+  rules: { start: a.rules.start && { ...a.rules.start, from: null }, end: a.rules.end && { ...a.rules.end, from: null } },
 });
 const sameSnap = (a: Snap, b: Snap) => meaning(a) === meaning(b);
 function restoreSnap(o: Snap) {
   S.startTz = o.startTz; S.live = o.live; S.start = o.start;
   S.endTz = o.endTz; S.end = o.end; S.endLive = o.endLive; S.link = o.link ? mkLink(o.link) : null; S.linkTo = o.linkTo;
-  S.endPreset = o.endPreset; S.endSample = o.endSample; S.zones = [...o.zones]; S.readOrder = [...o.readOrder];
+  S.rules = clone(o.rules); S.endSample = o.endSample; S.zones = [...o.zones]; S.readOrder = [...o.readOrder];
+  S.chips = clone(o.chips); S.words = clone(o.words); S.wordsOff = [...o.wordsOff];
 }
 export const history = reactive({ undo: [] as { s: Snap; label: string }[], redo: [] as { s: Snap; label: string }[] });
 let coalesceKey = '', coalesceAt = 0;
@@ -202,24 +287,39 @@ export const pulse = reactive({ start: 0, end: 0, span: 0, zones: 0 });
 export function bump(k: keyof typeof pulse) { pulse[k]++; }
 
 /* ---------- mutations ---------- */
+/** An end that follows a rule reading `which` stops following it (it stays where it is): `which` is about to depend on it. */
+function unhookFrom(which: End) {
+  const o = other(which);
+  if (isFollowing(o) && readsOther(o)) { pinRule(o); }
+}
+/** The end keeps the moment its rule gives now; the rule stays as its name. */
+function pinRule(which: End) {
+  const r = S.rules[which];
+  if (!r?.follow) return;
+  const w = wallOf(which);
+  if (w) { if (which === 'start') S.start = { ...w }; else S.end = { ...w }; }
+  S.rules[which] = { ...r, follow: false };
+}
 /** Puts this end at a moment. If the span was computing this end, it stops; if it computes the other end, that one follows. */
-export function setWall(which: End, w: Wall, opts: { preset?: PeriodKey | null } = {}): boolean {
+export function setWall(which: End, w: Wall): boolean {
   if (!validWall(w)) { toast(RANGE_ERR); return false; }
-  if (isDerived(which)) S.link = null;
+  if (isLinked(which)) S.link = null;
+  S.rules[which] = null;
   if (which === 'start') { S.start = { ...w }; S.live = false; }
-  else { S.end = { ...w }; S.endLive = false; S.endSample = false; S.endPreset = opts.preset || null; }
+  else { S.end = { ...w }; S.endLive = false; S.endSample = false; }
   return true;
 }
-export function setInstant(which: End, ms: number, opts?: { preset?: PeriodKey | null }): boolean {
+export function setInstant(which: End, ms: number): boolean {
   if (!Number.isFinite(ms)) { toast(RANGE_ERR); return false; }
-  return setWall(which, partsInTz(ms, tzOf(which)), opts);
+  return setWall(which, partsInTz(ms, tzOf(which)));
 }
 /** This end follows the clock (on), or stays at the second it shows now (off). */
 export function setLive(which: End, on: boolean) {
   if (on) {
-    if (isDerived(which)) S.link = null;
+    if (isLinked(which)) S.link = null;
+    S.rules[which] = null;
     if (which === 'start') S.live = true;
-    else { S.endLive = true; S.endSample = false; S.endPreset = null; }
+    else { S.endLive = true; S.endSample = false; }
     return;
   }
   if (!isLive(which)) return;
@@ -235,7 +335,7 @@ export function setStartTz(id: string, keepInstant = true) {
   S.startTz = id;
   if (follow) {
     if (keepInstant && S.end && !S.endLive && !isDerived('end') && eMs != null) S.end = partsInTz(eMs, id);
-    if (!sameZone(S.endTz, id)) { S.endPreset = null; S.endSample = false; }
+    if (!sameZone(S.endTz, id)) S.endSample = false;
     S.endTz = id;
   }
   if (!S.zones.some((z) => sameZone(z, prev))) S.zones.unshift(prev);
@@ -244,7 +344,7 @@ export function setStartTz(id: string, keepInstant = true) {
 export function setEndTz(id: string) {
   const prev = S.endTz;
   if (S.end && !S.endLive && !isDerived('end') && endMs.value != null) S.end = partsInTz(endMs.value, id);
-  if (!sameZone(prev, id)) { S.endPreset = null; S.endSample = false; }
+  if (!sameZone(prev, id)) S.endSample = false;
   S.endTz = id;
   if (!S.zones.some((z) => sameZone(z, prev))) S.zones.unshift(prev);
   trimZones();
@@ -276,9 +376,12 @@ export function checkSpan(sp: Span, to: End = linkTarget()): { ok: true; ms: num
 export function setLink(sp: Span, to: End = linkTarget()): boolean {
   const c = checkSpan(sp, to);
   if (!c.ok) { toast(c.err); return false; }
+  unhookFrom(to);
+  if (isFollowing(other(to)) && readsOther(other(to))) pinRule(other(to));
   S.link = { expr: fmtSpan(sp), span: { ...sp } };
   S.linkTo = to;
-  if (to === 'end') { S.endLive = false; S.endSample = false; S.endPreset = null; }
+  S.rules[to] = null;
+  if (to === 'end') { S.endLive = false; S.endSample = false; }
   else S.live = false;
   return true;
 }
@@ -287,20 +390,28 @@ export function freezeLink(): boolean {
   if (!S.link) return false;
   const which = S.linkTo, w = wallOf(which);
   if (!w) return false;
-  if (which === 'end') { S.end = { ...w }; S.endLive = false; S.endPreset = null; }
+  if (which === 'end') { S.end = { ...w }; S.endLive = false; }
   else { S.start = { ...w }; S.live = false; }
   S.link = null;
   return true;
 }
 /** Keep the current gap: the end not held at now follows the other. */
-export function linkFromMeasured(): boolean {
+export function linkFromMeasured(to: End = linkTarget()): boolean {
   if (endMs.value == null) return false;
-  const to = linkTarget();
   return setLink(spanBetween(startMs.value, endMs.value, to === 'end' ? S.startTz : S.endTz), to);
 }
 export function clearEnd() {
-  if (isDerived('start')) freezeLink();
-  S.end = null; S.endLive = false; S.link = null; S.endSample = false; S.endPreset = null; S.active = 'start';
+  if (isLinked('start')) freezeLink();
+  if (isFollowing('start') && readsOther('start')) pinRule('start');
+  S.end = null; S.endLive = false; S.link = null; S.endSample = false; S.rules.end = null; S.active = 'start';
+}
+/** A rule's starting point at the other end, after the ends trade places. */
+function swapRule(r: EndRule | null): EndRule | null {
+  if (!r) return null;
+  const x = decodeRule(r.code);
+  if (!x) return null;
+  if (x.o.t === 'start') x.o = { t: 'end' }; else if (x.o.t === 'end') x.o = { t: 'start' };
+  return { ...r, code: encodeRule(x) };
 }
 /** Start and end trade places: moments, zones, which one follows the clock, and which one the span computes. */
 export function swapEnds(): boolean {
@@ -308,70 +419,87 @@ export function swapEnds(): boolean {
   const s = { ...startWall.value }, sTz = S.startTz, sLive = S.live, e = { ...endWall.value }, eTz = S.endTz, eLive = S.endLive;
   S.start = e; S.startTz = eTz; S.live = eLive;
   S.end = s; S.endTz = sTz; S.endLive = sLive;
+  const rs = S.rules.start, re = S.rules.end;
+  S.rules = { start: swapRule(re), end: swapRule(rs) };
   if (S.link) {
     const sp = { ...S.link.span, sign: -S.link.span.sign as 1 | -1 };
     S.link = { expr: fmtSpan(sp), span: sp };
     S.linkTo = other(S.linkTo);
   }
-  S.endSample = false; S.endPreset = null;
+  S.endSample = false;
   return true;
 }
 
-/* ---------- presets ---------- */
-export type StartPreset = 'today' | 'monday' | 'month' | 'year';
-export type PeriodKey = 'day' | 'week' | 'month' | 'newyear' | 'lny';
-export const START_PRESETS: [StartPreset, string, string][] = [
-  ['today', '今天', '今天 00:00:00'], ['monday', '本週一', '本週一 00:00:00'], ['month', '月初', '本月 1 日 00:00:00'], ['year', '年初', '今年 1 月 1 日 00:00:00'],
-];
-export function startPresetWall(key: StartPreset): Wall {
-  const n = partsInTz(Date.now(), S.startTz);
-  const day0 = { ...n, h: 0, mi: 0, s: 0 };
-  if (key === 'today') return day0;
-  if (key === 'monday') return addDaysWall(day0, -mod(wdOf(n) + 6, 7));
-  if (key === 'month') return { ...day0, d: 1 };
-  return { ...day0, mo: 1, d: 1 };
+/* ---------- rules: what shortcuts, words and typed text set an end by ---------- */
+/**
+ * Set an end by a rule. 現在 makes the end follow the clock; the other end plus a length (+30天) becomes the link;
+ * any other rule puts the end where it lands now, and the end keeps following it when `follow` (by default: when the
+ * rule reads the other end, or when the settings say rules from now keep following).
+ */
+export function applyRule(which: End, rule: Rule, opts: { name?: string; follow?: boolean } = {}): boolean {
+  if (isNowRule(rule)) { setLive(which, true); return true; }
+  const reads = ruleReads(rule, which, wordRule);
+  if (reads.has(which)) { toast(`${SUBJ_NAME[which]}不能從自己算起，這個規則要放在${SUBJ_NAME[other(which)]}`); return false; }
+  const sp = spanOfRule(rule, which);
+  if (sp && opts.follow !== false) {
+    // the link counts from the start to the end: start = end − span is kept as the span the other way
+    return setLink(which === 'end' ? sp : { ...sp, sign: -sp.sign as 1 | -1 }, which);
+  }
+  if (reads.has(other(which)) && msOf(other(which)) == null) { toast(which === 'start' ? '先設定結束，才能從結束算' : '先設定開始'); return false; }
+  const res = runRule(rule, which);
+  if (!res.ok) { toast(res.err); return false; }
+  const follow = opts.follow ?? (reads.size > 0 || S.prefs.followNow);
+  if (follow && reads.has(other(which))) {
+    if (isLinked(other(which))) freezeLink();
+    if (isFollowing(other(which)) && readsOther(other(which))) pinRule(other(which));
+  }
+  if (!setInstant(which, res.ms)) return false;
+  S.rules[which] = { code: encodeRule(rule), name: opts.name || ruleName(rule, S.prefs), follow, from: res.from };
+  return true;
 }
-export const PERIOD_NAMES: Record<PeriodKey, string> = { day: '今天結束', week: '本週結束', month: '本月結束', newyear: '跨年', lny: '春節' };
-function lnyAround(w: Wall) {
-  const n = dayNum(w.y, w.mo, w.d);
-  let prev: typeof LNY[number] | null = null, next: typeof LNY[number] | null = null;
-  for (const x of LNY) { if (dayNum(x.y, x.mo, x.d) <= n) prev = x; else { next = x; break; } }
-  return { prev, next };
+/** Keep following the rule this end was set by, or stay where it is now. */
+export function setFollow(which: End, on: boolean): boolean {
+  const r = S.rules[which];
+  if (!r || r.follow === on) return false;
+  if (!on) { pinRule(which); return true; }
+  const rule = decodeRule(r.code);
+  return !!rule && applyRule(which, rule, { name: r.name, follow: true });
 }
-/** The period that contains the start, read on the end's clock, as [from, to] instants. */
-export function periodBounds(key: PeriodKey, sMs = startMs.value): [number | null, number] | null {
-  const tz = S.endTz;
-  const n = partsInTz(sMs, tz);
-  const d0 = { ...n, h: 0, mi: 0, s: 0 };
-  const at = (w: Wall) => toInstant(w, tz);
-  if (key === 'day') return n.y >= 9999 && n.mo === 12 && n.d === 31 ? null : [at(d0), at(addDaysWall(d0, 1))];
-  if (key === 'week') { const mon = addDaysWall(d0, -mod(wdOf(n) + 6, 7)); const nx = addDaysWall(mon, 7); return nx.y > 9999 ? null : [at(mon), at(nx)]; }
-  if (key === 'month') { const m0 = { ...d0, d: 1 }; const nx = addMonthsWall(m0, 1); return nx.y > 9999 ? null : [at(m0), at(nx)]; }
-  if (key === 'newyear') { if (n.y >= 9999) return null; const y0 = { ...d0, mo: 1, d: 1 }; return [at(y0), at({ ...y0, y: n.y + 1 })]; }
-  const { prev, next } = lnyAround(n);
-  if (!next) return null;
-  return [prev ? at({ ...prev, h: 0, mi: 0, s: 0 }) : null, at({ ...next, h: 0, mi: 0, s: 0 })];
+export const chipRule = (c: Chip) => decodeRule(c.code);
+export const chipName = (c: Chip) => { const r = chipRule(c); return c.name || (r ? ruleName(r, S.prefs) : '?'); };
+/** The end a span shortcut sets: the one the span computes. */
+export const chipTarget = (row: ChipRow): End => (row === 'span' ? linkTarget() : row);
+/** The chip is what the end is now. */
+export function chipOn(row: ChipRow, c: Chip): boolean {
+  const r = chipRule(c);
+  if (!r) return false;
+  const which = chipTarget(row);
+  if (isNowRule(r)) return isLive(which);
+  const sp = spanOfRule(r, which);
+  if (sp) return isLinked(which) && !!S.link && S.link.expr === fmtSpanT(which === 'end' ? sp : { ...sp, sign: -sp.sign as 1 | -1 }) && S.link.span.biz === sp.biz;
+  return S.rules[which]?.code === c.code;
 }
-export function periodLabel(key: PeriodKey): string {
-  if (key === 'newyear') return '跨年';
-  if (key === 'lny') return '春節';
-  const b = periodBounds(key);
-  const cur = !!b && b[0] != null && now.value >= b[0] && now.value < b[1];
-  return { day: cur ? '今天' : '當天', week: cur ? '本週' : '當週', month: cur ? '本月' : '當月' }[key];
+/** How far now is through the period the chip ends (月底: through this month), for the chip to fill like a bar. */
+export function chipProgress(row: ChipRow, c: Chip): number | null {
+  const r = chipRule(c);
+  if (!r || row === 'span' || isNowRule(r)) return null;
+  const res = runRule(r, chipTarget(row));
+  if (!res.ok || res.from == null || res.ms <= res.from) return null;
+  const f = (now.value - res.from) / (res.ms - res.from);
+  return f >= 0 && f <= 1 ? f : null;
 }
-export function applyEndPreset(key: PeriodKey): boolean {
-  const b = periodBounds(key);
-  if (!b) { toast('這個快捷鍵目前無法使用'); return false; }
-  return setInstant('end', b[1], { preset: key });
+export function applyChip(row: ChipRow, c: Chip): boolean {
+  const r = chipRule(c);
+  if (!r) { toast('這個快捷壞掉了，請重新設定'); return false; }
+  return applyRule(chipTarget(row), r, { name: chipName(c) });
 }
 
 /* ---------- progress from start to end (the rail under the span) ---------- */
-/** With a live start and a period end (本月結束, 跨年…): how far through that period now is. */
+/** With a live start and an end set by a rule with a period (本月結束, 跨年, 中秋 …): how far through that period now is. */
 export const presetProgress = computed(() => {
-  if (!S.live || !S.endPreset || S.link) return null;
-  const b = periodBounds(S.endPreset);
-  if (!b || b[0] == null) return null;
-  const f = (now.value - b[0]) / (b[1] - b[0]);
+  const r = S.rules.end;
+  if (!S.live || !r || r.from == null || S.link || endMs.value == null) return null;
+  const f = (now.value - r.from) / (endMs.value - r.from);
   return f >= 0 && f <= 1 ? f : null;
 });
 /** The fill of the rail (0–1) and where now sits on it (null when now is outside start–end). */
@@ -430,11 +558,28 @@ export function loadState(): boolean {
   const st = W(o.start);
   if (o.live === false && st) { S.live = false; S.start = st; }
   const en = W(o.end);
-  if (en) {
-    S.end = en; S.endSample = !!o.endSample;
-    S.endPreset = typeof o.endPreset === 'string' && o.endPreset in PERIOD_NAMES ? (o.endPreset as PeriodKey) : null;
+  if (en) { S.end = en; S.endSample = !!o.endSample; }
+  const rules = (o.rules || {}) as Record<string, unknown>;
+  for (const k of ['start', 'end'] as End[]) S.rules[k] = readEndRule(rules[k]);
+  // the first version kept a period key for the end
+  if (!S.rules.end && typeof o.endPreset === 'string' && OLD_PRESETS[o.endPreset]) S.rules.end = { ...OLD_PRESETS[o.endPreset], follow: false, from: null };
+  if (o.endLive === true) { S.endLive = true; S.endSample = false; S.rules.end = null; }
+  if (o.chips && typeof o.chips === 'object') {
+    for (const row of ['start', 'end', 'span'] as ChipRow[]) {
+      const list = (o.chips as Record<string, unknown>)[row];
+      if (Array.isArray(list)) S.chips[row] = list.filter((c): c is Chip => !!c && typeof c.code === 'string' && !!decodeRule(c.code)).slice(0, 40)
+        .map((c) => ({ code: c.code, ...(typeof c.name === 'string' && c.name ? { name: c.name.slice(0, 40) } : {}) }));
+    }
   }
-  if (o.endLive === true) { S.endLive = true; S.endSample = false; S.endPreset = null; }
+  if (Array.isArray(o.words)) S.words = (o.words as unknown[]).filter((w): w is MyWord => !!w && typeof (w as MyWord).name === 'string' && typeof (w as MyWord).code === 'string' && !!decodeRule((w as MyWord).code)).slice(0, 200);
+  if (Array.isArray(o.wordsOff)) S.wordsOff = (o.wordsOff as unknown[]).filter((w): w is string => typeof w === 'string').slice(0, 200);
+  if (o.prefs && typeof o.prefs === 'object') {
+    const pr = o.prefs as Record<string, unknown>;
+    S.prefs = {
+      weekStart: pr.weekStart === 0 ? 0 : 1, termTz: pr.termTz === 'local' ? 'local' : 'china', missing: pr.missing === 'error' ? 'error' : 'clamp',
+      dayResets: pr.dayResets !== false, followNow: pr.followNow === true, lunar: pr.lunar !== false,
+    };
+  }
   if (typeof o.link === 'string') S.link = mkLink(o.link);
   S.linkTo = o.linkTo === 'start' && S.link && (S.endLive || S.end) ? 'start' : 'end';
   if (S.link && S.linkTo === 'end') S.endLive = false;
@@ -451,16 +596,17 @@ export function loadState(): boolean {
 }
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 export function startPersisting() {
-  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.endPreset, S.link?.expr, S.linkTo, S.zones, S.theme, S.lens, S.readEnd, S.readOrder,
-    S.density, S.map, S.dur, S.durSample], () => {
+  watch(() => [S.startTz, S.endTz, S.live, S.live ? null : S.start, S.end, S.endLive, S.endSample, S.rules, S.link?.expr, S.linkTo, S.zones, S.theme, S.lens, S.readEnd, S.readOrder,
+    S.density, S.map, S.dur, S.durSample, S.chips, S.words, S.wordsOff, S.prefs], () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify({
           v: 2, startTz: S.startTz, endTz: S.endTz, live: S.live, start: S.live ? null : S.start, end: S.end, endLive: S.endLive,
-          endSample: S.endSample, endPreset: S.endPreset, link: S.link ? S.link.expr : null, linkTo: S.linkTo, zones: S.zones,
+          endSample: S.endSample, rules: S.rules, link: S.link ? S.link.expr : null, linkTo: S.linkTo, zones: S.zones,
           theme: S.theme, lens: S.lens, readEnd: S.readEnd, readOrder: S.readOrder,
           density: S.density, map: S.map, dur: S.dur, durSample: S.durSample,
+          chips: S.chips, words: S.words, wordsOff: S.wordsOff, prefs: S.prefs,
         }));
       } catch { /* storage unavailable: everything still works for this visit */ }
     }, 300);
@@ -469,8 +615,18 @@ export function startPersisting() {
 /** First visit: a sample end (New Year) so every lens has something to show. Marked as a sample. */
 export function seedSample() {
   if (S.link || S.end || S.endLive) return;
-  const b = periodBounds('newyear');
-  if (b) { S.end = partsInTz(b[1], S.endTz); S.endPreset = 'newyear'; S.endSample = true; }
+  if (applyRule('end', { o: { t: 'now' }, steps: [{ t: 'align', p: 'y', pos: 'end' }] }, { follow: false })) S.endSample = true;
+}
+/** Old saved states and links named the end by one of five periods. */
+export const OLD_PRESETS: Record<string, { code: string; name: string }> = {
+  day: { code: 'n/ad.end', name: '今天結束' }, week: { code: 'n/aw.end', name: '本週結束' }, month: { code: 'n/amo.end', name: '本月結束' },
+  newyear: { code: 'n/ay.end', name: '跨年' }, lny: { code: 'n/w%E6%98%A5%E7%AF%80', name: '春節' },
+};
+function readEndRule(x: unknown): EndRule | null {
+  if (!x || typeof x !== 'object') return null;
+  const r = x as Record<string, unknown>;
+  if (typeof r.code !== 'string' || !decodeRule(r.code)) return null;
+  return { code: r.code, name: typeof r.name === 'string' ? r.name.slice(0, 60) : '', follow: r.follow === true, from: typeof r.from === 'number' ? r.from : null };
 }
 
 /* ---------- clock ---------- */
@@ -488,5 +644,4 @@ export const describe = (which: End) => {
   const w = wallOf(which);
   return w ? `${fmtDT(w)}（${zoneName(tzOf(which))}）` : '—';
 };
-export const startPresetActive = (key: StartPreset) => !S.live && !isDerived('start') && wEq(S.start, startPresetWall(key));
 export { DAY };
